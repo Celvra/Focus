@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="today_title">今日</string>
+    <string name="today_tab_updates">动态</string>
+    <string name="today_tab_ideas">点子</string>
+    <string name="today_tab_goals">目标</string>
+    <string name="today_updates_prompt">让 Focus 整理一份关于你在意的事的动态…</string>
+    <string name="today_updates_empty_title">还没有动态</string>
+    <string name="today_updates_empty_body">Focus 会读你的订阅，把值得知道的事写成一张张卡片。</string>
+    <string name="today_updates_generate">生成我的动态</string>
+    <string name="today_update_like">喜欢</string>
+    <string name="today_update_dislike">不感兴趣</string>
+    <string name="today_update_discuss">讨论</string>
+    <string name="today_update_info">为什么会有这条</string>
+    <string name="today_update_reason_title">为什么会有这条</string>
+    <string name="today_ideas_empty_title">还没有点子</string>
+    <string name="today_ideas_empty_body">问 Focus 接下来能做什么，它想出来的点子会放在这里。</string>
+    <string name="today_ideas_generate">要点子</string>
+    <string name="today_ideas_default_section">点子</string>
+    <string name="today_idea_includes">包含的内容</string>
+    <string name="today_idea_start">开始吧</string>
+    <string name="today_idea_more">更多选项</string>
+    <string name="today_idea_more_like">更多相似内容</string>
+    <string name="today_idea_not_interested">不感兴趣</string>
+    <string name="today_goals_track">追踪</string>
+    <string name="today_goals_empty">还没有目标。在下面新建一个，或者让 Focus 帮你建。</string>
+    <string name="today_goals_create">创建目标</string>
+    <string name="today_goals_new">新建目标</string>
+    <string name="today_goal_more">目标选项</string>
+    <string name="today_goal_edit">编辑</string>
+    <string name="today_goal_delete">删除</string>
+    <string name="today_goal_new_title">新建目标</string>
+    <string name="today_goal_edit_title">编辑目标</string>
+    <string name="today_goal_field_title">目标</string>
+    <string name="today_goal_field_detail">具体做什么</string>
+    <string name="today_goal_save">保存</string>
+    <string name="today_goal_delete_title">删除目标</string>
+    <string name="today_goal_delete_body">确定删除「%1$s」？</string>
+    <string name="today_goal_delete_confirm">删除</string>
+    <string name="today_cancel">取消</string>
+</resources>

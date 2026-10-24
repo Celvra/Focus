@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="goals_title">目标</string>
+    <string name="goals_subtitle">%1$d 个进行中</string>
+    <string name="goals_add">新目标</string>
+    <string name="goals_filter_active">进行中 %1$d</string>
+    <string name="goals_filter_done">已完成 %1$d</string>
+    <string name="goals_filter_all">全部</string>
+    <string name="goals_empty_title">还没有目标</string>
+    <string name="goals_empty_body">设一个目标，或者让 Focus 把建议变成目标。</string>
+    <string name="goals_status_active">进行中</string>
+    <string name="goals_status_paused">已暂停</string>
+    <string name="goals_status_done">已完成</string>
+    <string name="goals_due">截止 %1$s</string>
+    <string name="goals_done">标为完成</string>
+    <string name="goals_reopen">重新开始</string>
+    <string name="goals_edit">编辑</string>
+    <string name="goals_delete">删除</string>
+    <string name="goals_delete_title">删除目标？</string>
+    <string name="goals_delete_body">会把「%1$s」从目标里移除。</string>
+    <string name="goals_delete_confirm">删除</string>
+    <string name="goals_cancel">取消</string>
+    <string name="goals_editor_new">新目标</string>
+    <string name="goals_editor_edit">编辑目标</string>
+    <string name="goals_field_title">标题</string>
+    <string name="goals_field_detail">为什么要做</string>
+    <string name="goals_save">保存</string>
+</resources>

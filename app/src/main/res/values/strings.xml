@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Focus</string>
+    <string name="notification_channel_reminders">Reminders</string>
+    <string name="settings_title">Settings</string>
+    <string name="drawer_recent">Recent</string>
+    <string name="drawer_new_chat">New chat</string>
+    <string name="drawer_no_conversations">No conversations yet.</string>
+    <string name="drawer_default_name">You</string>
+    <string name="drawer_untitled">Untitled</string>
+    <string name="drawer_history">All conversations</string>
+    <string name="history_title">Conversations</string>
+    <string name="history_tab_active">Chats</string>
+    <string name="history_tab_archived">Archived</string>
+    <string name="history_empty">No conversations yet.</string>
+    <string name="history_empty_body">Your conversations will appear here.</string>
+    <string name="history_archived_empty">No archived chats.</string>
+    <string name="history_archived_empty_body">Chats you archive will appear here.</string>
+    <string name="history_archive">Archive chat</string>
+    <string name="history_delete">Delete chat</string>
+    <string name="history_delete_title">Delete this chat?</string>
+    <string name="history_delete_body">“%1$s” and all its messages will be permanently deleted.</string>
+    <string name="history_delete_confirm">Delete</string>
+    <string name="history_cancel">Cancel</string>
+</resources>

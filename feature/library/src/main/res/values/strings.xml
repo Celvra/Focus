@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_title">Library</string>
+    <string name="library_subtitle_articles">%1$d articles</string>
+    <string name="library_subtitle_feeds">%1$d feeds</string>
+    <string name="library_subtitle_files">Connected folder</string>
+    <string name="library_tab_articles">Articles</string>
+    <string name="library_tab_feeds">Feeds</string>
+    <string name="library_tab_files">Files</string>
+    <string name="library_refresh">Refresh</string>
+    <string name="library_unread_only">Unread</string>
+    <string name="library_empty_articles_title">No articles yet</string>
+    <string name="library_empty_articles_body">Subscribe to an RSS or Atom feed and new posts appear here.</string>
+    <string name="library_empty_feeds_title">No feeds yet</string>
+    <string name="library_empty_feeds_body">Paste a feed address. Posts are saved for offline reading.</string>
+    <string name="library_add_feed">Add feed</string>
+    <string name="library_add_feed_title">Add feed</string>
+    <string name="library_add_feed_body">Use the address of the RSS or Atom feed, not the site home page.</string>
+    <string name="library_feed_url">Feed URL</string>
+    <string name="library_add">Add</string>
+    <string name="library_feed_error">Last refresh failed</string>
+    <string name="library_delete">Delete</string>
+    <string name="library_delete_title">Delete?</string>
+    <string name="library_delete_body">\"%1$s\" will be removed. This cannot be undone.</string>
+    <string name="library_delete_confirm">Delete</string>
+    <string name="library_cancel">Cancel</string>
+    <string name="library_empty_files_title">No folder connected</string>
+    <string name="library_empty_files_body">Pick a folder to read and write text files. Focus keeps access to that folder only.</string>
+    <string name="library_pick_folder">Choose folder</string>
+    <string name="library_change_folder">Change folder</string>
+    <string name="library_files_empty">This folder has no files.</string>
+    <string name="library_note_title">New note</string>
+    <string name="library_note_name">File name</string>
+    <string name="library_note_body">Note</string>
+    <string name="library_note_save">Save</string>
+</resources>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Focus</string>
+    <string name="notification_channel_reminders">提醒</string>
+    <string name="settings_title">设置</string>
+    <string name="drawer_recent">最近</string>
+    <string name="drawer_new_chat">新对话</string>
+    <string name="drawer_no_conversations">还没有对话。</string>
+    <string name="drawer_default_name">你</string>
+    <string name="drawer_untitled">未命名</string>
+    <string name="drawer_history">全部对话</string>
+    <string name="history_title">对话</string>
+    <string name="history_tab_active">对话</string>
+    <string name="history_tab_archived">已归档</string>
+    <string name="history_empty">还没有对话。</string>
+    <string name="history_empty_body">对话会出现在这里。</string>
+    <string name="history_archived_empty">没有已归档对话。</string>
+    <string name="history_archived_empty_body">归档的对话会出现在这里。</string>
+    <string name="history_archive">归档对话</string>
+    <string name="history_delete">删除对话</string>
+    <string name="history_delete_title">删除这个对话？</string>
+    <string name="history_delete_body">“%1$s”及其所有消息将被永久删除。</string>
+    <string name="history_delete_confirm">删除</string>
+    <string name="history_cancel">取消</string>
+</resources>

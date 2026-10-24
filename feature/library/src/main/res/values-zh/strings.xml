@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_title">资料库</string>
+    <string name="library_subtitle_articles">%1$d 篇文章</string>
+    <string name="library_subtitle_feeds">%1$d 个订阅</string>
+    <string name="library_subtitle_files">已连接文件夹</string>
+    <string name="library_tab_articles">文章</string>
+    <string name="library_tab_feeds">订阅</string>
+    <string name="library_tab_files">文件</string>
+    <string name="library_refresh">刷新</string>
+    <string name="library_unread_only">只看未读</string>
+    <string name="library_empty_articles_title">还没有文章</string>
+    <string name="library_empty_articles_body">订阅 RSS 或 Atom 源，新文章会出现在这里。</string>
+    <string name="library_empty_feeds_title">还没有订阅</string>
+    <string name="library_empty_feeds_body">粘贴订阅地址，文章会保存下来离线阅读。</string>
+    <string name="library_add_feed">添加订阅</string>
+    <string name="library_add_feed_title">添加订阅</string>
+    <string name="library_add_feed_body">填 RSS 或 Atom 源的地址，不是网站首页。</string>
+    <string name="library_feed_url">订阅地址</string>
+    <string name="library_add">添加</string>
+    <string name="library_feed_error">上次刷新失败</string>
+    <string name="library_delete">删除</string>
+    <string name="library_delete_title">确认删除？</string>
+    <string name="library_delete_body">会移除「%1$s」，无法撤销。</string>
+    <string name="library_delete_confirm">删除</string>
+    <string name="library_cancel">取消</string>
+    <string name="library_empty_files_title">还没有连接文件夹</string>
+    <string name="library_empty_files_body">选一个文件夹，用来读写文本文件。Focus 只会拿到这个文件夹的权限。</string>
+    <string name="library_pick_folder">选择文件夹</string>
+    <string name="library_change_folder">更换文件夹</string>
+    <string name="library_files_empty">这个文件夹里没有文件。</string>
+    <string name="library_note_title">新建笔记</string>
+    <string name="library_note_name">文件名</string>
+    <string name="library_note_body">内容</string>
+    <string name="library_note_save">保存</string>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_done">Done</string>
+    <string name="common_close">Close</string>
+    <string name="common_save">Save</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_edit">Edit</string>
+    <string name="common_add">Add</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_share">Share</string>
+    <string name="common_copy">Copy</string>
+    <string name="common_undo">Undo</string>
+    <string name="common_approve">Approve</string>
+    <string name="common_reject">Reject</string>
+    <string name="common_back">Back</string>
+    <string name="common_more">More</string>
+    <string name="common_loading">Loading</string>
+    <string name="common_remove">Remove</string>
+    <string name="common_stop">Stop</string>
+    <string name="error_no_network">No network connection</string>
+    <string name="error_timeout">The request timed out</string>
+    <string name="error_tls">Secure connection failed</string>
+    <string name="error_unauthorized">The API key was rejected</string>
+    <string name="error_forbidden">Access denied</string>
+    <string name="error_not_found">Not found</string>
+    <string name="error_server">The server had a problem</string>
+    <string name="error_update_required">Update required</string>
+    <string name="error_storage">Local storage failed</string>
+    <string name="error_generic">Something went wrong</string>
+</resources>

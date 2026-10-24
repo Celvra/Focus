@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onboarding_title">Focus</string>
+    <string name="onboarding_tagline">Your day, handled.</string>
+    <string name="onboarding_connect_title">Connect your model</string>
+    <string name="onboarding_connect_body">Focus runs on an OpenAI-compatible model with tool calling. Enter the endpoint and key, then run the check.</string>
+    <string name="onboarding_base_url">Base URL</string>
+    <string name="onboarding_model">Model</string>
+    <string name="onboarding_api_key">API key</string>
+    <string name="onboarding_test">Test and continue</string>
+    <string name="onboarding_testing">Testing model</string>
+    <string name="onboarding_privacy">The key is stored encrypted on this device and is only sent to the endpoint you enter.</string>
+    <string name="onboarding_err_streaming">The model did not stream a reply.</string>
+    <string name="onboarding_err_tools">The model did not call a tool. Enable tool calling and try again.</string>
+    <string name="onboarding_err_generic">Connection failed.</string>
+    <string name="onboarding_setup">Setup</string>
+    <string name="onboarding_input_hint">Message Focus</string>
+    <string name="onboarding_send">Send</string>
+    <string name="onboarding_later">You can change this later in Settings.</string>
+    <string name="onboarding_step_of">Step %1$d of 2</string>
+    <string name="onboarding_cap_today_title">Today</string>
+    <string name="onboarding_cap_today_body">Brief and schedule</string>
+    <string name="onboarding_cap_library_title">Library</string>
+    <string name="onboarding_cap_library_body">Feeds and files</string>
+    <string name="onboarding_cap_goals_title">Goals</string>
+    <string name="onboarding_cap_goals_body">Progress and focus</string>
+    <string name="onboarding_meet_title">Meet Focus</string>
+    <string name="onboarding_meet_body">A short setup conversation.</string>
+    <string name="onboarding_meet_hint">You can ask about your calendar, feeds, files, or goals.</string>
+    <string name="onboarding_ready_title">Focus is getting ready</string>
+    <string name="onboarding_ready_body">One question at a time, then you\'re in.</string>
+    <string name="onboarding_hero_body">Calendar, feeds, files, and goals, answered in one conversation.</string>
+    <string name="onboarding_model_picker_title">Choose a model</string>
+    <string name="onboarding_model_search_hint">Search models</string>
+    <string name="onboarding_models_empty">No matching models</string>
+    <string name="onboarding_err_models">Could not load the model list.</string>
+    <string name="onboarding_skip">Skip setup</string>
+    <string name="onboarding_key_show">Show API key</string>
+    <string name="onboarding_key_hide">Hide API key</string>
+</resources>

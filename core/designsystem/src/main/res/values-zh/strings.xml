@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="common_cancel">取消</string>
+    <string name="common_done">完成</string>
+    <string name="common_close">关闭</string>
+    <string name="common_save">保存</string>
+    <string name="common_delete">删除</string>
+    <string name="common_edit">编辑</string>
+    <string name="common_add">添加</string>
+    <string name="common_retry">重试</string>
+    <string name="common_share">分享</string>
+    <string name="common_copy">复制</string>
+    <string name="common_undo">撤销</string>
+    <string name="common_approve">批准</string>
+    <string name="common_reject">拒绝</string>
+    <string name="common_back">返回</string>
+    <string name="common_more">更多</string>
+    <string name="common_loading">加载中</string>
+    <string name="common_remove">移除</string>
+    <string name="common_stop">停止</string>
+    <string name="error_no_network">没有网络连接</string>
+    <string name="error_timeout">请求超时</string>
+    <string name="error_tls">安全连接失败</string>
+    <string name="error_unauthorized">API 密钥被拒绝</string>
+    <string name="error_forbidden">没有访问权限</string>
+    <string name="error_not_found">没有找到</string>
+    <string name="error_server">服务器出错</string>
+    <string name="error_update_required">需要更新</string>
+    <string name="error_storage">本地存储失败</string>
+    <string name="error_generic">出错了</string>
+</resources>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="goals_title">Goals</string>
+    <string name="goals_subtitle">%1$d active</string>
+    <string name="goals_add">New goal</string>
+    <string name="goals_filter_active">Active %1$d</string>
+    <string name="goals_filter_done">Done %1$d</string>
+    <string name="goals_filter_all">All</string>
+    <string name="goals_empty_title">No goals yet</string>
+    <string name="goals_empty_body">Set one goal, or let Focus turn a suggestion into a goal for you.</string>
+    <string name="goals_status_active">Active</string>
+    <string name="goals_status_paused">Paused</string>
+    <string name="goals_status_done">Done</string>
+    <string name="goals_due">Due %1$s</string>
+    <string name="goals_done">Mark done</string>
+    <string name="goals_reopen">Reopen</string>
+    <string name="goals_edit">Edit</string>
+    <string name="goals_delete">Delete</string>
+    <string name="goals_delete_title">Delete goal?</string>
+    <string name="goals_delete_body">This removes \"%1$s\" from your goals.</string>
+    <string name="goals_delete_confirm">Delete</string>
+    <string name="goals_cancel">Cancel</string>
+    <string name="goals_editor_new">New goal</string>
+    <string name="goals_editor_edit">Edit goal</string>
+    <string name="goals_field_title">Title</string>
+    <string name="goals_field_detail">Why it matters</string>
+    <string name="goals_save">Save</string>
+</resources>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="today_title">Today</string>
+    <string name="today_tab_updates">Updates</string>
+    <string name="today_tab_ideas">Ideas</string>
+    <string name="today_tab_goals">Goals</string>
+    <string name="today_updates_prompt">Ask Focus for a feed about what you care about…</string>
+    <string name="today_updates_empty_title">No updates yet</string>
+    <string name="today_updates_empty_body">Focus reads your feeds and writes one card for each thing worth knowing.</string>
+    <string name="today_updates_generate">Build my feed</string>
+    <string name="today_update_like">Like</string>
+    <string name="today_update_dislike">Not for me</string>
+    <string name="today_update_discuss">Discuss</string>
+    <string name="today_update_info">Why this card</string>
+    <string name="today_update_reason_title">Why this card is here</string>
+    <string name="today_ideas_empty_title">No ideas yet</string>
+    <string name="today_ideas_empty_body">Ask Focus what to do next, and the ideas it comes up with land here.</string>
+    <string name="today_ideas_generate">Ask for ideas</string>
+    <string name="today_ideas_default_section">Ideas</string>
+    <string name="today_idea_includes">What it includes</string>
+    <string name="today_idea_start">Start</string>
+    <string name="today_idea_more">More options</string>
+    <string name="today_idea_more_like">More like this</string>
+    <string name="today_idea_not_interested">Not interested</string>
+    <string name="today_goals_track">Tracking</string>
+    <string name="today_goals_empty">No goals yet. Add one below, or ask Focus to set one up.</string>
+    <string name="today_goals_create">Create a goal</string>
+    <string name="today_goals_new">New goal</string>
+    <string name="today_goal_more">Goal options</string>
+    <string name="today_goal_edit">Edit</string>
+    <string name="today_goal_delete">Delete</string>
+    <string name="today_goal_new_title">New goal</string>
+    <string name="today_goal_edit_title">Edit goal</string>
+    <string name="today_goal_field_title">Goal</string>
+    <string name="today_goal_field_detail">What it involves</string>
+    <string name="today_goal_save">Save</string>
+    <string name="today_goal_delete_title">Delete goal</string>
+    <string name="today_goal_delete_body">Delete “%1$s”?</string>
+    <string name="today_goal_delete_confirm">Delete</string>
+    <string name="today_cancel">Cancel</string>
+</resources>
