@@ -42,6 +42,7 @@ sealed interface ChatEvent {
         val summary: String,
         val tool: String? = null,
     ) : ChatEvent
+    data class WorkingTextChanged(val text: String) : ChatEvent
     data class ApprovalRequested(val request: ApprovalRequest) : ChatEvent
     data class ApprovalResolved(val request: ApprovalRequest, val approved: Boolean) : ChatEvent
     data object Completed : ChatEvent
@@ -151,8 +152,20 @@ class ChatEngine(
                 for (call in message.toolCalls) {
                     val label = ToolLabels.of(call.name)
                     val result = tools.execute(call, conversationId)
+                    result.workingText?.let { emit(ChatEvent.WorkingTextChanged(it)) }
                     val approval = result.approval
                     if (approval == null) {
+                        if (call.name == ToolCatalog.SET_WORKING_TEXT) {
+                            chats.append(
+                                conversationId = conversationId,
+                                role = ChatRole.Tool,
+                                content = result.content,
+                                toolCallId = call.id,
+                                name = call.name,
+                                label = label,
+                            )
+                            continue
+                        }
                         emit(ChatEvent.ToolStarted(label))
                         emit(ChatEvent.ToolFinished(label, result.ok, result.summary, call.name))
                         chats.append(

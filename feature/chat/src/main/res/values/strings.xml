@@ -2,6 +2,7 @@
 <resources>
     <string name="chat_title">Focus</string>
     <string name="chat_subtitle">Ask anything about your day</string>
+    <string name="chat_working">Working</string>
     <string name="chat_input_hint">Message Focus</string>
     <string name="chat_input_hint_titled">Send a message in %1$s</string>
     <string name="chat_send">Send</string>

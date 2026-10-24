@@ -193,7 +193,13 @@ fun ChatScreen(
             topBar = {
                 FocusCompactTopBar(
                     title = state.title.ifBlank { stringResource(R.string.chat_title) },
-                    subtitle = if (state.title.isBlank()) stringResource(R.string.chat_subtitle) else null,
+                    subtitle = when {
+                        state.sending -> state.workingText.ifBlank {
+                            stringResource(R.string.chat_working)
+                        }
+                        state.title.isBlank() -> stringResource(R.string.chat_subtitle)
+                        else -> null
+                    },
                     onMenu = LocalFocusDrawerOpener.current,
                     actions = {
                         if (!state.isEmpty) {

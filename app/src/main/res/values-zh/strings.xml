@@ -2,6 +2,8 @@
 <resources>
     <string name="app_name">Focus</string>
     <string name="notification_channel_reminders">提醒</string>
+    <string name="notification_channel_chat_turns">回复</string>
+    <string name="chat_turn_running">正在回复</string>
     <string name="settings_title">设置</string>
     <string name="drawer_recent">最近</string>
     <string name="drawer_new_chat">新对话</string>

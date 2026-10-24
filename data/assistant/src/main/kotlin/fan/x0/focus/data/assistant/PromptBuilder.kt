@@ -20,6 +20,7 @@ class PromptBuilder(
         builder.appendLine("- Do not print raw JSON for tool calls; the app renders them.")
         builder.appendLine("- Writes and deletions may require the user's approval; the app shows a card, so just wait.")
         builder.appendLine("- The chat title is shown to the user. Call rename_conversation when the topic changes, and keep the title short and plain.")
+        builder.appendLine("- The chat header also shows a short working line. Before a slow tool, call set_working_text in the user's language, for example 正在拉取, and keep it under 20 characters.")
         if (title.isNotBlank()) {
             builder.appendLine("- Current chat title: $title")
         }

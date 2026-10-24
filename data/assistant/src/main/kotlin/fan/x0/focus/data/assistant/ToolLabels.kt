@@ -19,6 +19,7 @@ object ToolLabels {
         "create_reminder", "list_reminders" -> "Reminder"
         "save_profile", "complete_onboarding" -> "Setup"
         "rename_conversation" -> "Title"
+        ToolCatalog.SET_WORKING_TEXT -> "Status"
         "create_plan" -> "Plan"
         else -> name?.replace('_', ' ') ?: "Tool"
     }

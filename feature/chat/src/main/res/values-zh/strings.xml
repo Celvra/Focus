@@ -2,6 +2,7 @@
 <resources>
     <string name="chat_title">Focus</string>
     <string name="chat_subtitle">问什么都行</string>
+    <string name="chat_working">正在处理</string>
     <string name="chat_input_hint">给 Focus 发消息</string>
     <string name="chat_input_hint_titled">在 %1$s 中发送信息</string>
     <string name="chat_send">发送</string>

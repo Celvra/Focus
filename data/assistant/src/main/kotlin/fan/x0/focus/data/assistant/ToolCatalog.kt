@@ -25,6 +25,8 @@ data class ToolSpec(
 }
 
 object ToolCatalog {
+    const val SET_WORKING_TEXT = "set_working_text"
+
     val all: List<ToolSpec> = listOf(
         ToolSpec(
             name = "list_calendar_events",
@@ -230,6 +232,14 @@ object ToolCatalog {
             kind = ToolKind.Write,
             parameters = schema(required = listOf("title")) {
                 put("title", string("Short plain title, under 40 characters"))
+            },
+        ),
+        ToolSpec(
+            name = SET_WORKING_TEXT,
+            description = "Set the short line under the chat title while you work. Call it before a slow tool, in the user's language, for example 正在拉取 or Fetching feeds. The app clears it when the turn ends.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("text")) {
+                put("text", string("Full working line, under 20 characters"))
             },
         ),
         ToolSpec(

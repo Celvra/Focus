@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import fan.x0.focus.app.AppModule
+import fan.x0.focus.app.ChatTurnService
 import fan.x0.focus.core.network.NetworkModule
 import fan.x0.focus.data.assistant.ApprovalStatus
 import fan.x0.focus.data.assistant.ApprovalStore
@@ -64,6 +65,13 @@ class FocusApplication : Application() {
                 ReminderWorker.CHANNEL_ID,
                 getString(R.string.notification_channel_reminders),
                 NotificationManager.IMPORTANCE_DEFAULT,
+            ),
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ChatTurnService.CHANNEL_ID,
+                getString(R.string.notification_channel_chat_turns),
+                NotificationManager.IMPORTANCE_LOW,
             ),
         )
     }

@@ -24,6 +24,7 @@ data class ToolResult(
     val content: String,
     val summary: String,
     val approval: ApprovalRequest? = null,
+    val workingText: String? = null,
 )
 
 data class StepOutcome(
@@ -361,6 +362,15 @@ class ToolExecutor(
                 chats.rename(conversationId, title)
                 ok("Renamed to $title", "Conversation renamed: $title.")
             }
+            ToolCatalog.SET_WORKING_TEXT -> {
+                val text = args.text("text") ?: return fail("text is required")
+                ToolResult(
+                    ok = true,
+                    content = "Working line set: ${text.take(40)}",
+                    summary = text.take(40),
+                    workingText = text.take(40),
+                )
+            }
             "post_update" -> {
                 val headline = args.text("headline") ?: return fail("headline is required")
                 val body = args.text("body") ?: return fail("body is required")
@@ -470,7 +480,7 @@ class ToolExecutor(
                 else -> null
             } ?: return@mapNotNull null
             val spec = ToolCatalog.find(tool) ?: return@mapNotNull null
-            if (spec.kind == ToolKind.Plan) return@mapNotNull null
+            if (spec.kind == ToolKind.Plan || tool == ToolCatalog.SET_WORKING_TEXT) return@mapNotNull null
             if (parseObject(arguments) == null) return@mapNotNull null
             ApprovalStep(tool, arguments, label.take(80))
         }

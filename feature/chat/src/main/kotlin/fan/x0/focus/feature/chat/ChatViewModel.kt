@@ -9,18 +9,22 @@ import fan.x0.focus.data.assistant.AttachmentLoader
 import fan.x0.focus.data.assistant.AssistantSettings
 import fan.x0.focus.data.assistant.ChatAttachment
 import fan.x0.focus.data.assistant.ChatCommand
-import fan.x0.focus.data.assistant.ChatEngine
-import fan.x0.focus.data.assistant.ChatEvent
 import fan.x0.focus.data.assistant.ChatMessage
-import fan.x0.focus.data.assistant.ChatMode
 import fan.x0.focus.data.assistant.ChatRole
 import fan.x0.focus.data.assistant.ChatStore
 import fan.x0.focus.data.assistant.ChatSwitcher
-import fan.x0.focus.data.assistant.ChatTitleGenerator
+import fan.x0.focus.data.assistant.ChatTurnApprovalPhase
+import fan.x0.focus.data.assistant.ChatTurnEntry
+import fan.x0.focus.data.assistant.ChatTurnResult
+import fan.x0.focus.data.assistant.ChatTurnRunner
+import fan.x0.focus.data.assistant.ChatTurnState
+import fan.x0.focus.data.assistant.ChatTurnStep
+import fan.x0.focus.data.assistant.ChatTurnStepStatus
 import fan.x0.focus.data.assistant.ModelCatalogRepository
 import fan.x0.focus.data.assistant.ProfileStore
 import fan.x0.focus.data.assistant.ReasoningLevel
 import fan.x0.focus.data.assistant.SecretStore
+import fan.x0.focus.data.assistant.ToolCatalog
 import fan.x0.focus.data.assistant.ToolLabels
 import fan.x0.focus.data.assistant.TurnOptions
 import kotlinx.coroutines.CancellationException
@@ -31,7 +35,6 @@ import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
 class ChatViewModel(
-    private val engine: ChatEngine,
     private val chats: ChatStore,
     private val switcher: ChatSwitcher,
     private val profile: ProfileStore,
@@ -39,18 +42,17 @@ class ChatViewModel(
     private val secrets: SecretStore,
     private val catalog: ModelCatalogRepository,
     private val loader: AttachmentLoader,
-    private val titles: ChatTitleGenerator,
+    private val turns: ChatTurnRunner,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
-    private var turnJob: Job? = null
     private var loadJob: Job? = null
     private var modelJob: Job? = null
-    private var titleJob: Job? = null
-    private var titleJobConversationId: String? = null
 
     init {
         viewModelScope.launch {
-            val conversation = chats.ensureConversation()
+            val conversation = switcher.current.value
+                ?.let { chats.conversation(it) }
+                ?: chats.ensureConversation()
             load(conversation.id)
             switcher.command.filterNotNull().collect { command ->
                 when (command) {
@@ -59,6 +61,25 @@ class ChatViewModel(
                     is ChatCommand.Ask -> ask(command.text)
                 }
                 switcher.consume()
+            }
+        }
+        viewModelScope.launch {
+            turns.states.collect { states ->
+                val id = currentState.conversationId
+                if (id.isBlank() || currentState.loading) return@collect
+                states[id]?.let(::applyTurn)
+            }
+        }
+        viewModelScope.launch {
+            turns.results.collect { results ->
+                val id = currentState.conversationId
+                if (id.isBlank() || currentState.loading) return@collect
+                results[id]?.let { handleResult(it) }
+            }
+        }
+        viewModelScope.launch {
+            turns.titleUpdates.collect { id ->
+                if (id == currentState.conversationId && !currentState.loading) refreshTitle()
             }
         }
     }
@@ -96,9 +117,8 @@ class ChatViewModel(
         val state = currentState
         val text = state.input.trim()
         if ((text.isBlank() && state.attachments.isEmpty()) || state.sending) return
-        turnJob?.cancel()
         val conversationId = state.conversationId
-        if (conversationId.isBlank()) return
+        if (conversationId.isBlank() || turns.isRunning(conversationId)) return
         val attachments = state.attachments.map { it.toModel() }
         val options = TurnOptions(
             providerId = state.providerId,
@@ -110,6 +130,7 @@ class ChatViewModel(
             copy(
                 input = "",
                 sending = true,
+                workingText = "",
                 live = emptyList(),
                 attachments = emptyList(),
                 turn = turn + 1,
@@ -120,16 +141,7 @@ class ChatViewModel(
                 ),
             )
         }
-        turnJob = viewModelScope.launch {
-            try {
-                engine.send(conversationId, text, ChatMode.Chat, options).collect { handle(it) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                updateState { copy(sending = false, live = emptyList()) }
-                emitError(AppError(AppErrorType.Generic, serverMessage = e.message ?: e.javaClass.simpleName))
-            }
-        }
+        turns.start(conversationId, text, options)
     }
 
     private fun selectProvider(providerId: String) {
@@ -211,72 +223,8 @@ class ChatViewModel(
     }
 
     private fun stop() {
-        turnJob?.cancel()
         val conversationId = currentState.conversationId
-        val pending = currentState.live.filterIsInstance<ChatEntry.Assistant>().lastOrNull()?.takeIf { it.live }
-        val answer = pending?.text?.trim().orEmpty()
-        val thought = pending?.reasoning?.trim().orEmpty()
-        if (answer.isNotBlank() || thought.isNotBlank()) {
-            viewModelScope.launch {
-                chats.append(
-                    conversationId = conversationId,
-                    role = ChatRole.Assistant,
-                    content = answer,
-                    reasoning = thought,
-                )
-            }
-        }
-        updateState {
-            copy(
-                history = history + live.map { it.sealed() },
-                live = emptyList(),
-                sending = false,
-            )
-        }
-    }
-
-    private suspend fun handle(event: ChatEvent) {
-        when (event) {
-            is ChatEvent.Delta -> updateState { copy(live = live.appendDelta(turn, event.text)) }
-            is ChatEvent.ReasoningDelta -> updateState { copy(live = live.appendReasoning(turn, event.text)) }
-            is ChatEvent.UserMessageAppended -> requestTitle(event.turns)
-            is ChatEvent.ToolStarted -> updateState {
-                copy(live = live.startStep(turn, event.label))
-            }
-            is ChatEvent.ToolFinished -> {
-                updateState { copy(live = live.finishStep(event.label, event.ok, event.summary)) }
-                if (event.tool == "rename_conversation") refreshTitle()
-            }
-            is ChatEvent.ApprovalRequested -> updateState {
-                val card = event.request.toUi(ApprovalPhase.Waiting)
-                copy(live = live.sealLive() + ChatEntry.Approval(card.id, card))
-            }
-            is ChatEvent.ApprovalResolved -> updateState {
-                val card = live.approvalCard() ?: return@updateState this
-                copy(
-                    live = live.updateApproval(
-                        card.copy(
-                            phase = if (event.approved) ApprovalPhase.Running else ApprovalPhase.Declined,
-                        ),
-                    ),
-                )
-            }
-            ChatEvent.Completed -> finishTurn()
-            is ChatEvent.Failed -> {
-                val state = currentState
-                val pending = state.live.filterIsInstance<ChatEntry.Assistant>().lastOrNull()?.takeIf { it.live }
-                if (pending != null && (pending.text.isNotBlank() || pending.reasoning.isNotBlank())) {
-                    chats.append(
-                        conversationId = state.conversationId,
-                        role = ChatRole.Assistant,
-                        content = pending.text,
-                        reasoning = pending.reasoning,
-                    )
-                }
-                reload()
-                emitError(event.error)
-            }
-        }
+        if (conversationId.isNotBlank()) turns.stop(conversationId)
     }
 
     private fun decide(action: ChatAction.Decide) {
@@ -287,18 +235,7 @@ class ChatViewModel(
                 live = live.updateApproval(card.copy(phase = if (action.approve) ApprovalPhase.Running else ApprovalPhase.Declined)),
             )
         }
-        engine.decide(action.approvalId, action.approve)
-    }
-
-    private suspend fun finishTurn() {
-        updateState {
-            copy(
-                history = history + live.map { it.sealed() },
-                live = emptyList(),
-                sending = false,
-            )
-        }
-        refreshTitle()
+        turns.decide(action.approvalId, action.approve)
     }
 
     private suspend fun reload() {
@@ -309,6 +246,7 @@ class ChatViewModel(
                 history = messages.toEntries(),
                 live = emptyList(),
                 sending = false,
+                workingText = "",
             )
         }
     }
@@ -336,6 +274,7 @@ class ChatViewModel(
                 history = messages.toEntries(),
                 live = emptyList(),
                 sending = false,
+                workingText = "",
                 input = "",
                 turn = 0,
                 attachments = emptyList(),
@@ -350,13 +289,13 @@ class ChatViewModel(
             )
         }
         switcher.markLoaded(conversationId)
+        applyTurn(turns.state(conversationId))
+        turns.result(conversationId)?.let { handleResult(it) }
     }
 
     private suspend fun switchTo(conversationId: String) {
         if (conversationId == currentState.conversationId) return
-        turnJob?.cancel()
         loadJob?.cancel()
-        titleJob?.cancel()
         updateState { copy(loading = true) }
         loadJob = viewModelScope.launch {
             load(conversationId)
@@ -364,9 +303,7 @@ class ChatViewModel(
     }
 
     private suspend fun newConversation() {
-        turnJob?.cancel()
         loadJob?.cancel()
-        titleJob?.cancel()
         if (currentState.history.isEmpty() && currentState.conversationId.isNotBlank()) {
             load(currentState.conversationId)
             return
@@ -377,38 +314,79 @@ class ChatViewModel(
 
     private suspend fun ask(text: String) {
         if (currentState.history.isNotEmpty()) newConversation()
-        turnJob?.cancel()
-        updateState { copy(input = text, sending = false, live = emptyList()) }
+        updateState { copy(input = text, sending = false, live = emptyList(), workingText = "") }
         send()
     }
 
-    private fun requestTitle(turns: Int) {
-        val conversationId = currentState.conversationId
-        if (conversationId.isBlank()) return
-        if (titleJobConversationId == conversationId && titleJob?.isActive == true) return
-        val due = currentState.title.isBlank() || turns == 1 || turns % TITLE_REFRESH_TURNS == 0
-        if (!due) return
-        val providerId = currentState.providerId
-        val model = currentState.model
-        titleJobConversationId = conversationId
-        titleJob = viewModelScope.launch {
-            val title = try {
-                titles.generate(conversationId, providerId, model)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                null
-            } ?: return@launch
-            if (currentState.conversationId == conversationId) {
-                updateState { copy(title = title) }
-            }
+    private fun applyTurn(turn: ChatTurnState) {
+        if (turn.conversationId != currentState.conversationId) return
+        if (!turn.running) {
+            updateState { copy(sending = false, live = emptyList(), workingText = "") }
+            return
         }
+        updateState {
+            copy(
+                sending = true,
+                workingText = turn.workingText,
+                live = turn.entries.mapIndexed { index, entry -> entry.toUi(turn.turnId, index) },
+            )
+        }
+    }
+
+    private suspend fun handleResult(result: ChatTurnResult) {
+        if (result.conversationId != currentState.conversationId) return
+        if (!turns.consumeResult(result.conversationId, result.turnId)) return
+        reload()
+        result.error?.let { emitError(it) }
+        refreshTitle()
     }
 
     private suspend fun refreshTitle() {
         val id = currentState.conversationId
+        if (id.isBlank()) return
         val title = chats.conversation(id)?.title.orEmpty()
         updateState { copy(title = title) }
+    }
+
+    private fun ChatTurnEntry.toUi(turnId: Long, index: Int): ChatEntry = when (this) {
+        is ChatTurnEntry.Answer -> ChatEntry.Assistant(
+            key = "live-answer-$turnId-$index",
+            text = text,
+            live = true,
+            reasoning = reasoning,
+        )
+        is ChatTurnEntry.Trace -> ChatEntry.Trace(
+            key = "live-trace-$turnId-$index",
+            steps = steps.map { it.toUi() },
+        )
+        is ChatTurnEntry.Approval -> ChatEntry.Approval(
+            key = "live-approval-${card.id}",
+            card = ApprovalUi(
+                id = card.id,
+                title = card.title,
+                summary = card.summary,
+                steps = card.steps.map { it.toUi() },
+                phase = card.phase.toUi(),
+            ),
+        )
+    }
+
+    private fun ChatTurnStep.toUi(): TraceStep = TraceStep(
+        label = label,
+        status = when (status) {
+            ChatTurnStepStatus.Pending -> TraceStatus.Pending
+            ChatTurnStepStatus.Running -> TraceStatus.Running
+            ChatTurnStepStatus.Done -> TraceStatus.Done
+            ChatTurnStepStatus.Failed -> TraceStatus.Failed
+        },
+        summary = summary,
+    )
+
+    private fun ChatTurnApprovalPhase.toUi(): ApprovalPhase = when (this) {
+        ChatTurnApprovalPhase.Waiting -> ApprovalPhase.Waiting
+        ChatTurnApprovalPhase.Running -> ApprovalPhase.Running
+        ChatTurnApprovalPhase.Finished -> ApprovalPhase.Finished
+        ChatTurnApprovalPhase.Declined -> ApprovalPhase.Declined
     }
 
     private fun List<ChatMessage>.toEntries(): List<ChatEntry> {
@@ -442,7 +420,7 @@ class ChatViewModel(
                         )
                     }
                 }
-                ChatRole.Tool -> steps += message.toSteps()
+                ChatRole.Tool -> if (message.name != ToolCatalog.SET_WORKING_TEXT) steps += message.toSteps()
                 ChatRole.System -> Unit
             }
         }
@@ -484,17 +462,4 @@ class ChatViewModel(
         text = text,
         base64 = base64,
     )
-
-    private fun fan.x0.focus.data.assistant.ApprovalRequest.toUi(phase: ApprovalPhase): ApprovalUi =
-        ApprovalUi(
-            id = id,
-            title = title,
-            summary = summary,
-            steps = steps.map { TraceStep(it.label, TraceStatus.Pending) },
-            phase = phase,
-        )
-
-    companion object {
-        private const val TITLE_REFRESH_TURNS = 10
-    }
 }
