@@ -48,7 +48,7 @@ class OnboardingViewModel(
     init {
         viewModelScope.launch {
             chats.clear(ONBOARDING_CONVERSATION)
-            updateState { copy(loading = false) }
+            updateState { copy(loading = false, restored = false) }
             send("")
         }
         viewModelScope.launch {
@@ -159,6 +159,7 @@ class OnboardingViewModel(
         updateState {
             copy(
                 messages = if (message == null) messages else messages + message,
+                lastMessageId = message?.id ?: lastMessageId,
                 streamingText = "",
                 reasoning = "",
                 steps = emptyList(),
@@ -210,11 +211,18 @@ class OnboardingViewModel(
         updateState {
             val answer = streamingText.trim()
             copy(
-                messages = if (answer.isBlank()) {
+                messages = if (answer.isBlank() && reasoning.isBlank() && steps.isEmpty()) {
                     messages
                 } else {
-                    messages + OnboardingMessage(nextId++, fromUser = false, text = answer)
+                    messages + OnboardingMessage(
+                        id = nextId++,
+                        fromUser = false,
+                        text = answer,
+                        reasoning = reasoning.trim(),
+                        steps = steps,
+                    )
                 },
+                lastMessageId = if (answer.isBlank() && reasoning.isBlank() && steps.isEmpty()) lastMessageId else nextId - 1,
                 streamingText = "",
                 reasoning = "",
                 steps = emptyList(),

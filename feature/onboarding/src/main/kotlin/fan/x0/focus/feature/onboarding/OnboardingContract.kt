@@ -7,7 +7,13 @@ import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
 import fan.x0.focus.core.network.openai.ChatProtocol
 
-data class OnboardingMessage(val id: Long, val fromUser: Boolean, val text: String)
+data class OnboardingMessage(
+    val id: Long,
+    val fromUser: Boolean,
+    val text: String,
+    val reasoning: String = "",
+    val steps: List<FocusTraceStep> = emptyList(),
+)
 
 sealed interface ProviderFailure {
     enum class Field { BaseUrl, Model, ApiKey }
@@ -25,6 +31,8 @@ data class OnboardingUiState(
     val reasoning: String = "",
     val steps: List<FocusTraceStep> = emptyList(),
     val sending: Boolean = false,
+    val lastMessageId: Long = -1L,
+    val restored: Boolean = false,
     val input: String = "",
     val providerReady: Boolean = false,
     val providerSheetOpen: Boolean = false,

@@ -90,6 +90,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fan.x0.focus.core.designsystem.components.AvatarState
 import fan.x0.focus.core.designsystem.components.AvatarStyle
 import fan.x0.focus.core.designsystem.components.FocusAvatar
+import fan.x0.focus.core.designsystem.components.FocusBubbleEnter
 import fan.x0.focus.core.designsystem.components.FocusChatBubble
 import fan.x0.focus.core.designsystem.components.FocusReasoningCard
 import fan.x0.focus.core.designsystem.components.FocusTraceCard
@@ -627,41 +628,7 @@ private fun ChatBubbleEnter(
     fromUser: Boolean,
     onPlayed: () -> Unit,
     content: @Composable () -> Unit,
-) {
-    val motion = LocalFocusMotion.current
-    val density = LocalDensity.current
-    val alpha = remember { Animatable(if (play) 0f else 1f) }
-    val progress = remember { Animatable(if (play) 0f else 1f) }
-    var settled by remember { mutableStateOf(!play) }
-    LaunchedEffect(Unit) {
-        if (play) {
-            onPlayed()
-            coroutineScope {
-                launch { alpha.animateTo(1f, motion.effectsDefault()) }
-                launch { progress.animateTo(1f, motion.spatialDefault()) }
-            }
-            settled = true
-        }
-    }
-    val startScale = if (fromUser) 0.88f else 0.94f
-    val startLift = with(density) { (if (fromUser) 18.dp else 12.dp).toPx() }
-    val origin = if (fromUser) TransformOrigin(1f, 1f) else TransformOrigin(0f, 1f)
-    Box(
-        modifier = if (settled) {
-            Modifier
-        } else {
-            Modifier.graphicsLayer {
-                this.alpha = alpha.value
-                scaleX = startScale + (1f - startScale) * progress.value
-                scaleY = scaleX
-                translationY = startLift * (1f - progress.value)
-                transformOrigin = origin
-            }
-        },
-    ) {
-        content()
-    }
-}
+) = FocusBubbleEnter(play, fromUser, onPlayed, content)
 
 private fun LazyListState.atBottom(): Boolean {
     val layout = layoutInfo

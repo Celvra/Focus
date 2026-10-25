@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -51,6 +52,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import fan.x0.focus.core.designsystem.components.FocusAmbientBackground
 import fan.x0.focus.core.designsystem.components.FocusAmbientWorking
+import fan.x0.focus.core.designsystem.components.FocusBubbleEnter
 import fan.x0.focus.core.designsystem.components.FocusChatBubble
 import fan.x0.focus.core.designsystem.components.FocusReasoningCard
 import fan.x0.focus.core.designsystem.components.FocusTraceCard
@@ -208,31 +210,53 @@ private fun Conversation(
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items(
+        itemsIndexed(
             items = state.messages,
-            key = { it.id },
-            contentType = { if (it.fromUser) "user" else "assistant" },
-        ) { message ->
-            FocusChatBubble(text = message.text, fromUser = message.fromUser)
+            key = { _, it -> it.id },
+            contentType = { _, it -> if (it.fromUser) "user" else "assistant" },
+        ) { _, message ->
+            val fresh = message.id == state.lastMessageId && !state.restored
+            FocusBubbleEnter(play = fresh, fromUser = message.fromUser) {
+                AssistantTurn(
+                    message = message,
+                    live = false,
+                )
+            }
         }
         if (live) {
             item(key = "live", contentType = "assistant") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (state.reasoning.isNotBlank()) {
-                        FocusReasoningCard(text = state.reasoning, running = state.sending)
-                    }
-                    if (state.steps.isNotEmpty()) {
-                        FocusTraceCard(steps = state.steps)
-                    }
-                    if (state.streamingText.isNotBlank()) {
-                        FocusChatBubble(
-                            text = state.streamingText,
+                FocusBubbleEnter(play = state.sending, fromUser = false) {
+                    AssistantTurn(
+                        message = OnboardingMessage(
+                            id = -1L,
                             fromUser = false,
-                            streaming = state.sending,
-                        )
-                    }
+                            text = state.streamingText,
+                            reasoning = state.reasoning,
+                            steps = state.steps,
+                        ),
+                        live = true,
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AssistantTurn(message: OnboardingMessage, live: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (message.reasoning.isNotBlank()) {
+            FocusReasoningCard(text = message.reasoning, running = live)
+        }
+        if (message.steps.isNotEmpty()) {
+            FocusTraceCard(steps = message.steps)
+        }
+        if (message.text.isNotBlank() || live) {
+            FocusChatBubble(
+                text = message.text,
+                fromUser = message.fromUser,
+                streaming = live,
+            )
         }
     }
 }
