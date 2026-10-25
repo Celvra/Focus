@@ -14,6 +14,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -104,6 +105,7 @@ import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -435,7 +437,6 @@ private fun ChatThread(
     working: Boolean = false,
     onMascotDock: (Offset?) -> Unit = {},
 ) {
-    val motion = LocalFocusMotion.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val entries = state.entries
@@ -446,7 +447,6 @@ private fun ChatThread(
 
     LaunchedEffect(state.turn) {
         follow = true
-        if (entries.isNotEmpty()) listState.scrollToItem(entries.size)
     }
 
     // Follow streaming only while the reader has not dragged away from the end.
@@ -463,7 +463,7 @@ private fun ChatThread(
     }
 
     LaunchedEffect(entries.size, state.live, bottomPadding, working) {
-        if (follow && entries.isNotEmpty()) listState.scrollToItem(entries.size)
+        if (follow && entries.isNotEmpty()) listState.requestScrollToItem(entries.size)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -491,47 +491,39 @@ private fun ChatThread(
                 },
             ) { entry ->
                 val play = entry.isFresh() && entry.key !in played
-                Box(
-                    modifier = Modifier.animateItem(
-                        fadeInSpec = motion.effectsDefault(),
-                        placementSpec = motion.spatialDefault(),
-                        fadeOutSpec = motion.effectsFast(),
-                    ),
+                ChatBubbleEnter(
+                    play = play,
+                    fromUser = entry is ChatEntry.User,
+                    onPlayed = { played += entry.key },
                 ) {
-                    ChatBubbleEnter(
-                        play = play,
-                        fromUser = entry is ChatEntry.User,
-                        onPlayed = { played += entry.key },
-                    ) {
-                        when (entry) {
-                            is ChatEntry.User -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                if (entry.attachments.isNotEmpty()) {
-                                    UserAttachmentStrip(attachments = entry.attachments)
-                                }
-                                if (entry.text.isNotBlank()) {
-                                    FocusChatBubble(text = entry.text, fromUser = true)
-                                }
+                    when (entry) {
+                        is ChatEntry.User -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (entry.attachments.isNotEmpty()) {
+                                UserAttachmentStrip(attachments = entry.attachments)
                             }
-                            is ChatEntry.Assistant -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (entry.reasoning.isNotBlank()) {
-                                    key(entry.key) {
-                                        ReasoningCard(text = entry.reasoning, running = entry.live)
-                                    }
-                                }
-                                if (entry.text.isNotBlank()) {
-                                    FocusChatBubble(
-                                        text = entry.text,
-                                        fromUser = false,
-                                        streaming = entry.live,
-                                    )
-                                }
+                            if (entry.text.isNotBlank()) {
+                                FocusChatBubble(text = entry.text, fromUser = true)
                             }
-                            is ChatEntry.Trace -> TraceCard(steps = entry.steps)
-                            is ChatEntry.Approval -> FocusApprovalCard(
-                                card = entry.card,
-                                onDecide = { onAction(ChatAction.Decide(entry.card.id, it)) },
-                            )
                         }
+                        is ChatEntry.Assistant -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (entry.reasoning.isNotBlank()) {
+                                key(entry.key) {
+                                    ReasoningCard(text = entry.reasoning, running = entry.live)
+                                }
+                            }
+                            if (entry.text.isNotBlank()) {
+                                FocusChatBubble(
+                                    text = entry.text,
+                                    fromUser = false,
+                                    streaming = entry.live,
+                                )
+                            }
+                        }
+                        is ChatEntry.Trace -> TraceCard(steps = entry.steps)
+                        is ChatEntry.Approval -> FocusApprovalCard(
+                            card = entry.card,
+                            onDecide = { onAction(ChatAction.Decide(entry.card.id, it)) },
+                        )
                     }
                 }
             }
@@ -594,26 +586,33 @@ private fun ChatBubbleEnter(
 ) {
     val motion = LocalFocusMotion.current
     val density = LocalDensity.current
-    var visible by remember { mutableStateOf(!play) }
+    val alpha = remember { Animatable(if (play) 0f else 1f) }
+    val progress = remember { Animatable(if (play) 0f else 1f) }
+    var settled by remember { mutableStateOf(!play) }
     LaunchedEffect(Unit) {
         if (play) {
             onPlayed()
-            visible = true
+            coroutineScope {
+                launch { alpha.animateTo(1f, motion.effectsDefault()) }
+                launch { progress.animateTo(1f, motion.spatialDefault()) }
+            }
+            settled = true
         }
     }
     val startScale = if (fromUser) 0.88f else 0.94f
     val startLift = with(density) { (if (fromUser) 18.dp else 12.dp).toPx() }
     val origin = if (fromUser) TransformOrigin(1f, 1f) else TransformOrigin(0f, 1f)
-    val alpha by animateFloatAsState(if (visible) 1f else 0f, motion.effectsDefault(), label = "bubbleAlpha")
-    val scale by animateFloatAsState(if (visible) 1f else startScale, motion.spatialDefault(), label = "bubbleScale")
-    val lift by animateFloatAsState(if (visible) 0f else startLift, motion.spatialDefault(), label = "bubbleLift")
     Box(
-        modifier = Modifier.graphicsLayer {
-            this.alpha = alpha
-            scaleX = scale
-            scaleY = scale
-            translationY = lift
-            transformOrigin = origin
+        modifier = if (settled) {
+            Modifier
+        } else {
+            Modifier.graphicsLayer {
+                this.alpha = alpha.value
+                scaleX = startScale + (1f - startScale) * progress.value
+                scaleY = scaleX
+                translationY = startLift * (1f - progress.value)
+                transformOrigin = origin
+            }
         },
     ) {
         content()
