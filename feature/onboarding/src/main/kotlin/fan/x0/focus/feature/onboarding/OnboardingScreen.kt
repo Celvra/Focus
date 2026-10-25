@@ -114,13 +114,6 @@ fun OnboardingScreen(
                     ),
                     onMenu = null,
                     actions = {
-                        IconButton(onClick = { onAction(OnboardingAction.OpenProviderSheet) }) {
-                            Icon(
-                                imageVector = FocusIcons.Tune,
-                                contentDescription = stringResource(R.string.onboarding_model_settings),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                         FocusTextButton(
                             text = stringResource(
                                 if (state.providerReady) {
@@ -242,7 +235,7 @@ private fun ComposerArea(
     val name = state.assistantName.ifBlank { stringResource(R.string.onboarding_title) }
     Column(modifier = modifier.fillMaxWidth()) {
         if (state.providerReady) {
-            ConnectedBanner(onFinish = { onAction(OnboardingAction.Finish) })
+            ConnectedBanner()
         }
         FocusComposer(
             input = state.input,
@@ -254,20 +247,23 @@ private fun ComposerArea(
             onStop = { onAction(OnboardingAction.Stop) },
             hazeState = hazeState,
             pills = {
+                if (!state.providerReady) {
+                    Text(
+                        text = stringResource(R.string.onboarding_public_model) +
+                            " " +
+                            stringResource(R.string.onboarding_auto_model),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 FocusComposerPill(
-                    label = stringResource(R.string.onboarding_public_model),
-                    icon = FocusIcons.Bolt,
-                    compact = true,
-                    onClick = { onAction(OnboardingAction.OpenProviderSheet) },
-                )
-                FocusComposerPill(
-                    label = stringResource(R.string.onboarding_auto_model),
-                    icon = FocusIcons.Assistant,
-                    compact = true,
-                    onClick = { onAction(OnboardingAction.OpenProviderSheet) },
-                )
-                FocusComposerPill(
-                    label = stringResource(R.string.onboarding_connect_model),
+                    label = stringResource(
+                        if (state.providerReady) {
+                            R.string.onboarding_model_settings
+                        } else {
+                            R.string.onboarding_connect_model
+                        },
+                    ),
                     icon = FocusIcons.Tune,
                     compact = true,
                     onClick = { onAction(OnboardingAction.OpenProviderSheet) },
@@ -278,7 +274,7 @@ private fun ComposerArea(
 }
 
 @Composable
-private fun ConnectedBanner(onFinish: () -> Unit) {
+private fun ConnectedBanner() {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -287,7 +283,7 @@ private fun ConnectedBanner(onFinish: () -> Unit) {
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Row(
-            modifier = Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -309,10 +305,6 @@ private fun ConnectedBanner(onFinish: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            FocusTextButton(
-                text = stringResource(R.string.onboarding_finish),
-                onClick = onFinish,
-            )
         }
     }
 }
