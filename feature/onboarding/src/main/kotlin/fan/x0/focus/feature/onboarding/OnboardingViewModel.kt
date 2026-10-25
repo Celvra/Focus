@@ -1,6 +1,8 @@
 package fan.x0.focus.feature.onboarding
 
 import androidx.lifecycle.viewModelScope
+import fan.x0.focus.core.designsystem.components.FocusStepStatus
+import fan.x0.focus.core.designsystem.components.FocusTraceStep
 import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.AppErrorType
 import fan.x0.focus.core.error.toAppError
@@ -158,6 +160,8 @@ class OnboardingViewModel(
             copy(
                 messages = if (message == null) messages else messages + message,
                 streamingText = "",
+                reasoning = "",
+                steps = emptyList(),
                 sending = true,
                 input = "",
             )
@@ -167,6 +171,17 @@ class OnboardingViewModel(
                 engine.send(ONBOARDING_CONVERSATION, value, ChatMode.Onboarding).collect { event ->
                     when (event) {
                         is ChatEvent.Delta -> updateState { copy(streamingText = streamingText + event.text) }
+                        is ChatEvent.ReasoningDelta -> updateState { copy(reasoning = reasoning + event.text) }
+                        is ChatEvent.ToolStarted -> updateState { copy(steps = steps.upsert(event.label, FocusStepStatus.Running, null)) }
+                        is ChatEvent.ToolFinished -> updateState {
+                            copy(
+                                steps = steps.upsert(
+                                    event.label,
+                                    if (event.ok) FocusStepStatus.Done else FocusStepStatus.Failed,
+                                    event.summary.take(120).ifBlank { null },
+                                ),
+                            )
+                        }
                         is ChatEvent.Completed -> finishTurn()
                         is ChatEvent.Failed -> {
                             finishTurn()
@@ -201,8 +216,23 @@ class OnboardingViewModel(
                     messages + OnboardingMessage(nextId++, fromUser = false, text = answer)
                 },
                 streamingText = "",
+                reasoning = "",
+                steps = emptyList(),
                 sending = false,
             )
+        }
+    }
+
+    private fun List<FocusTraceStep>.upsert(
+        label: String,
+        status: FocusStepStatus,
+        summary: String?,
+    ): List<FocusTraceStep> {
+        val index = indexOfLast { it.label == label }
+        val step = FocusTraceStep(label, status, summary)
+        return when {
+            index < 0 -> this + step
+            else -> toMutableList().also { it[index] = step }
         }
     }
 

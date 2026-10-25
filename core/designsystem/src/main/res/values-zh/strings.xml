@@ -20,6 +20,12 @@
     <string name="common_loading">加载中</string>
     <string name="common_remove">移除</string>
     <string name="common_stop">停止</string>
+    <string name="common_reasoning">思考过程</string>
+    <string name="common_reasoning_live">正在思考</string>
+    <string name="common_tools_title">工具调用</string>
+    <plurals name="common_tools_count">
+        <item quantity="other">%d 次调用</item>
+    </plurals>
     <string name="error_no_network">没有网络连接</string>
     <string name="error_timeout">请求超时</string>
     <string name="error_tls">安全连接失败</string>

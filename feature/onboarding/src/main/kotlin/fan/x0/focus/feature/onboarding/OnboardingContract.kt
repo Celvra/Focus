@@ -1,5 +1,6 @@
 package fan.x0.focus.feature.onboarding
 
+import fan.x0.focus.core.designsystem.components.FocusTraceStep
 import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.mvi.UiAction
 import fan.x0.focus.core.mvi.UiEffect
@@ -21,6 +22,8 @@ data class OnboardingUiState(
     val assistantName: String = "",
     val messages: List<OnboardingMessage> = emptyList(),
     val streamingText: String = "",
+    val reasoning: String = "",
+    val steps: List<FocusTraceStep> = emptyList(),
     val sending: Boolean = false,
     val input: String = "",
     val providerReady: Boolean = false,

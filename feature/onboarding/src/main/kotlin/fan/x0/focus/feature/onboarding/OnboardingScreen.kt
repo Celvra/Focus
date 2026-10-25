@@ -52,6 +52,8 @@ import dev.chrisbanes.haze.rememberHazeState
 import fan.x0.focus.core.designsystem.components.FocusAmbientBackground
 import fan.x0.focus.core.designsystem.components.FocusAmbientWorking
 import fan.x0.focus.core.designsystem.components.FocusChatBubble
+import fan.x0.focus.core.designsystem.components.FocusReasoningCard
+import fan.x0.focus.core.designsystem.components.FocusTraceCard
 import fan.x0.focus.core.designsystem.components.FocusChip
 import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
 import fan.x0.focus.core.designsystem.components.FocusComposer
@@ -215,11 +217,21 @@ private fun Conversation(
         }
         if (live) {
             item(key = "live", contentType = "assistant") {
-                FocusChatBubble(
-                    text = state.streamingText,
-                    fromUser = false,
-                    streaming = state.sending,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (state.reasoning.isNotBlank()) {
+                        FocusReasoningCard(text = state.reasoning, running = state.sending)
+                    }
+                    if (state.steps.isNotEmpty()) {
+                        FocusTraceCard(steps = state.steps)
+                    }
+                    if (state.streamingText.isNotBlank()) {
+                        FocusChatBubble(
+                            text = state.streamingText,
+                            fromUser = false,
+                            streaming = state.sending,
+                        )
+                    }
+                }
             }
         }
     }

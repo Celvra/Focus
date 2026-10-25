@@ -91,6 +91,9 @@ import fan.x0.focus.core.designsystem.components.AvatarState
 import fan.x0.focus.core.designsystem.components.AvatarStyle
 import fan.x0.focus.core.designsystem.components.FocusAvatar
 import fan.x0.focus.core.designsystem.components.FocusChatBubble
+import fan.x0.focus.core.designsystem.components.FocusReasoningCard
+import fan.x0.focus.core.designsystem.components.FocusTraceCard
+import fan.x0.focus.core.designsystem.components.FocusTraceStep
 import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
 import fan.x0.focus.core.designsystem.components.FocusIconBadge
 import fan.x0.focus.core.designsystem.components.FocusIcons
@@ -545,7 +548,7 @@ private fun ChatThread(
                         is ChatEntry.Assistant -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (entry.reasoning.isNotBlank()) {
                                 key(entry.key) {
-                                    ReasoningCard(text = entry.reasoning, running = entry.live)
+                                    FocusReasoningCard(text = entry.reasoning, running = entry.live)
                                 }
                             }
                             if (entry.text.isNotBlank()) {
@@ -556,7 +559,11 @@ private fun ChatThread(
                                 )
                             }
                         }
-                        is ChatEntry.Trace -> TraceCard(steps = entry.steps)
+                        is ChatEntry.Trace -> FocusTraceCard(
+                            steps = entry.steps.map {
+                                FocusTraceStep(it.label, it.status.toStepStatus(), it.summary)
+                            },
+                        )
                         is ChatEntry.Approval -> FocusApprovalCard(
                             card = entry.card,
                             onDecide = { onAction(ChatAction.Decide(entry.card.id, it)) },
@@ -688,221 +695,6 @@ private fun JumpToLatest(
                 contentDescription = stringResource(R.string.chat_jump_latest),
                 modifier = Modifier.size(20.dp),
             )
-        }
-    }
-}
-
-@Composable
-private fun ReasoningCard(text: String, running: Boolean) {
-    val motion = LocalFocusMotion.current
-    var expanded by remember { mutableStateOf(running) }
-    LaunchedEffect(running) {
-        if (!running) expanded = false
-    }
-    val chevron by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = motion.spatialFast(),
-        label = "reasoningChevron",
-    )
-    val interaction = remember { MutableInteractionSource() }
-    val shape = MaterialTheme.shapes.small
-    Card(
-        shape = FocusShapeTokens.card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(shape)
-                    .stateLayer(interaction, shape)
-                    .clickable(interactionSource = interaction, indication = null, role = Role.Button) {
-                        expanded = !expanded
-                    }
-                    .heightIn(min = 40.dp)
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    imageVector = FocusIcons.Idea,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text(
-                    text = stringResource(if (running) R.string.chat_reasoning_live else R.string.chat_reasoning),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier
-                        .weight(1f)
-                        .shimmer(running, highlight = MaterialTheme.colorScheme.onSurface),
-                )
-                Icon(
-                    imageVector = FocusIcons.ArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp).rotate(chevron),
-                )
-            }
-            AnimatedVisibility(
-                visible = expanded,
-                enter = expandVertically(motion.spatialDefault()) + fadeIn(motion.effectsDefault()),
-                exit = shrinkVertically(motion.spatialDefault()) + fadeOut(motion.effectsFast()),
-            ) {
-                ReasoningBody(text = text, running = running)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReasoningBody(text: String, running: Boolean) {
-    val scroll = rememberScrollState()
-    LaunchedEffect(text, running) {
-        if (running) scroll.animateScrollTo(scroll.maxValue)
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (running) {
-                    Modifier
-                        .graphicsLayer { alpha = 0.99f }
-                        .drawWithCache {
-                            val height = size.height.takeIf { it > 0f } ?: 1f
-                            val fade = (20.dp.toPx() / height).coerceIn(0f, 0.33f)
-                            val brush = Brush.verticalGradient(
-                                colorStops = arrayOf(
-                                    0f to Color.Transparent,
-                                    fade to Color.Black,
-                                ),
-                            )
-                            onDrawWithContent {
-                                drawContent()
-                                drawRect(brush = brush, blendMode = BlendMode.DstIn)
-                            }
-                        }
-                        .heightIn(max = 120.dp)
-                        .verticalScroll(scroll)
-                } else {
-                    Modifier
-                }
-            )
-    ) {
-        FocusMarkdown(
-            text = text,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            streaming = running,
-            bodyStyle = MaterialTheme.typography.bodySmall,
-            preserveLineBreaks = true,
-            modifier = Modifier.padding(start = 28.dp, end = 8.dp, bottom = 10.dp),
-        )
-    }
-}
-
-@Composable
-private fun TraceCard(steps: List<TraceStep>) {
-    val motion = LocalFocusMotion.current
-    val scheme = MaterialTheme.colorScheme
-    val running = steps.any { it.status == TraceStatus.Running || it.status == TraceStatus.Pending }
-    val failed = steps.any { it.status == TraceStatus.Failed }
-    var expanded by remember { mutableStateOf(running) }
-    // Collapse once the turn settles; a later tap still reopens it.
-    LaunchedEffect(running) {
-        if (!running) expanded = false
-    }
-    val container by animateColorAsState(
-        targetValue = if (running) scheme.surfaceContainerHigh else scheme.surfaceContainerLow,
-        animationSpec = motion.effectsDefault(),
-        label = "traceContainer",
-    )
-    val chevron by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = motion.spatialFast(),
-        label = "traceChevron",
-    )
-    val headerInteraction = remember { MutableInteractionSource() }
-    val headerShape = MaterialTheme.shapes.small
-
-    Card(
-        shape = FocusShapeTokens.card,
-        colors = CardDefaults.cardColors(containerColor = container),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(headerShape)
-                    .stateLayer(headerInteraction, headerShape)
-                    .clickable(
-                        interactionSource = headerInteraction,
-                        indication = null,
-                        role = Role.Button,
-                    ) { expanded = !expanded }
-                    .heightIn(min = 40.dp)
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Box(modifier = Modifier.width(20.dp), contentAlignment = Alignment.Center) {
-                    when {
-                        running -> FocusLoadingBlob(size = 16.dp)
-                        failed -> Icon(
-                            imageVector = FocusIcons.Warning,
-                            contentDescription = null,
-                            tint = scheme.error,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        else -> Icon(
-                            imageVector = FocusIcons.Check,
-                            contentDescription = null,
-                            tint = scheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                }
-                Text(
-                    text = stringResource(R.string.chat_tools_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = scheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = pluralStringResource(R.plurals.chat_tools_count, steps.size, steps.size),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = scheme.onSurfaceVariant,
-                )
-                Icon(
-                    imageVector = FocusIcons.ArrowDown,
-                    contentDescription = null,
-                    tint = scheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .rotate(chevron),
-                )
-            }
-            AnimatedVisibility(
-                visible = expanded,
-                enter = expandVertically(motion.spatialDefault()) + fadeIn(motion.effectsDefault()),
-                exit = shrinkVertically(motion.spatialDefault()) + fadeOut(motion.effectsFast()),
-            ) {
-                Column {
-                    steps.forEachIndexed { index, step ->
-                        key(index, step.label) {
-                            FocusTimelineStep(
-                                label = step.label,
-                                status = step.status.toStepStatus(),
-                                summary = step.summary,
-                                isFirst = index == 0,
-                                isLast = index == steps.lastIndex,
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }

@@ -20,6 +20,13 @@
     <string name="common_loading">Loading</string>
     <string name="common_remove">Remove</string>
     <string name="common_stop">Stop</string>
+    <string name="common_reasoning">Thinking process</string>
+    <string name="common_reasoning_live">Thinking</string>
+    <string name="common_tools_title">Tool calls</string>
+    <plurals name="common_tools_count">
+        <item quantity="one">%d call</item>
+        <item quantity="other">%d calls</item>
+    </plurals>
     <string name="error_no_network">No network connection</string>
     <string name="error_timeout">The request timed out</string>
     <string name="error_tls">Secure connection failed</string>
