@@ -12,6 +12,10 @@ Your next-generation private LLM assistant
 
 </div>
 
+## Community
+
+[QQ](https://qm.qq.com/q/BeQPYWuzVS)
+
 ## Why choose it
 
 It can connect to your RSS and Atom feeds, so you can discover something new every day.

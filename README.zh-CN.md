@@ -12,6 +12,10 @@
 
 </div>
 
+## 社区
+
+[QQ](https://qm.qq.com/q/BeQPYWuzVS)
+
 ## 为什么选择它
 
 它可以接入你的 RSS 和 Atom 订阅，使得你每天都能了解全新的事物
