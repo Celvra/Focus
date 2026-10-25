@@ -155,19 +155,39 @@ class SettingsViewModel(
                     val token = ++fetchToken
                     viewModelScope.launch { fetchModels(token, openPicker = true, notify = true) }
                 } else {
-                    updateState { copy(modelPickerOpen = true, modelQuery = "") }
+                    updateState {
+                        copy(
+                            modelPickerOpen = true,
+                            modelPickerTarget = ModelPickerTarget.Provider,
+                            modelQuery = "",
+                        )
+                    }
                 }
             }
-            SettingsAction.CloseModelPicker -> updateState { copy(modelPickerOpen = false, modelQuery = "") }
+            SettingsAction.CloseModelPicker -> updateState {
+                copy(
+                    modelPickerOpen = false,
+                    modelPickerTarget = ModelPickerTarget.Provider,
+                    modelQuery = "",
+                )
+            }
             is SettingsAction.ModelQueryChanged -> updateState { copy(modelQuery = action.value) }
-            is SettingsAction.SelectModel -> updateState {
-                copy(model = action.id, modelPickerOpen = false, modelQuery = "", connectionOk = false)
+            is SettingsAction.SelectModel -> {
+                if (currentState.modelPickerTarget == ModelPickerTarget.Judge) {
+                    updateState { copy(modelPickerOpen = false, modelQuery = "") }
+                    setJudgeModel(action.id)
+                } else {
+                    updateState {
+                        copy(model = action.id, modelPickerOpen = false, modelQuery = "", connectionOk = false)
+                    }
+                }
             }
             SettingsAction.FetchBalance -> fetchBalance()
             is SettingsAction.PolicyChanged -> setPolicy(action.value)
             is SettingsAction.JudgeKindChanged -> setJudgeKind(action.value)
             is SettingsAction.JudgeProviderChanged -> setJudgeProvider(action.providerId)
-            is SettingsAction.JudgeModelChanged -> setJudgeModel(action.value)
+            SettingsAction.OpenJudgeModelPicker -> openJudgeModelPicker()
+            SettingsAction.RefreshJudgeModels -> openJudgeModelPicker()
             is SettingsAction.JudgeContextChanged -> setJudgeContext(action.value)
             is SettingsAction.JudgeMaxRiskChanged -> setJudgeMaxRisk(action.value)
             is SettingsAction.JudgeTimeoutChanged -> setJudgeTimeout(action.value)
@@ -198,6 +218,44 @@ class SettingsViewModel(
     private fun setJudgeModel(value: String) {
         updateState { copy(judgeModel = value) }
         viewModelScope.launch { policy.setJudgeModel(value) }
+    }
+
+    private fun openJudgeModelPicker() {
+        updateState { copy(judgeModelsLoading = true) }
+        viewModelScope.launch {
+            val provider = currentState.providers.firstOrNull { it.id == currentState.judgeProviderId }
+            val seeded = listOfNotNull(
+                provider?.model?.takeIf { it.isNotBlank() },
+                currentState.judgeModel.takeIf { it.isNotBlank() },
+            )
+            val fetched = provider?.let { config ->
+                val key = secrets.apiKey(config.id).orEmpty()
+                if (key.isBlank()) {
+                    null
+                } else {
+                    runCatching {
+                        catalog.list(
+                            ModelEndpoint(config.baseUrl, currentState.judgeModel.trim()),
+                            key,
+                            config.protocol,
+                        )
+                    }.getOrElse { error ->
+                        if (seeded.isEmpty()) emitError(error.toAppError())
+                        null
+                    }
+                }
+            }
+            val models = (seeded + fetched.orEmpty()).distinct()
+            updateState {
+                copy(
+                    judgeModels = models,
+                    judgeModelsLoading = false,
+                    modelPickerOpen = models.isNotEmpty(),
+                    modelPickerTarget = ModelPickerTarget.Judge,
+                    modelQuery = "",
+                )
+            }
+        }
     }
 
     private fun setJudgeMaxRisk(value: Int) {

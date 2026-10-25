@@ -207,11 +207,22 @@ fun SettingsScreen(
             }
             item(key = "policy") {
                 FocusReveal(index = 3) {
-                    PolicyGroup(state = state, onAction = onAction)
+                    PolicyCard(state = state, onAction = onAction)
+                }
+            }
+            item(key = "judge") {
+                AnimatedVisibility(
+                    visible = state.policy == CommandPolicy.AutoPilot,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically(),
+                ) {
+                    FocusReveal(index = 4) {
+                        JudgeCard(state = state, onAction = onAction)
+                    }
                 }
             }
             item(key = "about") {
-                FocusReveal(index = 4) {
+                FocusReveal(index = 5) {
                     AboutGroup(onReset = { onAction(SettingsAction.AskReset) })
                 }
             }
@@ -221,16 +232,25 @@ fun SettingsScreen(
         ProviderEditorSheet(state = state, onAction = onAction)
     }
     if (state.modelPickerOpen) {
+        val judge = state.modelPickerTarget == ModelPickerTarget.Judge
+        val refreshJudge: (() -> Unit)? = if (judge) {
+            { onAction(SettingsAction.RefreshJudgeModels) }
+        } else {
+            null
+        }
         FocusSearchPickerSheet(
-            title = stringResource(R.string.settings_model_picker_title),
+            title = stringResource(
+                if (judge) R.string.settings_judge_model_item else R.string.settings_model_picker_title,
+            ),
             searchHint = stringResource(R.string.settings_model_search_hint),
             emptyText = stringResource(R.string.settings_models_empty),
-            items = state.models,
+            items = if (judge) state.judgeModels else state.models,
             query = state.modelQuery,
             onQueryChange = { onAction(SettingsAction.ModelQueryChanged(it)) },
             onSelect = { onAction(SettingsAction.SelectModel(it)) },
             onDismiss = { onAction(SettingsAction.CloseModelPicker) },
-            selected = state.model,
+            selected = if (judge) state.judgeModel else state.model,
+            onRefresh = refreshJudge,
         )
     }
     if (state.resetConfirm) {
@@ -703,11 +723,21 @@ private fun ProviderEditorSheet(state: SettingsUiState, onAction: (SettingsActio
 }
 
 @Composable
-private fun PolicyGroup(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
+private fun PolicyCard(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
     FocusCardGroup(title = stringResource(R.string.settings_policy_title)) {
         formItem(
             headlineContent = { Text(stringResource(R.string.settings_policy_item)) },
-            supportingContent = { Text(stringResource(R.string.settings_policy_body)) },
+            supportingContent = {
+                Text(
+                    stringResource(
+                        when (state.policy) {
+                            CommandPolicy.Yolo -> R.string.settings_policy_body_yolo
+                            CommandPolicy.AutoPilot -> R.string.settings_policy_body_autopilot
+                            CommandPolicy.Manual -> R.string.settings_policy_body_manual
+                        },
+                    ),
+                )
+            },
             leadingContent = {
                 FocusCardGroupIcon(
                     icon = FocusIcons.Bolt,
@@ -737,9 +767,15 @@ private fun PolicyGroup(state: SettingsUiState, onAction: (SettingsAction) -> Un
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun JudgeCard(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
+    FocusCardGroup(title = stringResource(R.string.settings_judge_title)) {
         formItem(
-            headlineContent = { Text(stringResource(R.string.settings_judge_item)) },
-            supportingContent = { Text(stringResource(R.string.settings_judge_body)) },
+            headlineContent = { Text(stringResource(R.string.settings_judge_engine_item)) },
+            supportingContent = { Text(stringResource(R.string.settings_judge_engine_body)) },
             leadingContent = {
                 FocusCardGroupIcon(
                     icon = FocusIcons.Tune,
@@ -763,6 +799,19 @@ private fun PolicyGroup(state: SettingsUiState, onAction: (SettingsAction) -> Un
                     onClick = { onAction(SettingsAction.JudgeKindChanged(JudgeKind.Llm)) },
                 )
             }
+        }
+        formItem(
+            headlineContent = { Text(stringResource(R.string.settings_judge_provider_item)) },
+            supportingContent = {
+                Text(
+                    if (state.providers.isEmpty()) {
+                        stringResource(R.string.settings_judge_provider_empty)
+                    } else {
+                        stringResource(R.string.settings_judge_provider_body)
+                    },
+                )
+            },
+        ) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -775,39 +824,80 @@ private fun PolicyGroup(state: SettingsUiState, onAction: (SettingsAction) -> Un
                     )
                 }
             }
-            OutlinedTextField(
-                value = state.judgeModel,
-                onValueChange = { onAction(SettingsAction.JudgeModelChanged(it)) },
-                label = { Text(stringResource(R.string.settings_judge_model)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+        }
+        item(
+            headlineContent = {
+                Text(
+                    text = state.judgeModel.ifBlank {
+                        stringResource(R.string.settings_judge_model_none)
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            supportingContent = { Text(stringResource(R.string.settings_judge_model_body)) },
+            trailingContent = {
+                if (state.judgeModelsLoading) {
+                    FocusLoadingBlob(size = 18.dp)
+                } else {
+                    Icon(
+                        imageVector = FocusIcons.Search,
+                        contentDescription = stringResource(R.string.settings_judge_model_item),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            onClick = { onAction(SettingsAction.OpenJudgeModelPicker) },
+        )
+        formItem(
+            headlineContent = { Text(stringResource(R.string.settings_judge_context_item)) },
+            supportingContent = { Text(stringResource(R.string.settings_judge_context_body)) },
+        ) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 listOf(0, 1, 2, 4, 8).forEach { window ->
                     FocusChip(
-                        label = stringResource(R.string.settings_judge_context, window),
+                        label = if (window == 0) {
+                            stringResource(R.string.settings_judge_context_none)
+                        } else {
+                            stringResource(R.string.settings_judge_context_value, window)
+                        },
                         selected = state.judgeContextWindow == window,
                         onClick = { onAction(SettingsAction.JudgeContextChanged(window)) },
                     )
                 }
             }
+        }
+        formItem(
+            headlineContent = { Text(stringResource(R.string.settings_judge_risk_item)) },
+            supportingContent = { Text(stringResource(R.string.settings_judge_risk_body)) },
+        ) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 listOf(1, 2, 3).forEach { risk ->
                     FocusChip(
-                        label = stringResource(R.string.settings_judge_risk, risk),
+                        label = stringResource(R.string.settings_judge_risk_value, risk),
                         selected = state.judgeMaxRisk == risk,
                         onClick = { onAction(SettingsAction.JudgeMaxRiskChanged(risk)) },
                     )
                 }
+            }
+        }
+        formItem(
+            headlineContent = { Text(stringResource(R.string.settings_judge_timeout_item)) },
+            supportingContent = { Text(stringResource(R.string.settings_judge_timeout_body)) },
+        ) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 listOf(5, 8, 15, 30).forEach { seconds ->
                     FocusChip(
-                        label = stringResource(R.string.settings_judge_timeout, seconds),
+                        label = stringResource(R.string.settings_judge_timeout_value, seconds),
                         selected = state.judgeTimeoutSeconds == seconds,
                         onClick = { onAction(SettingsAction.JudgeTimeoutChanged(seconds)) },
                     )

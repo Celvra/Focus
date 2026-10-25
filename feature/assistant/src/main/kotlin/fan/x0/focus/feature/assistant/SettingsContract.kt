@@ -45,14 +45,19 @@ data class SettingsUiState(
     val judgeKind: JudgeKind = JudgeKind.Jev,
     val judgeProviderId: String = "",
     val judgeModel: String = "",
+    val judgeModels: List<String> = emptyList(),
+    val judgeModelsLoading: Boolean = false,
     val judgeContextWindow: Int = 2,
     val judgeMaxRisk: Int = 3,
     val judgeTimeoutSeconds: Int = 8,
+    val modelPickerTarget: ModelPickerTarget = ModelPickerTarget.Provider,
 ) : UiState {
     val activeProvider: ProviderConfig? get() = providers.firstOrNull { it.id == activeProviderId }
     val canDelete: Boolean get() = providers.size > 1 && !isNewProvider
     val balanceSupported: Boolean get() = editingProviderId != null
 }
+
+enum class ModelPickerTarget { Provider, Judge }
 
 sealed interface SettingsAction : UiAction {
     data class RefreshHoursChanged(val hours: Int) : SettingsAction
@@ -85,7 +90,8 @@ sealed interface SettingsAction : UiAction {
     data class PolicyChanged(val value: CommandPolicy) : SettingsAction
     data class JudgeKindChanged(val value: JudgeKind) : SettingsAction
     data class JudgeProviderChanged(val providerId: String) : SettingsAction
-    data class JudgeModelChanged(val value: String) : SettingsAction
+    data object OpenJudgeModelPicker : SettingsAction
+    data object RefreshJudgeModels : SettingsAction
     data class JudgeContextChanged(val value: Int) : SettingsAction
     data class JudgeMaxRiskChanged(val value: Int) : SettingsAction
     data class JudgeTimeoutChanged(val value: Int) : SettingsAction
