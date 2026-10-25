@@ -42,7 +42,7 @@ jobs:
           FOCUS_KEYSTORE_PASSWORD: ${{ secrets.FOCUS_KEYSTORE_PASSWORD }}
           FOCUS_KEY_ALIAS: ${{ secrets.FOCUS_KEY_ALIAS }}
           FOCUS_KEY_PASSWORD: ${{ secrets.FOCUS_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease --console=plain
+        run: ./gradlew :app:assembleRelease --console=plain -Pkotlin.daemon.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=1024m"
       - name: Collect apk
         run: |
           mkdir -p dist

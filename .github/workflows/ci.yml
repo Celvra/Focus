@@ -23,9 +23,9 @@ jobs:
         run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v6
       - name: Assemble debug
-        run: ./gradlew :app:assembleDebug --console=plain
+        run: ./gradlew :app:assembleDebug --console=plain -Pkotlin.daemon.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=1024m"
       - name: Unit tests
-        run: ./gradlew testDebugUnitTest --console=plain
+        run: ./gradlew testDebugUnitTest --console=plain -Pkotlin.daemon.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=1024m"
 
   bridge:
     runs-on: ubuntu-latest
