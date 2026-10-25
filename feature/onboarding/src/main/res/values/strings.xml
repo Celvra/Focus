@@ -6,8 +6,6 @@
     <string name="onboarding_skip">Skip</string>
     <string name="onboarding_finish">Finish setup</string>
     <string name="onboarding_input_hint">Message %1$s</string>
-    <string name="onboarding_public_model">Public model</string>
-    <string name="onboarding_auto_model">auto</string>
     <string name="onboarding_connect_model">Connect your own</string>
     <string name="onboarding_connected_title">Model connected</string>
     <string name="onboarding_connected_body">You can finish setup now.</string>

@@ -247,15 +247,6 @@ private fun ComposerArea(
             onStop = { onAction(OnboardingAction.Stop) },
             hazeState = hazeState,
             pills = {
-                if (!state.providerReady) {
-                    Text(
-                        text = stringResource(R.string.onboarding_public_model) +
-                            " " +
-                            stringResource(R.string.onboarding_auto_model),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
                 FocusComposerPill(
                     label = stringResource(
                         if (state.providerReady) {

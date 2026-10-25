@@ -6,8 +6,6 @@
     <string name="onboarding_skip">跳过</string>
     <string name="onboarding_finish">完成设置</string>
     <string name="onboarding_input_hint">给 %1$s 发消息</string>
-    <string name="onboarding_public_model">公共模型</string>
-    <string name="onboarding_auto_model">auto</string>
     <string name="onboarding_connect_model">连接自己的模型</string>
     <string name="onboarding_connected_title">模型已连接</string>
     <string name="onboarding_connected_body">现在可以完成设置了。</string>
