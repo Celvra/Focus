@@ -579,18 +579,25 @@ class ToolExecutor(
             }
             "switch_model" -> {
                 val model = args.text("model") ?: return fail("model is required")
-                if (conversationId.isBlank()) return fail("No active conversation")
+                val asDefault = args.flag("default") ?: false
                 val config = settings.configOnce()
                 val provider = args.text("provider_id")?.let { id ->
                     config.providers.firstOrNull { it.id == id }
                 } ?: config.activeProvider ?: return fail("No provider")
-                val reasoning = chats.conversation(conversationId)?.reasoning.orEmpty()
-                chats.setProvider(conversationId, provider.id, model, reasoning)
+                if (asDefault) {
+                    settings.setActiveProvider(provider.id)
+                    settings.setModel(provider.baseUrl, model, provider.protocol)
+                }
+                if (conversationId.isNotBlank()) {
+                    val reasoning = chats.conversation(conversationId)?.reasoning.orEmpty()
+                    chats.setProvider(conversationId, provider.id, model, reasoning)
+                }
                 ok(
-                    "Model set to $model",
+                    if (asDefault) "Default model set to $model" else "Model set to $model",
                     buildJsonObject {
                         put("provider_id", provider.id)
                         put("model", model)
+                        put("default", asDefault)
                     }.toString(),
                 )
             }

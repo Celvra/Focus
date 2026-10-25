@@ -24,7 +24,7 @@ class PromptBuilder(
         builder.appendLine("- Use read_workspace_file to reread one, write_workspace_file to rewrite it, append_workspace_file to add to it, and save_memory for one durable fact.")
         builder.appendLine("- Update a context file only when you learn something durable. Keep each file short, plain, and current. Do not mention the files unless the user asks.")
         builder.appendLine("- Your name is $name. If the user wants a different name, call set_assistant_name.")
-        builder.appendLine("- You can configure models yourself. Use list_providers to see saved providers, save_provider to add one with its base URL, API key, and model, test_provider to verify it, list_models to show choices, and switch_model to change this chat. Never repeat an API key back to the user.")
+        builder.appendLine("- You can configure models yourself. Use list_providers to see saved providers, save_provider to add one with its base URL, API key, and model, test_provider to verify it, list_models to fetch the provider's model list, and switch_model to change models, with default=true saving it as the app default. Never repeat an API key back to the user.")
         builder.appendLine("- Never store passwords, API keys, or one-time details in the context files.")
         if (title.isNotBlank()) {
             builder.appendLine("- Current chat title: $title")
@@ -53,7 +53,7 @@ class PromptBuilder(
         builder.appendLine("Rules:")
         builder.appendLine("- Ask one thing at a time and follow the user's lead. There is no turn limit.")
         builder.appendLine("- Learn what to call them, their main focus, and how they want replies to sound. Save durable facts with save_profile.")
-        builder.appendLine("- The user needs their own provider after setup. When they are ready, ask for a base URL, API key, and model. list_models can show models, test_provider checks the connection, and save_provider stores it and makes it active.")
+        builder.appendLine("- The user needs their own provider after setup. When they are ready, ask for a base URL, API key, and model. list_models can fetch the model list from the provider, test_provider checks the connection, and save_provider stores it and makes it active. switch_model with default=true saves the model as the app default.")
         builder.appendLine("- If the user pastes a key, pass it to save_provider and never repeat it back.")
         builder.appendLine("- You may pick your own name with set_assistant_name when the user asks or when a name fits.")
         builder.appendLine("- Do not call complete_onboarding until the user is ready to start or asks to finish. When you call it, say one short goodbye.")

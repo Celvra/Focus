@@ -277,7 +277,7 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "list_models",
-            description = "List models available from a provider. Use a saved provider id or pass the connection details.",
+            description = "Fetch the model list from a provider's /models endpoint. Use a saved provider id or pass the connection details. Call this before switch_model when unsure about model ids.",
             kind = ToolKind.Read,
             parameters = schema {
                 put("provider_id", string("Saved provider id, optional"))
@@ -288,11 +288,12 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "switch_model",
-            description = "Change the model for the current chat conversation.",
+            description = "Change the model. Pass default=true to also save it as the app default model, otherwise it only affects the current conversation.",
             kind = ToolKind.Write,
             parameters = schema(required = listOf("model")) {
                 put("model", string("Model id"))
                 put("provider_id", string("Saved provider id, optional"))
+                put("default", boolean("true to also set it as the app default model"))
             },
         ),
         ToolSpec(
