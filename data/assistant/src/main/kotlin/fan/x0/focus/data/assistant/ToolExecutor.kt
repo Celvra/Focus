@@ -1,6 +1,11 @@
 package fan.x0.focus.data.assistant
 
+import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.CompletedToolCall
+import fan.x0.focus.core.network.openai.ConnectionTestException
+import fan.x0.focus.core.network.openai.ModelConnectionTester
+import fan.x0.focus.core.network.openai.ModelEndpoint
+import fan.x0.focus.core.network.openai.OpenAiModelCatalog
 import fan.x0.focus.data.sources.Article
 import fan.x0.focus.data.sources.CalendarRepository
 import fan.x0.focus.data.sources.Feed
@@ -18,6 +23,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.koin.core.annotation.Single
+import java.util.UUID
 
 data class ToolResult(
     val ok: Boolean,
@@ -25,6 +31,7 @@ data class ToolResult(
     val summary: String,
     val approval: ApprovalRequest? = null,
     val workingText: String? = null,
+    val completesOnboarding: Boolean = false,
 )
 
 data class StepOutcome(
@@ -40,16 +47,18 @@ class ToolExecutor(
     private val files: FileRepository,
     private val web: WebArticleExtractor,
     private val goals: GoalStore,
-    private val memories: MemoryStore,
     private val approvals: ApprovalStore,
     private val today: TodayStore,
     private val reminders: ReminderStore,
-    private val profile: ProfileStore,
+    private val workspace: WorkspaceStore,
     private val settings: AssistantSettings,
     private val reminderScheduler: ReminderScheduler,
     private val chats: ChatStore,
+    private val secrets: SecretStore,
+    private val tester: ModelConnectionTester,
+    private val catalog: OpenAiModelCatalog,
 ) {
-    val specs: List<ToolSpec> = ToolCatalog.all
+    val specs: List<ToolSpec> = ToolCatalog.chat()
 
     suspend fun execute(call: CompletedToolCall, conversationId: String = ""): ToolResult =
         dispatch(call.name, call.arguments, allowApproval = true, conversationId = conversationId)
@@ -121,6 +130,25 @@ class ToolExecutor(
                 val days = (args.number("days") ?: 60).coerceIn(1, 365)
                 val events = calendar.search(query, days)
                 ok("${events.size} matches", eventsJson(events))
+            }
+            "create_calendar_event" -> {
+                val title = args.text("title") ?: return fail("title is required")
+                val start = ToolTime.parse(args.text("start")) ?: return fail("start must be ISO-8601")
+                val end = ToolTime.parse(args.text("end")) ?: return fail("end must be ISO-8601")
+                if (end <= start) return fail("end must be after start")
+                val id = calendar.createEvent(
+                    title = title,
+                    start = start,
+                    end = end,
+                    description = args.text("description"),
+                    location = args.text("location"),
+                )
+                ok("Created $title", "Event created: $title ($id).")
+            }
+            "delete_calendar_event" -> {
+                val id = args.text("event_id")?.toLongOrNull() ?: return fail("event_id is required")
+                if (!calendar.deleteEvent(id)) return fail("Event not found")
+                ok("Deleted event", "Calendar event deleted.")
             }
             "list_feeds" -> {
                 val feeds = feeds.listFeeds()
@@ -198,18 +226,49 @@ class ToolExecutor(
                 val list = goals.list()
                 ok("${list.size} goals", goalsJson(list))
             }
-            "list_memories" -> {
-                val list = memories.list()
+            "list_workspace_files" -> {
+                val documents = workspace.readAll()
                 ok(
-                    "${list.size} memories",
+                    "${documents.size} context files",
                     buildJsonObject {
-                        putJsonArray("memories") {
-                            list.forEach { memory ->
-                                add(buildJsonObject { put("id", memory.id); put("content", memory.content) })
+                        putJsonArray("files") {
+                            documents.forEach { document ->
+                                add(
+                                    buildJsonObject {
+                                        put("file", document.file.name.lowercase())
+                                        put("name", document.file.fileName)
+                                        put("characters", document.content.length)
+                                        put("preview", document.content.take(200))
+                                    },
+                                )
                             }
                         }
                     }.toString(),
                 )
+            }
+            "read_workspace_file" -> {
+                val file = args.workspaceFile() ?: return fail("file must be one of ${WorkspaceFile.keys()}")
+                val content = workspace.read(file)
+                ok(
+                    "Read ${file.fileName}",
+                    buildJsonObject {
+                        put("file", file.name.lowercase())
+                        put("name", file.fileName)
+                        put("content", content)
+                    }.toString(),
+                )
+            }
+            "write_workspace_file" -> {
+                val file = args.workspaceFile() ?: return fail("file must be one of ${WorkspaceFile.keys()}")
+                val content = args.text("content") ?: return fail("content is required")
+                workspace.write(file, content)
+                ok("Saved ${file.fileName}", "${file.fileName} updated.")
+            }
+            "append_workspace_file" -> {
+                val file = args.workspaceFile() ?: return fail("file must be one of ${WorkspaceFile.keys()}")
+                val content = args.text("content") ?: return fail("content is required")
+                workspace.append(file, content)
+                ok("Updated ${file.fileName}", "${file.fileName} updated.")
             }
             "list_reminders" -> {
                 val list = reminders.upcoming(ToolTime.now())
@@ -293,6 +352,18 @@ class ToolExecutor(
                 val feed = feeds.addFeed(url)
                 ok("Added ${feed.title}", "Subscribed to ${feed.title}.")
             }
+            "delete_article" -> {
+                val id = args.text("article_id") ?: return fail("article_id is required")
+                if (feeds.getArticle(id) == null) return fail("Article not found")
+                feeds.deleteArticle(id)
+                ok("Deleted article", "Article deleted.")
+            }
+            "remove_feed" -> {
+                val id = args.text("feed_id") ?: return fail("feed_id is required")
+                if (feeds.getFeed(id) == null) return fail("Feed not found")
+                feeds.removeFeed(id)
+                ok("Removed feed", "Feed removed.")
+            }
             "create_goal" -> {
                 val title = args.text("title") ?: return fail("title is required")
                 val goal = goals.add(
@@ -322,10 +393,15 @@ class ToolExecutor(
                 ) ?: return fail("Goal not found")
                 ok("Updated ${updated.title}", "Goal updated: ${updated.title}.")
             }
+            "delete_goal" -> {
+                val id = args.text("goal_id") ?: return fail("goal_id is required")
+                if (!goals.delete(id)) return fail("Goal not found")
+                ok("Deleted goal", "Goal deleted.")
+            }
             "save_memory" -> {
                 val content = args.text("content") ?: return fail("content is required")
-                memories.add(content)
-                ok("Saved memory", "Saved: $content")
+                workspace.appendMemory(content)
+                ok("Saved memory", "Saved to MEMORY.md: $content")
             }
             "create_reminder" -> {
                 val text = args.text("text") ?: return fail("text is required")
@@ -347,14 +423,176 @@ class ToolExecutor(
                 val file = files.createText(name, content.take(100_000))
                 ok("Created ${file.name}", "Created file ${file.name}.")
             }
+            "delete_file" -> {
+                val uri = args.text("uri") ?: return fail("uri is required")
+                files.delete(uri)
+                ok("Deleted file", "File deleted.")
+            }
             "save_profile" -> {
-                profile.update(
+                workspace.updateUserProfile(
                     name = args.text("name"),
                     tone = args.text("tone"),
                     focus = args.text("focus"),
                     language = args.text("language"),
                 )
-                ok("Profile saved", "Profile updated.")
+                ok("Profile saved", "USER.md updated.")
+            }
+            "set_assistant_name" -> {
+                val name = args.text("name") ?: return fail("name is required")
+                workspace.updateAssistantName(name)
+                ok("Name set to ${name.trim().take(40)}", "Assistant name updated.")
+            }
+            "list_providers" -> {
+                val config = settings.configOnce()
+                val entries = config.providers.map { provider ->
+                    buildJsonObject {
+                        put("id", provider.id)
+                        put("name", provider.name)
+                        put("base_url", provider.baseUrl)
+                        put("model", provider.model)
+                        put("protocol", provider.protocol.name)
+                        put("active", provider.id == config.activeProviderId)
+                        put("key_saved", !secrets.apiKey(provider.id).isNullOrBlank())
+                    }
+                }
+                ok(
+                    "${entries.size} providers",
+                    buildJsonObject {
+                        putJsonArray("providers") { entries.forEach { add(it) } }
+                    }.toString(),
+                )
+            }
+            "save_provider" -> {
+                val config = settings.configOnce()
+                val requestedName = args.text("name")
+                val requestedBaseUrl = args.text("base_url")?.trim()?.trimEnd('/')
+                val existing = args.text("provider_id")?.let { id ->
+                    config.providers.firstOrNull { it.id == id }
+                } ?: requestedName?.let { name ->
+                    config.providers.firstOrNull { it.name.equals(name, ignoreCase = true) }
+                } ?: requestedBaseUrl?.let { url ->
+                    config.providers.firstOrNull { it.baseUrl == url }
+                }
+                val baseUrl = requestedBaseUrl
+                    ?: existing?.baseUrl
+                    ?: return fail("base_url or provider_id is required")
+                if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+                    return fail("base_url must start with http:// or https://")
+                }
+                val model = args.text("model")
+                    ?: existing?.model?.takeIf { it.isNotBlank() }
+                    ?: return fail("model or provider_id is required")
+                val protocolText = args.text("protocol")
+                val protocol = if (protocolText == null) {
+                    existing?.protocol ?: ChatProtocol.ChatCompletions
+                } else {
+                    protocolOf(protocolText) ?: return fail("protocol must be chat, responses, or anthropic")
+                }
+                val name = requestedName ?: existing?.name ?: providerName(baseUrl)
+                val id = existing?.id ?: UUID.randomUUID().toString()
+                val makeActive = args.flag("make_active") ?: true
+                settings.updateProvider(
+                    ProviderConfig(
+                        id = id,
+                        name = name,
+                        baseUrl = baseUrl,
+                        model = model,
+                        protocol = protocol,
+                    ),
+                    makeActive = makeActive,
+                )
+                args.text("api_key")?.let { secrets.setApiKey(id, it) }
+                val keySaved = !secrets.apiKey(id).isNullOrBlank()
+                ok(
+                    "Saved $name",
+                    buildJsonObject {
+                        put("id", id)
+                        put("name", name)
+                        put("base_url", baseUrl)
+                        put("model", model)
+                        put("protocol", protocol.name)
+                        put("active", makeActive)
+                        put("key_saved", keySaved)
+                    }.toString(),
+                )
+            }
+            "test_provider" -> {
+                val config = settings.configOnce()
+                val saved = args.text("provider_id")?.let { id ->
+                    config.providers.firstOrNull { it.id == id }
+                }
+                val baseUrl = args.text("base_url")?.trim()?.trimEnd('/')
+                    ?: saved?.baseUrl
+                    ?: return fail("base_url or provider_id is required")
+                if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+                    return fail("base_url must start with http:// or https://")
+                }
+                val model = args.text("model") ?: saved?.model ?: return fail("model or provider_id is required")
+                val protocol = protocolOf(args.text("protocol"))
+                    ?: saved?.protocol
+                    ?: ChatProtocol.ChatCompletions
+                val key = args.text("api_key")
+                    ?: saved?.let { secrets.apiKey(it.id) }
+                    ?: return fail("api_key or provider_id is required")
+                try {
+                    val report = tester.test(ModelEndpoint(baseUrl, model), key, protocol)
+                    ok(
+                        "Connection works",
+                        buildJsonObject {
+                            put("ok", true)
+                            put("model", report.echoedModel ?: model)
+                            put("latency_ms", report.latencyMs)
+                        }.toString(),
+                    )
+                } catch (e: ConnectionTestException) {
+                    fail("Connection test failed: ${e.detail ?: e.stage.name}")
+                }
+            }
+            "list_models" -> {
+                val config = settings.configOnce()
+                val saved = args.text("provider_id")?.let { id ->
+                    config.providers.firstOrNull { it.id == id }
+                }
+                val baseUrl = args.text("base_url")?.trim()?.trimEnd('/')
+                    ?: saved?.baseUrl
+                    ?: return fail("base_url or provider_id is required")
+                if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+                    return fail("base_url must start with http:// or https://")
+                }
+                val protocol = protocolOf(args.text("protocol"))
+                    ?: saved?.protocol
+                    ?: ChatProtocol.ChatCompletions
+                val key = args.text("api_key")
+                    ?: saved?.let { secrets.apiKey(it.id) }
+                    ?: return fail("api_key or provider_id is required")
+                val models = catalog.list(
+                    endpoint = ModelEndpoint(baseUrl, saved?.model.orEmpty()),
+                    apiKey = key,
+                    protocol = protocol,
+                ).take(200)
+                ok(
+                    "${models.size} models",
+                    buildJsonObject {
+                        putJsonArray("models") { models.forEach { add(JsonPrimitive(it)) } }
+                    }.toString(),
+                )
+            }
+            "switch_model" -> {
+                val model = args.text("model") ?: return fail("model is required")
+                if (conversationId.isBlank()) return fail("No active conversation")
+                val config = settings.configOnce()
+                val provider = args.text("provider_id")?.let { id ->
+                    config.providers.firstOrNull { it.id == id }
+                } ?: config.activeProvider ?: return fail("No provider")
+                val reasoning = chats.conversation(conversationId)?.reasoning.orEmpty()
+                chats.setProvider(conversationId, provider.id, model, reasoning)
+                ok(
+                    "Model set to $model",
+                    buildJsonObject {
+                        put("provider_id", provider.id)
+                        put("model", model)
+                    }.toString(),
+                )
             }
             "rename_conversation" -> {
                 val title = args.text("title") ?: return fail("title is required")
@@ -397,10 +635,22 @@ class ToolExecutor(
                 )
                 ok("Saved ${idea.title}", "Idea saved: ${idea.title}.")
             }
-            "complete_onboarding" -> {
-                settings.completeOnboarding()
-                ok("Onboarding complete", "Setup finished.")
+            "delete_update" -> {
+                val id = args.text("update_id") ?: return fail("update_id is required")
+                if (!today.deleteUpdate(id)) return fail("Card not found")
+                ok("Deleted card", "Feed card deleted.")
             }
+            "delete_idea" -> {
+                val id = args.text("idea_id") ?: return fail("idea_id is required")
+                if (!today.deleteIdea(id)) return fail("Idea not found")
+                ok("Deleted idea", "Idea deleted.")
+            }
+            "complete_onboarding" -> ToolResult(
+                ok = true,
+                content = "Setup will finish after your goodbye.",
+                summary = "Onboarding complete",
+                completesOnboarding = true,
+            )
             else -> fail("Unsupported tool: ${spec.name}")
         }
     } catch (e: CancellationException) {
@@ -455,10 +705,15 @@ class ToolExecutor(
             val goal = goals.get(id)
             SimpleDraft("Delete goal", goal?.title ?: id, "Delete goal: ${goal?.title ?: id}")
         }
-        "delete_memory" -> {
-            val id = args.text("memory_id") ?: return null
-            val memory = memories.get(id)
-            SimpleDraft("Delete memory", memory?.content ?: id, "Delete memory")
+        "delete_update" -> {
+            val id = args.text("update_id") ?: return null
+            val update = today.update(id)
+            SimpleDraft("Delete card", update?.headline ?: id, "Delete card: ${update?.headline ?: id}")
+        }
+        "delete_idea" -> {
+            val id = args.text("idea_id") ?: return null
+            val idea = today.idea(id)
+            SimpleDraft("Delete idea", idea?.title ?: id, "Delete idea: ${idea?.title ?: id}")
         }
         "delete_file" -> {
             val uri = args.text("uri") ?: return null
@@ -572,11 +827,27 @@ class ToolExecutor(
         return primitive.content.takeIf { it.isNotBlank() }
     }
 
+    private fun JsonObject.workspaceFile(): WorkspaceFile? =
+        text("file")?.let { WorkspaceFile.fromKey(it) }
+
     private fun JsonObject.number(key: String): Int? =
         (this[key] as? JsonPrimitive)?.content?.toIntOrNull()
 
     private fun JsonObject.flag(key: String): Boolean? =
         (this[key] as? JsonPrimitive)?.content?.toBooleanStrictOrNull()
+
+    private fun protocolOf(value: String?): ChatProtocol? = when (value?.trim()?.lowercase()) {
+        "chat", "chat_completions", "chatcompletions", "openai" -> ChatProtocol.ChatCompletions
+        "responses", "response" -> ChatProtocol.Responses
+        "anthropic", "messages", "anthropic_messages" -> ChatProtocol.AnthropicMessages
+        else -> null
+    }
+
+    private fun providerName(baseUrl: String): String =
+        runCatching { java.net.URI(baseUrl).host }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: "Provider"
 
     private fun JsonObject.steps(key: String): List<IdeaStep> {
         val array = this[key] as? JsonArray ?: return emptyList()

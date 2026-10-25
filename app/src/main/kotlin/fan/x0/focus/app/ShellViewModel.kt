@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import fan.x0.focus.data.assistant.ChatStore
 import fan.x0.focus.data.assistant.ChatSwitcher
 import fan.x0.focus.data.assistant.Conversation
-import fan.x0.focus.data.assistant.ProfileStore
+import fan.x0.focus.data.assistant.WorkspaceStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,7 +24,7 @@ data class ShellState(
 @KoinViewModel
 class ShellViewModel(
     private val chats: ChatStore,
-    private val profile: ProfileStore,
+    private val workspace: WorkspaceStore,
     private val switcher: ChatSwitcher,
 ) : ViewModel() {
 
@@ -71,12 +71,12 @@ class ShellViewModel(
     }
 
     private suspend fun load() {
-        val person = profile.read()
+        val name = workspace.userName()
         val conversations = chats.conversations().filter { it.id != ONBOARDING_CHAT }
         val archived = chats.conversations(archived = true).filter { it.id != ONBOARDING_CHAT }
         _state.value = ShellState(
             loading = false,
-            name = person.name,
+            name = name,
             conversations = conversations,
             archived = archived,
         )

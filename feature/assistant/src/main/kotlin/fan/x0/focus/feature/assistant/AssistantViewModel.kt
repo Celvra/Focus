@@ -3,84 +3,51 @@ package fan.x0.focus.feature.assistant
 import androidx.lifecycle.viewModelScope
 import fan.x0.focus.core.error.toAppError
 import fan.x0.focus.core.mvi.BaseViewModel
-import fan.x0.focus.data.assistant.MemoryStore
-import fan.x0.focus.data.assistant.ProfileStore
+import fan.x0.focus.data.assistant.WorkspaceStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
 @KoinViewModel
 class AssistantViewModel(
-    private val profile: ProfileStore,
-    private val memories: MemoryStore,
+    private val workspace: WorkspaceStore,
 ) : BaseViewModel<AssistantAction, AssistantUiState, AssistantEffect>(AssistantUiState()) {
 
     init {
         viewModelScope.launch {
-            profile.revision.collect { loadProfile() }
-        }
-        viewModelScope.launch {
-            memories.revision.collect { loadMemories() }
+            workspace.revision.collect { load() }
         }
     }
 
-    private suspend fun loadProfile() {
+    private suspend fun load() {
         try {
-            val person = profile.read()
+            val documents = workspace.readAll()
+            val assistantName = workspace.assistantName()
             updateState {
                 copy(
                     loading = false,
-                    name = person.name.orEmpty(),
-                    tone = person.tone.orEmpty(),
-                    focus = person.focus.orEmpty(),
+                    assistantName = assistantName,
+                    documents = documents.map { WorkspaceDocumentUi(it.file, it.content) },
+                    openDocument = openDocument?.let { open ->
+                        documents.firstOrNull { it.file == open.file }
+                            ?.let { WorkspaceDocumentUi(it.file, it.content) }
+                    },
                 )
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            emitError(e.toAppError())
-        }
-    }
-
-    private suspend fun loadMemories() {
-        try {
-            val saved = memories.list()
-            updateState {
-                copy(
-                    loading = false,
-                    memories = saved.map { MemoryUi(it.id, it.content) },
-                )
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
+            updateState { copy(loading = false) }
             emitError(e.toAppError())
         }
     }
 
     override fun onAction(action: AssistantAction) {
         when (action) {
-            is AssistantAction.AskDeleteMemory -> updateState {
-                copy(deleteMemory = memories.firstOrNull { it.id == action.id })
+            is AssistantAction.OpenDocument -> updateState {
+                copy(openDocument = documents.firstOrNull { it.file == action.file })
             }
-            AssistantAction.ConfirmDeleteMemory -> confirmDeleteMemory()
-            AssistantAction.CancelDeleteMemory -> updateState { copy(deleteMemory = null) }
-        }
-    }
-
-    private fun confirmDeleteMemory() {
-        val target = currentState.deleteMemory ?: return
-        updateState {
-            copy(deleteMemory = null, memories = memories.filterNot { it.id == target.id })
-        }
-        viewModelScope.launch {
-            try {
-                memories.delete(target.id)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                emitError(e.toAppError())
-            }
+            AssistantAction.CloseDocument -> updateState { copy(openDocument = null) }
         }
     }
 }

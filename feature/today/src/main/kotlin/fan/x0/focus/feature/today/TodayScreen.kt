@@ -140,7 +140,14 @@ fun TodayScreen(
             onDismiss = { onAction(TodayAction.CloseIdeaMenu) },
             onMoreLike = { onAction(TodayAction.MoreLikeIdea(idea.id)) },
             onNotInterested = { onAction(TodayAction.DismissIdea(idea.id)) },
+            onDelete = { onAction(TodayAction.AskDeleteIdea(idea.id)) },
         )
+    }
+    state.deleteUpdate?.let { update ->
+        DeleteUpdateDialog(update = update, onAction = onAction)
+    }
+    state.deleteIdea?.let { idea ->
+        DeleteIdeaDialog(idea = idea, onAction = onAction)
     }
     state.goalDraft?.let { draft ->
         GoalEditorSheet(draft = draft, saving = state.saving, onAction = onAction)

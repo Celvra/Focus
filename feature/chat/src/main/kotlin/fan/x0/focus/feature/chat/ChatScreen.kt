@@ -62,13 +62,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
@@ -181,7 +184,11 @@ fun ChatScreen(
     var mascotTop by remember { mutableStateOf<Offset?>(null) }
     var mascotBottom by remember { mutableStateOf<Offset?>(null) }
     var overlayOrigin by remember { mutableStateOf(Offset.Zero) }
+    var composerTop by remember { mutableStateOf(Float.POSITIVE_INFINITY) }
     LaunchedEffect(state.conversationId) { mascotBottom = null }
+    LaunchedEffect(working) {
+        if (!working) mascotBottom = null
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -270,18 +277,30 @@ fun ChatScreen(
                     onPickPhotos = onPickPhotos,
                     onTakePhoto = onTakePhoto,
                     onHeightChange = { composerHeight = it },
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .onGloballyPositioned { composerTop = it.positionInRoot().y },
                 )
             }
         }
         if (!state.isEmpty) {
-            ChatMascot(
-                state = avatarState,
-                working = working,
-                topDock = mascotTop,
-                bottomDock = mascotBottom,
-                overlayOrigin = overlayOrigin,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawWithContent {
+                        clipRect(bottom = (composerTop - overlayOrigin.y).coerceIn(0f, size.height)) {
+                            this@drawWithContent.drawContent()
+                        }
+                    },
+            ) {
+                ChatMascot(
+                    state = avatarState,
+                    working = working,
+                    topDock = mascotTop,
+                    bottomDock = mascotBottom,
+                    overlayOrigin = overlayOrigin,
+                )
+            }
         }
     }
 }
@@ -302,6 +321,12 @@ private fun ChatHome(
     val title = buildString {
         append(stringResource(greeting))
         state.name?.takeIf { it.isNotBlank() }?.let { append(", ").append(it) }
+    }
+    val generated = state.suggestions
+    val suggestions = if (generated.isEmpty()) {
+        defaultSuggestions()
+    } else {
+        generated.map { Suggestion(suggestionIcon(it.icon), it.title, it.prompt) }
     }
 
     LazyColumn(
@@ -346,30 +371,13 @@ private fun ChatHome(
             }
         }
         items(
-            listOf(
-                Suggestion(
-                    icon = FocusIcons.Calendar,
-                    title = R.string.chat_suggest_schedule,
-                    prompt = R.string.chat_suggest_schedule_prompt,
-                ),
-                Suggestion(
-                    icon = FocusIcons.Feed,
-                    title = R.string.chat_suggest_reading,
-                    prompt = R.string.chat_suggest_reading_prompt,
-                ),
-                Suggestion(
-                    icon = FocusIcons.Goals,
-                    title = R.string.chat_suggest_goals,
-                    prompt = R.string.chat_suggest_goals_prompt,
-                ),
-            ),
-            key = { it.title },
+            suggestions,
+            key = { it.prompt },
         ) { suggestion ->
-            val prompt = stringResource(suggestion.prompt)
             FocusReveal(index = 2) {
                 SuggestionCard(
                     suggestion = suggestion,
-                    onClick = { onAction(ChatAction.Suggest(prompt)) },
+                    onClick = { onAction(ChatAction.Suggest(suggestion.prompt)) },
                 )
             }
         }
@@ -377,15 +385,44 @@ private fun ChatHome(
 }
 
 private data class Suggestion(
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val title: Int,
-    val prompt: Int,
+    val icon: ImageVector,
+    val title: String,
+    val prompt: String,
 )
+
+@Composable
+private fun defaultSuggestions(): List<Suggestion> = listOf(
+    Suggestion(
+        icon = FocusIcons.Calendar,
+        title = stringResource(R.string.chat_suggest_schedule),
+        prompt = stringResource(R.string.chat_suggest_schedule_prompt),
+    ),
+    Suggestion(
+        icon = FocusIcons.Feed,
+        title = stringResource(R.string.chat_suggest_reading),
+        prompt = stringResource(R.string.chat_suggest_reading_prompt),
+    ),
+    Suggestion(
+        icon = FocusIcons.Goals,
+        title = stringResource(R.string.chat_suggest_goals),
+        prompt = stringResource(R.string.chat_suggest_goals_prompt),
+    ),
+)
+
+private fun suggestionIcon(key: String): ImageVector = when (key) {
+    "calendar" -> FocusIcons.Calendar
+    "feed" -> FocusIcons.Feed
+    "goals" -> FocusIcons.Goals
+    "task" -> FocusIcons.Check
+    "idea" -> FocusIcons.Idea
+    "folder" -> FocusIcons.Folder
+    "today" -> FocusIcons.Today
+    else -> FocusIcons.Assistant
+}
 
 @Composable
 private fun SuggestionCard(suggestion: Suggestion, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
-    val prompt = stringResource(suggestion.prompt)
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -403,12 +440,12 @@ private fun SuggestionCard(suggestion: Suggestion, onClick: () -> Unit) {
             FocusIconBadge(icon = suggestion.icon, size = 40.dp)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(suggestion.title),
+                    text = suggestion.title,
                     style = MaterialTheme.typography.titleSmallEmphasized,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = stringResource(suggestion.prompt),
+                    text = suggestion.prompt,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -461,7 +498,9 @@ private fun ChatThread(
     }
 
     LaunchedEffect(entries.size, state.live, bottomPadding, working) {
-        if (follow && entries.isNotEmpty()) listState.requestScrollToItem(entries.size)
+        if (follow && entries.isNotEmpty()) {
+            listState.requestScrollToItem(entries.size + if (working) 1 else 0)
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {

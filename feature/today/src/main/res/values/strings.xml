@@ -13,6 +13,10 @@
     <string name="today_update_discuss">Discuss</string>
     <string name="today_update_info">Why this card</string>
     <string name="today_update_reason_title">Why this card is here</string>
+    <string name="today_update_more">Card options</string>
+    <string name="today_update_delete">Delete</string>
+    <string name="today_update_delete_title">Delete this card?</string>
+    <string name="today_update_delete_body">Delete “%1$s”? This cannot be undone.</string>
     <string name="today_ideas_empty_title">No ideas yet</string>
     <string name="today_ideas_empty_body">Ask Focus what to do next, and the ideas it comes up with land here.</string>
     <string name="today_ideas_generate">Ask for ideas</string>
@@ -22,6 +26,10 @@
     <string name="today_idea_more">More options</string>
     <string name="today_idea_more_like">More like this</string>
     <string name="today_idea_not_interested">Not interested</string>
+    <string name="today_idea_delete">Delete</string>
+    <string name="today_idea_delete_title">Delete this idea?</string>
+    <string name="today_idea_delete_body">Delete “%1$s”? This cannot be undone.</string>
+    <string name="today_delete_confirm">Delete</string>
     <string name="today_goals_track">Tracking</string>
     <string name="today_goals_empty">No goals yet. Add one below, or ask Focus to set one up.</string>
     <string name="today_goals_create">Create a goal</string>

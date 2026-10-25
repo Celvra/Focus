@@ -1,28 +1,27 @@
 package fan.x0.focus.feature.assistant
 
-import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.mvi.UiAction
 import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
+import fan.x0.focus.data.assistant.WorkspaceFile
 
-data class MemoryUi(
-    val id: String,
+data class WorkspaceDocumentUi(
+    val file: WorkspaceFile,
     val content: String,
-)
+) {
+    val fileName: String get() = file.fileName
+}
 
 data class AssistantUiState(
     val loading: Boolean = true,
-    val name: String = "",
-    val tone: String = "",
-    val focus: String = "",
-    val memories: List<MemoryUi> = emptyList(),
-    val deleteMemory: MemoryUi? = null,
+    val assistantName: String = "",
+    val documents: List<WorkspaceDocumentUi> = emptyList(),
+    val openDocument: WorkspaceDocumentUi? = null,
 ) : UiState
 
 sealed interface AssistantAction : UiAction {
-    data class AskDeleteMemory(val id: String) : AssistantAction
-    data object ConfirmDeleteMemory : AssistantAction
-    data object CancelDeleteMemory : AssistantAction
+    data class OpenDocument(val file: WorkspaceFile) : AssistantAction
+    data object CloseDocument : AssistantAction
 }
 
 sealed interface AssistantEffect : UiEffect

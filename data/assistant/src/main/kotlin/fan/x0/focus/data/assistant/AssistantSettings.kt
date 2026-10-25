@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import fan.x0.focus.core.network.openai.ChatProtocol
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -98,13 +99,21 @@ class AssistantSettings(@Provided private val context: Context) {
         }
     }
 
-    suspend fun setModel(baseUrl: String, model: String) {
+    suspend fun setModel(
+        baseUrl: String,
+        model: String,
+        protocol: ChatProtocol,
+    ) {
         context.assistantDataStore.edit { prefs ->
             val current = readProviders(prefs)
             val activeId = prefs[Keys.activeProviderId] ?: current.first().id
             val next = current.map {
                 if (it.id == activeId) {
-                    it.copy(baseUrl = baseUrl.trim().trimEnd('/'), model = model.trim())
+                    it.copy(
+                        baseUrl = baseUrl.trim().trimEnd('/'),
+                        model = model.trim(),
+                        protocol = protocol,
+                    )
                 } else {
                     it
                 }

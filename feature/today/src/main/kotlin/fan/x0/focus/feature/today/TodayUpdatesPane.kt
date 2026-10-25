@@ -1,6 +1,7 @@
 package fan.x0.focus.feature.today
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
@@ -66,6 +69,7 @@ fun UpdatesPane(
             itemsIndexed(state.updates, key = { _, update -> update.id }) { index, update ->
                 UpdateCard(
                     update = update,
+                    menuOpen = state.updateMenu == update.id,
                     onAction = onAction,
                     modifier = Modifier.animateItem(),
                 )
@@ -112,6 +116,7 @@ private fun UpdatesPrompt(onClick: () -> Unit) {
 @Composable
 private fun UpdateCard(
     update: UpdateUi,
+    menuOpen: Boolean,
     onAction: (TodayAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -149,6 +154,24 @@ private fun UpdateCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            Box {
+                IconButton(onClick = { onAction(TodayAction.UpdateMenu(update.id)) }) {
+                    Icon(
+                        imageVector = FocusIcons.More,
+                        contentDescription = stringResource(R.string.today_update_more),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { onAction(TodayAction.CloseUpdateMenu) },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.today_update_delete)) },
+                        onClick = { onAction(TodayAction.AskDeleteUpdate(update.id)) },
+                    )
+                }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {

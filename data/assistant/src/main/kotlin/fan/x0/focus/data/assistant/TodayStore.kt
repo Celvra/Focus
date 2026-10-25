@@ -41,6 +41,25 @@ class TodayStore(private val database: AssistantDatabase) {
         }
     }
 
+    suspend fun update(id: String): Update? = withContext(Dispatchers.IO) {
+        database.readableDatabase.rawQuery(
+            "SELECT id, headline, body, reason, category, icon, article_id, created_at, feedback " +
+                "FROM updates WHERE id = ? LIMIT 1",
+            arrayOf(id),
+        ).use { cursor ->
+            if (cursor.moveToFirst()) cursor.toUpdate() else null
+        }
+    }
+
+    suspend fun idea(id: String): Idea? = withContext(Dispatchers.IO) {
+        database.readableDatabase.rawQuery(
+            "SELECT id, title, detail, steps, category, icon, created_at FROM ideas WHERE id = ? LIMIT 1",
+            arrayOf(id),
+        ).use { cursor ->
+            if (cursor.moveToFirst()) cursor.toIdea() else null
+        }
+    }
+
     suspend fun postUpdate(
         headline: String,
         body: String,
@@ -109,6 +128,14 @@ class TodayStore(private val database: AssistantDatabase) {
     suspend fun dismissIdea(id: String) = withContext(Dispatchers.IO) {
         val values = ContentValues().apply { put("dismissed", 1) }
         database.writableDatabase.update("ideas", values, "id = ?", arrayOf(id))
+    }
+
+    suspend fun deleteUpdate(id: String): Boolean = withContext(Dispatchers.IO) {
+        database.writableDatabase.delete("updates", "id = ?", arrayOf(id)) > 0
+    }
+
+    suspend fun deleteIdea(id: String): Boolean = withContext(Dispatchers.IO) {
+        database.writableDatabase.delete("ideas", "id = ?", arrayOf(id)) > 0
     }
 
     suspend fun setFeedback(id: String, feedback: Int) = withContext(Dispatchers.IO) {

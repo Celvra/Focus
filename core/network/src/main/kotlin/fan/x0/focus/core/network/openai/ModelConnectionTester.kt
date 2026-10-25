@@ -22,13 +22,17 @@ data class ConnectionReport(
     val echoedModel: String?,
 )
 
-// Verifies streaming text and OpenAI-style tool calling before onboarding continues.
-class ModelConnectionTester(private val client: OpenAiChatClient) {
-    suspend fun test(endpoint: ModelEndpoint, apiKey: String): ConnectionReport {
+class ModelConnectionTester(private val client: ChatWireClient) {
+    suspend fun test(
+        endpoint: ModelEndpoint,
+        apiKey: String,
+        protocol: ChatProtocol = ChatProtocol.ChatCompletions,
+    ): ConnectionReport {
         val started = System.currentTimeMillis()
         val textEvents = try {
             client.stream(
                 endpoint = endpoint,
+                protocol = protocol,
                 apiKey = apiKey,
                 request = ChatCompletionRequest(
                     model = endpoint.model,
@@ -57,6 +61,7 @@ class ModelConnectionTester(private val client: OpenAiChatClient) {
         val toolResponse = try {
             client.complete(
                 endpoint = endpoint,
+                protocol = protocol,
                 apiKey = apiKey,
                 request = ChatCompletionRequest(
                     model = endpoint.model,
@@ -80,8 +85,7 @@ class ModelConnectionTester(private val client: OpenAiChatClient) {
             val detail = if (mapped != null) describe(mapped) else e.message
             throw ConnectionTestException(ConnectionStage.ToolCalling, detail, e)
         }
-        val called = toolResponse.choices.firstOrNull()?.message?.toolCalls
-        if (called.isNullOrEmpty()) {
+        if (toolResponse.toolCalls.isEmpty()) {
             throw ConnectionTestException(ConnectionStage.ToolCalling, "no tool call returned")
         }
         return ConnectionReport(

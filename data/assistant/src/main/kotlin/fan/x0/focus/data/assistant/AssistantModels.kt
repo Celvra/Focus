@@ -67,12 +67,6 @@ data class Goal(
     val icon: String = "",
 )
 
-data class Memory(
-    val id: String,
-    val content: String,
-    val createdAt: Long,
-)
-
 @Serializable
 data class ApprovalStep(
     val tool: String,
@@ -126,12 +120,3 @@ data class Reminder(
     val at: Long,
     val done: Boolean,
 )
-
-data class AssistantProfile(
-    val name: String? = null,
-    val tone: String? = null,
-    val focus: String? = null,
-    val language: String? = null,
-) {
-    val isEmpty: Boolean get() = name.isNullOrBlank() && tone.isNullOrBlank() && focus.isNullOrBlank()
-}

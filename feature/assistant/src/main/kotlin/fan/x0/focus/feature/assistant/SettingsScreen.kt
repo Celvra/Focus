@@ -76,6 +76,7 @@ import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.core.mvi.CollectEffect
+import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ProviderBalance
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -290,6 +291,13 @@ private fun ProvidersGroup(state: SettingsUiState, onAction: (SettingsAction) ->
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        Text(
+                            text = protocolLabel(provider.protocol),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         state.providerBalances[provider.id]?.let { balance ->
                             Text(
                                 text = formatBalance(balance),
@@ -331,6 +339,15 @@ private fun ProvidersGroup(state: SettingsUiState, onAction: (SettingsAction) ->
         )
     }
 }
+
+@Composable
+private fun protocolLabel(protocol: ChatProtocol): String = stringResource(
+    when (protocol) {
+        ChatProtocol.ChatCompletions -> R.string.settings_protocol_chat
+        ChatProtocol.Responses -> R.string.settings_protocol_responses
+        ChatProtocol.AnthropicMessages -> R.string.settings_protocol_anthropic
+    },
+)
 
 private fun formatBalance(balance: ProviderBalance): String {
     val symbol = when (balance.currency.uppercase()) {
@@ -472,6 +489,33 @@ private fun ProviderEditorSheet(state: SettingsUiState, onAction: (SettingsActio
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.settings_protocol_title),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FocusChip(
+                        label = stringResource(R.string.settings_protocol_chat),
+                        selected = state.protocol == ChatProtocol.ChatCompletions,
+                        onClick = { onAction(SettingsAction.ProtocolChanged(ChatProtocol.ChatCompletions)) },
+                    )
+                    FocusChip(
+                        label = stringResource(R.string.settings_protocol_responses),
+                        selected = state.protocol == ChatProtocol.Responses,
+                        onClick = { onAction(SettingsAction.ProtocolChanged(ChatProtocol.Responses)) },
+                    )
+                    FocusChip(
+                        label = stringResource(R.string.settings_protocol_anthropic),
+                        selected = state.protocol == ChatProtocol.AnthropicMessages,
+                        onClick = { onAction(SettingsAction.ProtocolChanged(ChatProtocol.AnthropicMessages)) },
+                    )
+                }
+            }
             OutlinedTextField(
                 value = state.apiKeyInput,
                 onValueChange = { onAction(SettingsAction.ApiKeyChanged(it)) },

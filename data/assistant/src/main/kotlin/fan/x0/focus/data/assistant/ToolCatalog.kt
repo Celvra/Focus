@@ -2,6 +2,7 @@ package fan.x0.focus.data.assistant
 
 import fan.x0.focus.core.network.openai.ToolDto
 import fan.x0.focus.core.network.openai.ToolFunctionDto
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
@@ -93,6 +94,20 @@ object ToolCatalog {
             },
         ),
         ToolSpec(
+            name = "list_workspace_files",
+            description = "List the assistant context files with name, size, and a short preview.",
+            kind = ToolKind.Read,
+            parameters = schema {},
+        ),
+        ToolSpec(
+            name = "read_workspace_file",
+            description = "Read one assistant context file in full.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("file")) {
+                put("file", string("One of: soul, persona, user, agent, memory"))
+            },
+        ),
+        ToolSpec(
             name = "read_web_article",
             description = "Fetch a web page by url and extract its readable article text.",
             kind = ToolKind.Read,
@@ -103,12 +118,6 @@ object ToolCatalog {
         ToolSpec(
             name = "list_goals",
             description = "List the user's goals with status and progress.",
-            kind = ToolKind.Read,
-            parameters = schema {},
-        ),
-        ToolSpec(
-            name = "list_memories",
-            description = "List saved memories about the user.",
             kind = ToolKind.Read,
             parameters = schema {},
         ),
@@ -182,7 +191,7 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "save_memory",
-            description = "Remember one durable fact about the user.",
+            description = "Append one durable fact about the user to MEMORY.md.",
             kind = ToolKind.Write,
             parameters = schema(required = listOf("content")) {
                 put("content", string("One sentence fact"))
@@ -217,13 +226,91 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "save_profile",
-            description = "Store the user's name, focus, tone, or language.",
+            description = "Store the user's name, focus, tone, or language in USER.md.",
             kind = ToolKind.Write,
             parameters = schema {
                 put("name", string("What to call the user"))
                 put("focus", string("Their main focus right now"))
                 put("tone", string("How replies should sound"))
                 put("language", string("Preferred reply language"))
+            },
+        ),
+        ToolSpec(
+            name = "set_assistant_name",
+            description = "Change your own name. Use when the user asks you to go by a different name, or when a new name fits.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("name")) {
+                put("name", string("New name, under 40 characters"))
+            },
+        ),
+        ToolSpec(
+            name = "list_providers",
+            description = "List saved model providers with their base URL, model, protocol, and whether a key is stored.",
+            kind = ToolKind.Read,
+            parameters = schema {},
+        ),
+        ToolSpec(
+            name = "save_provider",
+            description = "Save an OpenAI-compatible provider and model. The API key is stored encrypted on the device. Never repeat the key back to the user.",
+            kind = ToolKind.Write,
+            parameters = schema {
+                put("provider_id", string("Saved provider id to update, optional"))
+                put("name", string("Short provider name, for example OpenAI"))
+                put("base_url", string("Base URL, for example https://api.openai.com/v1"))
+                put("model", string("Model id"))
+                put("api_key", string("API key. Stored encrypted and never shown again."))
+                put("protocol", string("chat, responses, or anthropic. Default chat."))
+                put("make_active", boolean("Make this the active provider. Default true."))
+            },
+        ),
+        ToolSpec(
+            name = "test_provider",
+            description = "Check that a provider streams text and calls tools. Use a saved provider id or pass the connection details.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("provider_id", string("Saved provider id, optional"))
+                put("base_url", string("Base URL, when no provider id is given"))
+                put("api_key", string("API key, when no provider id is given"))
+                put("model", string("Model id, when no provider id is given"))
+                put("protocol", string("chat, responses, or anthropic"))
+            },
+        ),
+        ToolSpec(
+            name = "list_models",
+            description = "List models available from a provider. Use a saved provider id or pass the connection details.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("provider_id", string("Saved provider id, optional"))
+                put("base_url", string("Base URL, when no provider id is given"))
+                put("api_key", string("API key, when no provider id is given"))
+                put("protocol", string("chat, responses, or anthropic"))
+            },
+        ),
+        ToolSpec(
+            name = "switch_model",
+            description = "Change the model for the current chat conversation.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("model")) {
+                put("model", string("Model id"))
+                put("provider_id", string("Saved provider id, optional"))
+            },
+        ),
+        ToolSpec(
+            name = "write_workspace_file",
+            description = "Replace one assistant context file. Keep it short, plain, and current.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("file", "content")) {
+                put("file", string("One of: soul, persona, user, agent, memory"))
+                put("content", string("Full new file content"))
+            },
+        ),
+        ToolSpec(
+            name = "append_workspace_file",
+            description = "Append a short block to one assistant context file.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("file", "content")) {
+                put("file", string("One of: soul, persona, user, agent, memory"))
+                put("content", string("Text to append"))
             },
         ),
         ToolSpec(
@@ -318,11 +405,19 @@ object ToolCatalog {
             },
         ),
         ToolSpec(
-            name = "delete_memory",
-            description = "Delete a saved memory. Requires the user's approval.",
+            name = "delete_update",
+            description = "Delete one card from the user's Today feed. Requires the user's approval.",
             kind = ToolKind.Gated,
-            parameters = schema(required = listOf("memory_id")) {
-                put("memory_id", string("Memory id"))
+            parameters = schema(required = listOf("update_id")) {
+                put("update_id", string("Feed card id from list_updates"))
+            },
+        ),
+        ToolSpec(
+            name = "delete_idea",
+            description = "Delete one idea from the user's Today ideas tab. Requires the user's approval.",
+            kind = ToolKind.Gated,
+            parameters = schema(required = listOf("idea_id")) {
+                put("idea_id", string("Idea id from list_ideas"))
             },
         ),
         ToolSpec(
@@ -365,9 +460,35 @@ object ToolCatalog {
 
     fun find(name: String): ToolSpec? = byName[name]
 
-    fun onboarding(): List<ToolSpec> = all.filter {
-        it.name == "save_profile" || it.name == "save_memory" || it.name == "complete_onboarding"
+    fun onboarding(): List<ToolSpec> = all.filter { it.name in onboardingTools }
+
+    fun chat(): List<ToolSpec> = all.filterNot { it.name == "complete_onboarding" }
+
+    fun redactArguments(name: String, arguments: String): String {
+        if (name !in secretArgumentTools) return arguments
+        val value = runCatching { Json.parseToJsonElement(arguments) as? JsonObject }.getOrNull()
+            ?: return arguments
+        if (!value.containsKey("api_key")) return arguments
+        val redacted = JsonObject(
+            value.mapValues { (key, item) ->
+                if (key == "api_key") JsonPrimitive("***") else item
+            },
+        )
+        return redacted.toString()
     }
+
+    private val onboardingTools = setOf(
+        "save_profile",
+        "save_memory",
+        "set_assistant_name",
+        "list_providers",
+        "save_provider",
+        "test_provider",
+        "list_models",
+        "complete_onboarding",
+    )
+
+    private val secretArgumentTools = setOf("save_provider", "test_provider", "list_models")
 
     private fun objectArray(description: String, fields: List<String>): JsonObject = buildJsonObject {
         put("type", "array")

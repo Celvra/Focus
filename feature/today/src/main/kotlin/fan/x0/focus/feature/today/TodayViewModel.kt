@@ -38,6 +38,16 @@ class TodayViewModel(
             }
             TodayAction.CloseReason -> updateState { copy(reason = null) }
             is TodayAction.Discuss -> discuss(action.id)
+            is TodayAction.UpdateMenu -> updateState { copy(updateMenu = action.id) }
+            TodayAction.CloseUpdateMenu -> updateState { copy(updateMenu = null) }
+            is TodayAction.AskDeleteUpdate -> updateState {
+                copy(
+                    updateMenu = null,
+                    deleteUpdate = updates.firstOrNull { it.id == action.id },
+                )
+            }
+            TodayAction.CancelDeleteUpdate -> updateState { copy(deleteUpdate = null) }
+            TodayAction.ConfirmDeleteUpdate -> deleteUpdate()
             TodayAction.AskForUpdates -> askForUpdates()
             TodayAction.AskForIdeas -> askForIdeas()
             is TodayAction.OpenIdea -> updateState {
@@ -49,6 +59,15 @@ class TodayViewModel(
             }
             TodayAction.CloseIdeaMenu -> updateState { copy(ideaMenu = null) }
             is TodayAction.DismissIdea -> dismissIdea(action.id)
+            is TodayAction.AskDeleteIdea -> updateState {
+                copy(
+                    ideaMenu = null,
+                    openIdea = null,
+                    deleteIdea = ideas.firstOrNull { it.id == action.id },
+                )
+            }
+            TodayAction.CancelDeleteIdea -> updateState { copy(deleteIdea = null) }
+            TodayAction.ConfirmDeleteIdea -> deleteIdea()
             is TodayAction.MoreLikeIdea -> moreLikeIdea(action.id)
             is TodayAction.StartIdea -> startIdea(action.id)
             is TodayAction.GoalMenu -> updateState { copy(goalMenu = action.id) }
@@ -144,6 +163,49 @@ class TodayViewModel(
         viewModelScope.launch {
             try {
                 today.dismissIdea(id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                emitError(e.toAppError())
+                reload()
+            }
+        }
+    }
+
+    private fun deleteUpdate() {
+        val target = currentState.deleteUpdate ?: return
+        updateState {
+            copy(
+                deleteUpdate = null,
+                reason = reason?.takeIf { it.id != target.id },
+                updates = updates.filterNot { it.id == target.id },
+            )
+        }
+        viewModelScope.launch {
+            try {
+                today.deleteUpdate(target.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                emitError(e.toAppError())
+                reload()
+            }
+        }
+    }
+
+    private fun deleteIdea() {
+        val target = currentState.deleteIdea ?: return
+        updateState {
+            copy(
+                deleteIdea = null,
+                ideaMenu = null,
+                openIdea = null,
+                ideas = ideas.filterNot { it.id == target.id },
+            )
+        }
+        viewModelScope.launch {
+            try {
+                today.deleteIdea(target.id)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {

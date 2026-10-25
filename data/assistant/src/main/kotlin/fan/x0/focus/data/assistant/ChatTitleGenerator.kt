@@ -2,13 +2,13 @@ package fan.x0.focus.data.assistant
 
 import fan.x0.focus.core.network.openai.ChatCompletionRequest
 import fan.x0.focus.core.network.openai.ChatMessageDto
+import fan.x0.focus.core.network.openai.ChatWireClient
 import fan.x0.focus.core.network.openai.ModelEndpoint
-import fan.x0.focus.core.network.openai.OpenAiChatClient
 import org.koin.core.annotation.Single
 
 @Single
 class ChatTitleGenerator(
-    private val client: OpenAiChatClient,
+    private val client: ChatWireClient,
     private val settings: AssistantSettings,
     private val secrets: SecretStore,
     private val chats: ChatStore,
@@ -37,11 +37,8 @@ class ChatTitleGenerator(
             ),
             stream = false,
         )
-        val raw = client.complete(endpoint, apiKey, request)
-            .choices
-            .firstOrNull()
-            ?.message
-            ?.content
+        val raw = client.complete(endpoint, provider.protocol, apiKey, request).text
+            .takeIf { it.isNotBlank() }
             ?: return null
         val title = clean(raw) ?: return null
         val currentTitle = chats.conversation(conversationId)?.title.orEmpty()

@@ -5,59 +5,99 @@ import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import fan.x0.focus.core.designsystem.R
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private sealed interface MdBlock {
     data class Heading(val level: Int, val text: String) : MdBlock
     data class Paragraph(val text: String) : MdBlock
-    data class Bullet(val text: String, val index: Int?) : MdBlock
+    data class ListItem(
+        val text: String,
+        val depth: Int,
+        val marker: String,
+        val checked: Boolean?,
+    ) : MdBlock
     data class Quote(val text: String) : MdBlock
-    data class Code(val text: String) : MdBlock
+    data class Code(val language: String?, val text: String) : MdBlock
+    data class Table(
+        val headers: List<String>,
+        val alignments: List<TextAlign>,
+        val rows: List<List<String>>,
+    ) : MdBlock
+    data object Divider : MdBlock
 }
 
 @Composable
 fun FocusMarkdown(
     text: String,
     modifier: Modifier = Modifier,
-    color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface,
+    color: Color = MaterialTheme.colorScheme.onSurface,
     streaming: Boolean = false,
     bodyStyle: TextStyle = MaterialTheme.typography.bodyLarge,
     preserveLineBreaks: Boolean = false,
 ) {
-    val blocks = parseBlocks(text, preserveLineBreaks)
+    val blocks = remember(text, preserveLineBreaks) { parseBlocks(text, preserveLineBreaks) }
+    val linkColor = MaterialTheme.colorScheme.primary
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        blocks.forEachIndexed { index, block ->
+        blocks.forEach { block ->
             StreamBlock(animate = streaming) {
-                BlockContent(block = block, color = color, bodyStyle = bodyStyle)
+                BlockContent(block = block, color = color, linkColor = linkColor, bodyStyle = bodyStyle)
             }
         }
     }
 }
 
-// New blocks fade in as they arrive; existing blocks keep their identity so text growth stays calm.
 @Composable
 private fun StreamBlock(animate: Boolean, content: @Composable () -> Unit) {
     if (!animate) {
@@ -77,154 +117,571 @@ private fun StreamBlock(animate: Boolean, content: @Composable () -> Unit) {
 @Composable
 private fun BlockContent(
     block: MdBlock,
-    color: androidx.compose.ui.graphics.Color,
+    color: Color,
+    linkColor: Color,
     bodyStyle: TextStyle,
 ) {
     when (block) {
         is MdBlock.Heading -> Text(
-            text = inline(block.text, color),
+            text = inline(block.text, color, linkColor),
             style = when (block.level) {
                 1 -> LocalFocusTypography.current.headlineSmall
                 2 -> LocalFocusTypography.current.titleLarge
-                else -> LocalFocusTypography.current.titleMedium
+                3 -> LocalFocusTypography.current.titleMedium
+                4 -> LocalFocusTypography.current.titleSmall
+                5 -> LocalFocusTypography.current.labelLarge
+                else -> LocalFocusTypography.current.labelMedium
             },
             color = color,
         )
         is MdBlock.Paragraph -> Text(
-            text = inline(block.text, color),
+            text = inline(block.text, color, linkColor),
             style = bodyStyle,
             color = color,
         )
-        is MdBlock.Bullet -> Row {
-            Text(
-                text = block.index?.let { "$it." } ?: "•",
-                style = bodyStyle,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.width(22.dp),
-            )
-            Text(
-                text = inline(block.text, color),
-                style = bodyStyle,
-                color = color,
-            )
-        }
-        is MdBlock.Quote -> Row(modifier = Modifier.fillMaxWidth()) {
-            Spacer(
+        is MdBlock.ListItem -> ListRow(
+            item = block,
+            color = color,
+            linkColor = linkColor,
+            bodyStyle = bodyStyle,
+        )
+        is MdBlock.Quote -> Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
+        ) {
+            Box(
                 modifier = Modifier
                     .width(3.dp)
+                    .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)),
             )
             Text(
-                text = inline(block.text, color),
+                text = inline(block.text, color, linkColor),
                 style = bodyStyle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 10.dp),
             )
         }
-        is MdBlock.Code -> Text(
-            text = block.text,
-            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(12.dp))
-                .padding(12.dp),
+        is MdBlock.Code -> CodeBlock(block = block)
+        is MdBlock.Table -> TableBlock(block = block, color = color, linkColor = linkColor)
+        MdBlock.Divider -> HorizontalDivider(
+            modifier = Modifier.padding(vertical = 2.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
         )
     }
 }
 
-private fun parseBlocks(text: String, preserveLineBreaks: Boolean): List<MdBlock> {
-    val blocks = mutableListOf<MdBlock>()
-    var inCode = false
-    val code = StringBuilder()
-    text.lines().forEach { raw ->
-        val line = raw.trimEnd()
-        if (line.trimStart().startsWith("```")) {
-            if (inCode) {
-                blocks += MdBlock.Code(code.toString().trimEnd())
-                code.clear()
+@Composable
+private fun ListRow(
+    item: MdBlock.ListItem,
+    color: Color,
+    linkColor: Color,
+    bodyStyle: TextStyle,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = (item.depth * 16).dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(
+            modifier = Modifier.width(22.dp).padding(top = 3.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            if (item.checked != null) {
+                val checked = item.checked
+                Box(
+                    modifier = Modifier
+                        .size(15.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (checked) MaterialTheme.colorScheme.primary else Color.Transparent)
+                        .border(
+                            width = 1.5.dp,
+                            color = if (checked) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outline
+                            },
+                            shape = RoundedCornerShape(4.dp),
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (checked) {
+                        Icon(
+                            imageVector = FocusIcons.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(11.dp),
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = item.marker,
+                    style = bodyStyle,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
-            inCode = !inCode
-            return@forEach
         }
-        if (inCode) {
-            code.appendLine(line)
-            return@forEach
-        }
-        val trimmed = line.trim()
-        when {
-            trimmed.isEmpty() -> Unit
-            trimmed.startsWith("### ") -> blocks += MdBlock.Heading(3, trimmed.removePrefix("### "))
-            trimmed.startsWith("## ") -> blocks += MdBlock.Heading(2, trimmed.removePrefix("## "))
-            trimmed.startsWith("# ") -> blocks += MdBlock.Heading(1, trimmed.removePrefix("# "))
-            trimmed.startsWith("> ") -> blocks += MdBlock.Quote(trimmed.removePrefix("> "))
-            trimmed.startsWith("- ") || trimmed.startsWith("* ") -> blocks += MdBlock.Bullet(trimmed.drop(2), null)
-            numberedPattern.matches(trimmed) -> {
-                val dot = trimmed.indexOf('.')
-                blocks += MdBlock.Bullet(trimmed.substring(dot + 1).trim(), trimmed.substring(0, dot).toIntOrNull())
+        Text(
+            text = inline(item.text, color, linkColor),
+            style = bodyStyle,
+            color = color,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun CodeBlock(block: MdBlock.Code) {
+    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    var copied by remember(block.text) { mutableStateOf(false) }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = block.language ?: "code",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Surface(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(block.text))
+                        copied = true
+                        scope.launch {
+                            delay(1400)
+                            copied = false
+                        }
+                    },
+                    shape = CircleShape,
+                    color = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (copied) FocusIcons.Check else FocusIcons.Copy,
+                            contentDescription = null,
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Text(
+                            text = stringResource(
+                                if (copied) R.string.common_copied else R.string.common_copy,
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
             }
-            else -> {
-                val last = blocks.lastOrNull()
-                if (last is MdBlock.Paragraph) {
-                    val separator = if (preserveLineBreaks) "\n" else " "
-                    blocks[blocks.lastIndex] = MdBlock.Paragraph(last.text + separator + trimmed)
-                } else {
-                    blocks += MdBlock.Paragraph(trimmed)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            Text(
+                text = block.text,
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(12.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TableBlock(
+    block: MdBlock.Table,
+    color: Color,
+    linkColor: Color,
+) {
+    val widths = remember(block.headers, block.rows) {
+        block.headers.indices.map { index ->
+            val longest = (listOf(block.headers[index]) + block.rows.map { it.getOrElse(index) { "" } })
+                .maxOfOrNull { it.length } ?: 8
+            (longest.coerceIn(8, 28) * 7).dp
+        }
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            Row(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                block.headers.forEachIndexed { index, header ->
+                    TableCell(
+                        text = header,
+                        width = widths.getOrElse(index) { 72.dp },
+                        align = block.alignments.getOrElse(index) { TextAlign.Start },
+                        header = true,
+                        color = color,
+                        linkColor = linkColor,
+                    )
+                }
+            }
+            block.rows.forEachIndexed { rowIndex, row ->
+                if (rowIndex > 0) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    )
+                }
+                Row(
+                    modifier = Modifier.background(
+                        if (rowIndex % 2 == 1) {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        } else {
+                            Color.Transparent
+                        },
+                    ),
+                ) {
+                    block.headers.indices.forEach { index ->
+                        TableCell(
+                            text = row.getOrElse(index) { "" },
+                            width = widths.getOrElse(index) { 72.dp },
+                            align = block.alignments.getOrElse(index) { TextAlign.Start },
+                            header = false,
+                            color = color,
+                            linkColor = linkColor,
+                        )
+                    }
                 }
             }
         }
     }
-    if (inCode && code.isNotEmpty()) blocks += MdBlock.Code(code.toString().trimEnd())
+}
+
+@Composable
+private fun TableCell(
+    text: String,
+    width: Dp,
+    align: TextAlign,
+    header: Boolean,
+    color: Color,
+    linkColor: Color,
+) {
+    Text(
+        text = inline(text, color, linkColor),
+        style = if (header) {
+            MaterialTheme.typography.labelMedium
+        } else {
+            MaterialTheme.typography.bodySmall
+        },
+        color = color,
+        textAlign = align,
+        modifier = Modifier
+            .width(width)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    )
+}
+
+private fun parseBlocks(text: String, preserveLineBreaks: Boolean): List<MdBlock> {
+    if (text.isBlank()) return emptyList()
+    val lines = text.lines()
+    val blocks = mutableListOf<MdBlock>()
+    var index = 0
+    while (index < lines.size) {
+        val line = lines[index].trimEnd()
+        val trimmed = line.trim()
+        when {
+            trimmed.isEmpty() -> index++
+            trimmed.startsWith("```") -> {
+                val language = trimmed.removePrefix("```").trim().ifBlank { null }
+                val code = StringBuilder()
+                index++
+                while (index < lines.size && !lines[index].trim().startsWith("```")) {
+                    code.appendLine(lines[index].trimEnd())
+                    index++
+                }
+                if (index < lines.size) index++
+                blocks += MdBlock.Code(language, code.toString().trimEnd())
+            }
+            dividerRegex.matches(trimmed) -> {
+                blocks += MdBlock.Divider
+                index++
+            }
+            headingRegex.matches(trimmed) -> {
+                val match = headingRegex.matchEntire(trimmed)!!
+                val level = match.groupValues[1].length.coerceIn(1, 6)
+                val content = match.groupValues[2].trim()
+                if (content.isNotEmpty()) blocks += MdBlock.Heading(level, content)
+                index++
+            }
+            isTableStart(lines, index) -> {
+                val table = parseTable(lines, index)
+                blocks += table.first
+                index = table.second
+            }
+            trimmed.startsWith(">") -> {
+                val quote = StringBuilder(trimmed.removePrefix(">").trimStart())
+                index++
+                while (index < lines.size && lines[index].trim().startsWith(">")) {
+                    quote.append(if (preserveLineBreaks) "\n" else " ")
+                    quote.append(lines[index].trim().removePrefix(">").trimStart())
+                    index++
+                }
+                blocks += MdBlock.Quote(quote.toString())
+            }
+            listItemRegex.matches(line) -> {
+                val match = listItemRegex.matchEntire(line)!!
+                val indent = match.groupValues[1].replace("\t", "  ").length
+                val rawMarker = match.groupValues[2]
+                var content = match.groupValues[3]
+                val checked = when {
+                    content.startsWith("[ ] ") -> false
+                    content.startsWith("[x] ") || content.startsWith("[X] ") -> true
+                    else -> null
+                }
+                if (checked != null) content = content.drop(4)
+                val ordered = rawMarker.firstOrNull()?.isDigit() == true
+                blocks += MdBlock.ListItem(
+                    text = content,
+                    depth = (indent / 2).coerceIn(0, 4),
+                    marker = if (ordered) rawMarker.trimEnd('.', ')') + "." else "•",
+                    checked = checked,
+                )
+                index++
+            }
+            else -> {
+                val paragraph = StringBuilder(trimmed)
+                index++
+                while (index < lines.size && !isBlockStart(lines, index)) {
+                    val next = lines[index].trim()
+                    if (next.isNotEmpty()) {
+                        if (paragraph.isNotEmpty()) {
+                            paragraph.append(if (preserveLineBreaks) "\n" else " ")
+                        }
+                        paragraph.append(next)
+                    }
+                    index++
+                }
+                blocks += MdBlock.Paragraph(paragraph.toString())
+            }
+        }
+    }
     return blocks
 }
 
-private val numberedPattern = Regex("""^\d{1,2}\.\s+.*""")
+private fun isBlockStart(lines: List<String>, index: Int): Boolean {
+    val trimmed = lines[index].trim()
+    if (trimmed.isEmpty()) return true
+    return trimmed.startsWith("```") ||
+        dividerRegex.matches(trimmed) ||
+        headingRegex.matches(trimmed) ||
+        trimmed.startsWith(">") ||
+        listItemRegex.matches(lines[index].trimEnd()) ||
+        isTableStart(lines, index)
+}
 
-private fun inline(text: String, color: androidx.compose.ui.graphics.Color): AnnotatedString = buildAnnotatedString {
-    var i = 0
-    while (i < text.length) {
+private fun isTableStart(lines: List<String>, index: Int): Boolean {
+    if (index + 1 >= lines.size) return false
+    val header = lines[index].trim()
+    if (!header.contains('|')) return false
+    val separator = splitTableRow(lines[index + 1].trim())
+    return separator.isNotEmpty() && separator.all { tableSeparatorRegex.matches(it) }
+}
+
+private fun parseTable(lines: List<String>, start: Int): Pair<MdBlock.Table, Int> {
+    val headers = splitTableRow(lines[start].trim())
+    val alignments = splitTableRow(lines[start + 1].trim()).map { cell ->
         when {
-            text.startsWith("**", i) -> {
-                val end = text.indexOf("**", i + 2)
-                if (end > i) {
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = color)) {
-                        append(text.substring(i + 2, end))
+            cell.startsWith(":") && cell.endsWith(":") -> TextAlign.Center
+            cell.endsWith(":") -> TextAlign.End
+            else -> TextAlign.Start
+        }
+    }
+    val rows = mutableListOf<List<String>>()
+    var index = start + 2
+    while (index < lines.size) {
+        val line = lines[index].trim()
+        if (line.isEmpty() || !line.contains('|')) break
+        val cells = splitTableRow(line)
+        rows += headers.indices.map { cells.getOrElse(it) { "" } }
+        index++
+    }
+    return MdBlock.Table(headers, alignments, rows) to index
+}
+
+private fun splitTableRow(line: String): List<String> {
+    val body = line.removePrefix("|").removeSuffix("|")
+    val cells = mutableListOf<String>()
+    val current = StringBuilder()
+    var escaped = false
+    body.forEach { char ->
+        when {
+            escaped -> {
+                current.append(char)
+                escaped = false
+            }
+            char == '\\' -> escaped = true
+            char == '|' -> {
+                cells += current.toString().trim()
+                current.clear()
+            }
+            else -> current.append(char)
+        }
+    }
+    cells += current.toString().trim()
+    return cells
+}
+
+private fun inline(text: String, color: Color, linkColor: Color): AnnotatedString =
+    buildAnnotatedString { appendInline(text, color, linkColor) }
+
+private fun AnnotatedString.Builder.appendInline(text: String, color: Color, linkColor: Color) {
+    var index = 0
+    while (index < text.length) {
+        when {
+            text[index] == '\\' && index + 1 < text.length -> {
+                append(text[index + 1])
+                index += 2
+            }
+            text.startsWith("```", index) -> {
+                val end = text.indexOf("```", index + 3)
+                if (end > index) {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = color.copy(alpha = 0.08f))) {
+                        append(text.substring(index + 3, end))
                     }
-                    i = end + 2
+                    index = end + 3
                 } else {
-                    append(text[i]); i++
+                    append(text[index])
+                    index++
                 }
             }
-            text[i] == '`' -> {
-                val end = text.indexOf('`', i + 1)
-                if (end > i) {
-                    withStyle(
-                        SpanStyle(
-                            fontFamily = FontFamily.Monospace,
-                            background = color.copy(alpha = 0.08f),
-                        ),
-                    ) {
-                        append(text.substring(i + 1, end))
+            text[index] == '`' -> {
+                val end = text.indexOf('`', index + 1)
+                if (end > index) {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = color.copy(alpha = 0.08f))) {
+                        append(text.substring(index + 1, end))
                     }
-                    i = end + 1
+                    index = end + 1
                 } else {
-                    append(text[i]); i++
+                    append(text[index])
+                    index++
                 }
             }
-            text[i] == '*' -> {
-                val end = text.indexOf('*', i + 1)
-                if (end > i) {
+            text.startsWith("***", index) || text.startsWith("___", index) -> {
+                val marker = text.substring(index, index + 3)
+                val end = text.indexOf(marker, index + 3)
+                if (end > index) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
+                        appendInline(text.substring(index + 3, end), color, linkColor)
+                    }
+                    index = end + 3
+                } else {
+                    append(text[index])
+                    index++
+                }
+            }
+            text.startsWith("**", index) || text.startsWith("__", index) -> {
+                val marker = text.substring(index, index + 2)
+                val end = text.indexOf(marker, index + 2)
+                if (end > index) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        appendInline(text.substring(index + 2, end), color, linkColor)
+                    }
+                    index = end + 2
+                } else {
+                    append(text[index])
+                    index++
+                }
+            }
+            text.startsWith("~~", index) -> {
+                val end = text.indexOf("~~", index + 2)
+                if (end > index) {
+                    withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
+                        appendInline(text.substring(index + 2, end), color, linkColor)
+                    }
+                    index = end + 2
+                } else {
+                    append(text[index])
+                    index++
+                }
+            }
+            text[index] == '*' || text[index] == '_' -> {
+                val previous = text.getOrNull(index - 1)
+                val next = text.getOrNull(index + 1)
+                if (text[index] == '_' && previous?.isLetterOrDigit() == true && next?.isLetterOrDigit() == true) {
+                    append(text[index])
+                    index++
+                    continue
+                }
+                val end = text.indexOf(text[index], index + 1)
+                if (end > index) {
                     withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                        append(text.substring(i + 1, end))
+                        appendInline(text.substring(index + 1, end), color, linkColor)
                     }
-                    i = end + 1
+                    index = end + 1
                 } else {
-                    append(text[i]); i++
+                    append(text[index])
+                    index++
+                }
+            }
+            text[index] == '[' -> {
+                val labelEnd = text.indexOf("](", index + 1)
+                val urlEnd = if (labelEnd > index) text.indexOf(')', labelEnd + 2) else -1
+                if (labelEnd > index && urlEnd > labelEnd) {
+                    val label = text.substring(index + 1, labelEnd)
+                    val url = text.substring(labelEnd + 2, urlEnd)
+                    appendLink(label = label, url = url, color = color, linkColor = linkColor)
+                    index = urlEnd + 1
+                } else {
+                    append(text[index])
+                    index++
+                }
+            }
+            text[index] == '<' -> {
+                val end = text.indexOf('>', index + 1)
+                val url = if (end > index) text.substring(index + 1, end) else ""
+                if (end > index && (url.startsWith("http://") || url.startsWith("https://"))) {
+                    appendLink(label = url, url = url, color = color, linkColor = linkColor)
+                    index = end + 1
+                } else {
+                    append(text[index])
+                    index++
                 }
             }
             else -> {
-                append(text[i]); i++
+                append(text[index])
+                index++
             }
         }
     }
 }
+
+private fun AnnotatedString.Builder.appendLink(
+    label: String,
+    url: String,
+    color: Color,
+    linkColor: Color,
+) {
+    withLink(
+        LinkAnnotation.Url(
+            url = url,
+            styles = TextLinkStyles(
+                style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+            ),
+        ),
+    ) {
+        appendInline(label, color, linkColor)
+    }
+}
+
+private val headingRegex = Regex("""^(#{1,6})\s+(.+?)\s*#*$""")
+private val dividerRegex = Regex("""^(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$""")
+private val listItemRegex = Regex("""^(\s*)([-*+]|\d{1,3}[.)])\s+(.*)$""")
+private val tableSeparatorRegex = Regex("""^:?-{3,}:?$""")

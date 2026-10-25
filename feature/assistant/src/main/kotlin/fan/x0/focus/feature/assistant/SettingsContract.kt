@@ -4,6 +4,7 @@ import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.mvi.UiAction
 import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
+import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ProviderBalance
 import fan.x0.focus.data.assistant.ProviderConfig
 
@@ -20,6 +21,7 @@ data class SettingsUiState(
     val draftName: String = "",
     val baseUrl: String = "",
     val model: String = "",
+    val protocol: ChatProtocol = ChatProtocol.ChatCompletions,
     val apiKeyInput: String = "",
     val apiKeySaved: Boolean = false,
     val apiKeyVisible: Boolean = false,
@@ -56,6 +58,7 @@ sealed interface SettingsAction : UiAction {
     data class NameChanged(val value: String) : SettingsAction
     data class BaseUrlChanged(val value: String) : SettingsAction
     data class ModelChanged(val value: String) : SettingsAction
+    data class ProtocolChanged(val value: ChatProtocol) : SettingsAction
     data class ApiKeyChanged(val value: String) : SettingsAction
     data object ToggleApiKeyVisibility : SettingsAction
     data class MakeActiveChanged(val value: Boolean) : SettingsAction

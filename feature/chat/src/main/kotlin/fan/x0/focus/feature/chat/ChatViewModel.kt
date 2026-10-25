@@ -12,6 +12,7 @@ import fan.x0.focus.data.assistant.ChatCommand
 import fan.x0.focus.data.assistant.ChatMessage
 import fan.x0.focus.data.assistant.ChatRole
 import fan.x0.focus.data.assistant.ChatStore
+import fan.x0.focus.data.assistant.ChatSuggestionGenerator
 import fan.x0.focus.data.assistant.ChatSwitcher
 import fan.x0.focus.data.assistant.ChatTurnApprovalPhase
 import fan.x0.focus.data.assistant.ChatTurnEntry
@@ -21,12 +22,12 @@ import fan.x0.focus.data.assistant.ChatTurnState
 import fan.x0.focus.data.assistant.ChatTurnStep
 import fan.x0.focus.data.assistant.ChatTurnStepStatus
 import fan.x0.focus.data.assistant.ModelCatalogRepository
-import fan.x0.focus.data.assistant.ProfileStore
 import fan.x0.focus.data.assistant.ReasoningLevel
 import fan.x0.focus.data.assistant.SecretStore
 import fan.x0.focus.data.assistant.ToolCatalog
 import fan.x0.focus.data.assistant.ToolLabels
 import fan.x0.focus.data.assistant.TurnOptions
+import fan.x0.focus.data.assistant.WorkspaceStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filterNotNull
@@ -37,16 +38,18 @@ import org.koin.core.annotation.KoinViewModel
 class ChatViewModel(
     private val chats: ChatStore,
     private val switcher: ChatSwitcher,
-    private val profile: ProfileStore,
+    private val workspace: WorkspaceStore,
     private val settings: AssistantSettings,
     private val secrets: SecretStore,
     private val catalog: ModelCatalogRepository,
     private val loader: AttachmentLoader,
     private val turns: ChatTurnRunner,
+    private val suggestionGenerator: ChatSuggestionGenerator,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
     private var modelJob: Job? = null
+    private var suggestionJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -126,6 +129,7 @@ class ChatViewModel(
             reasoning = state.reasoningLevel,
             attachments = attachments,
         )
+        suggestionJob?.cancel()
         updateState {
             copy(
                 input = "",
@@ -193,7 +197,7 @@ class ChatViewModel(
                 return@launch
             }
             val models = try {
-                catalog.models(state.providerId, provider.baseUrl, state.model, key)
+                catalog.models(state.providerId, provider.baseUrl, state.model, key, provider.protocol)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -241,20 +245,31 @@ class ChatViewModel(
     private suspend fun reload() {
         val id = currentState.conversationId
         val messages = chats.messages(id)
+        val conversation = chats.conversation(id)
+        val config = settings.configOnce()
+        val providerId = conversation?.providerId?.takeIf { candidate ->
+            config.providers.any { it.id == candidate }
+        } ?: config.activeProviderId
+        val provider = config.providers.firstOrNull { it.id == providerId } ?: config.activeProvider
+        val model = conversation?.model?.ifBlank { null } ?: provider?.model.orEmpty()
         updateState {
             copy(
                 history = messages.toEntries(),
                 live = emptyList(),
                 sending = false,
                 workingText = "",
+                providers = config.providers.map { ProviderOption(it.id, it.name, it.model) },
+                providerId = providerId,
+                model = model,
             )
         }
     }
 
     private suspend fun load(conversationId: String) {
+        suggestionJob?.cancel()
         val messages = chats.messages(conversationId)
         val conversation = chats.conversation(conversationId)
-        val person = profile.read()
+        val name = workspace.userName()
         val config = settings.configOnce()
         val providerId = conversation?.providerId?.takeIf { id ->
             config.providers.any { it.id == id }
@@ -270,9 +285,10 @@ class ChatViewModel(
                 loading = false,
                 conversationId = conversationId,
                 title = conversation?.title.orEmpty(),
-                name = person.name,
+                name = name,
                 history = messages.toEntries(),
                 live = emptyList(),
+                suggestions = emptyList(),
                 sending = false,
                 workingText = "",
                 input = "",
@@ -291,6 +307,30 @@ class ChatViewModel(
         switcher.markLoaded(conversationId)
         applyTurn(turns.state(conversationId))
         turns.result(conversationId)?.let { handleResult(it) }
+        if (messages.isEmpty() && !turns.isRunning(conversationId)) {
+            suggestionJob = viewModelScope.launch { loadSuggestions(conversationId) }
+        }
+    }
+
+    private suspend fun loadSuggestions(conversationId: String) {
+        val state = currentState
+        if (state.conversationId != conversationId || state.history.isNotEmpty()) return
+        val generated = try {
+            suggestionGenerator.generate(state.providerId, state.model)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        if (generated.isEmpty()) return
+        if (currentState.conversationId != conversationId || currentState.history.isNotEmpty()) return
+        updateState {
+            copy(
+                suggestions = generated.map {
+                    SuggestionUi(title = it.title, prompt = it.prompt, icon = it.icon)
+                },
+            )
+        }
     }
 
     private suspend fun switchTo(conversationId: String) {

@@ -69,6 +69,12 @@ data class ModelOption(
     val meta: ModelMeta = ModelMeta(),
 )
 
+data class SuggestionUi(
+    val title: String,
+    val prompt: String,
+    val icon: String = "",
+)
+
 data class ChatUiState(
     val loading: Boolean = true,
     val conversationId: String = "",
@@ -77,6 +83,7 @@ data class ChatUiState(
     val name: String? = null,
     val history: List<ChatEntry> = emptyList(),
     val live: List<ChatEntry> = emptyList(),
+    val suggestions: List<SuggestionUi> = emptyList(),
     val input: String = "",
     val sending: Boolean = false,
     val turn: Int = 0,

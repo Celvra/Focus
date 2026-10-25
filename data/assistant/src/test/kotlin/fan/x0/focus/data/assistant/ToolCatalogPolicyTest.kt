@@ -16,7 +16,8 @@ class ToolCatalogPolicyTest {
                 "delete_article",
                 "remove_feed",
                 "delete_goal",
-                "delete_memory",
+                "delete_update",
+                "delete_idea",
                 "delete_file",
             ),
             gated,
@@ -32,7 +33,19 @@ class ToolCatalogPolicyTest {
     @Test
     fun `onboarding tools stay minimal`() {
         val names = ToolCatalog.onboarding().map { it.name }.toSet()
-        assertEquals(setOf("save_profile", "save_memory", "complete_onboarding"), names)
+        assertEquals(
+            setOf(
+                "save_profile",
+                "save_memory",
+                "set_assistant_name",
+                "list_providers",
+                "save_provider",
+                "test_provider",
+                "list_models",
+                "complete_onboarding",
+            ),
+            names,
+        )
     }
 
     @Test

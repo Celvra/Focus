@@ -19,11 +19,20 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
 
 data class ModelEndpoint(val baseUrl: String, val model: String) {
-    val chatUrl: String
+    val rootUrl: String
         get() {
-            val trimmed = baseUrl.trim().trimEnd('/')
-            return if (trimmed.endsWith("/chat/completions")) trimmed else "$trimmed/chat/completions"
+            var value = baseUrl.trim().trimEnd('/')
+            listOf("/chat/completions", "/responses", "/messages").forEach { suffix ->
+                if (value.endsWith(suffix)) value = value.removeSuffix(suffix).trimEnd('/')
+            }
+            return value
         }
+
+    val chatUrl: String get() = "$rootUrl/chat/completions"
+
+    val responsesUrl: String get() = "$rootUrl/responses"
+
+    val messagesUrl: String get() = "$rootUrl/messages"
 
     val isUsable: Boolean
         get() = model.isNotBlank() && (baseUrl.startsWith("https://") || baseUrl.startsWith("http://"))

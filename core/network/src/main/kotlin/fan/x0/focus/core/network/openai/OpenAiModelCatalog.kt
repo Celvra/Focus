@@ -3,6 +3,7 @@ package fan.x0.focus.core.network.openai
 import fan.x0.focus.core.network.NetworkExceptionMapper
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.timeout
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
@@ -19,13 +20,20 @@ class OpenAiModelCatalog(
     private val http: HttpClient,
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) {
-    suspend fun list(endpoint: ModelEndpoint, apiKey: String): List<String> =
-        details(endpoint, apiKey).map { it.id }
+    suspend fun list(
+        endpoint: ModelEndpoint,
+        apiKey: String,
+        protocol: ChatProtocol = ChatProtocol.ChatCompletions,
+    ): List<String> = details(endpoint, apiKey, protocol).map { it.id }
 
-    suspend fun details(endpoint: ModelEndpoint, apiKey: String): List<ModelEntry> {
+    suspend fun details(
+        endpoint: ModelEndpoint,
+        apiKey: String,
+        protocol: ChatProtocol = ChatProtocol.ChatCompletions,
+    ): List<ModelEntry> {
         val response = try {
             http.get(endpoint.modelsUrl) {
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
+                authHeaders(apiKey, protocol)
                 header(HttpHeaders.Accept, "application/json")
                 timeout {
                     requestTimeoutMillis = 25_000
@@ -42,6 +50,15 @@ class OpenAiModelCatalog(
             throw NetworkExceptionMapper.http(response.status.value, body)
         }
         return parseModelEntries(body, json)
+    }
+
+    private fun HttpRequestBuilder.authHeaders(apiKey: String, protocol: ChatProtocol) {
+        if (protocol == ChatProtocol.AnthropicMessages) {
+            header("x-api-key", apiKey)
+            header("anthropic-version", "2023-06-01")
+        } else {
+            header(HttpHeaders.Authorization, "Bearer $apiKey")
+        }
     }
 }
 
@@ -141,12 +158,4 @@ private fun JsonObject.strings(key: String): List<String> = (this[key] as? JsonA
     ?: emptyList()
 
 val ModelEndpoint.modelsUrl: String
-    get() {
-        val trimmed = baseUrl.trim().trimEnd('/')
-        val root = if (trimmed.endsWith("/chat/completions")) {
-            trimmed.removeSuffix("/chat/completions")
-        } else {
-            trimmed
-        }
-        return "$root/models"
-    }
+    get() = "$rootUrl/models"

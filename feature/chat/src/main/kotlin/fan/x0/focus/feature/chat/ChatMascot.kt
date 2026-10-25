@@ -42,13 +42,11 @@ internal fun ChatMascot(
     val origin by rememberUpdatedState(overlayOrigin)
 
     LaunchedEffect(working) {
-        val dock = snapshotFlow {
-            (if (working) bottom ?: top else top ?: bottom)?.minus(origin)
-        }.filterNotNull().first()
-        position.animateTo(dock, motion.spatialSlow())
-        snapshotFlow {
-            (if (working) bottom ?: top else top ?: bottom)?.minus(origin)
-        }.filterNotNull().collect { position.snapTo(it) }
+        val docks = snapshotFlow {
+            (if (working) bottom else top)?.minus(origin)
+        }.filterNotNull()
+        position.animateTo(docks.first(), motion.spatialSlow())
+        docks.collect { position.snapTo(it) }
     }
 
     FocusAvatar(

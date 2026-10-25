@@ -13,6 +13,10 @@
     <string name="today_update_discuss">讨论</string>
     <string name="today_update_info">为什么会有这条</string>
     <string name="today_update_reason_title">为什么会有这条</string>
+    <string name="today_update_more">动态选项</string>
+    <string name="today_update_delete">删除</string>
+    <string name="today_update_delete_title">删除这条动态？</string>
+    <string name="today_update_delete_body">确定删除「%1$s」？无法撤销。</string>
     <string name="today_ideas_empty_title">还没有点子</string>
     <string name="today_ideas_empty_body">问 Focus 接下来能做什么，它想出来的点子会放在这里。</string>
     <string name="today_ideas_generate">要点子</string>
@@ -22,6 +26,10 @@
     <string name="today_idea_more">更多选项</string>
     <string name="today_idea_more_like">更多相似内容</string>
     <string name="today_idea_not_interested">不感兴趣</string>
+    <string name="today_idea_delete">删除</string>
+    <string name="today_idea_delete_title">删除这个点子？</string>
+    <string name="today_idea_delete_body">确定删除「%1$s」？无法撤销。</string>
+    <string name="today_delete_confirm">删除</string>
     <string name="today_goals_track">追踪</string>
     <string name="today_goals_empty">还没有目标。在下面新建一个，或者让 Focus 帮你建。</string>
     <string name="today_goals_create">创建目标</string>

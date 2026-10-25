@@ -5,6 +5,7 @@ import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.AppErrorType
 import fan.x0.focus.core.error.toAppError
 import fan.x0.focus.core.mvi.BaseViewModel
+import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ConnectionStage
 import fan.x0.focus.core.network.openai.ConnectionTestException
 import fan.x0.focus.core.network.openai.ModelConnectionTester
@@ -101,6 +102,17 @@ class SettingsViewModel(
             }
             is SettingsAction.ModelChanged -> updateState {
                 copy(model = action.value, connectionOk = false, connectionError = null)
+            }
+            is SettingsAction.ProtocolChanged -> {
+                updateState {
+                    copy(
+                        protocol = action.value,
+                        connectionOk = false,
+                        connectionError = null,
+                        models = emptyList(),
+                    )
+                }
+                scheduleModelFetch()
             }
             is SettingsAction.ApiKeyChanged -> {
                 updateState {
@@ -212,6 +224,7 @@ class SettingsViewModel(
                 draftName = provider.name,
                 baseUrl = provider.baseUrl,
                 model = provider.model,
+                protocol = provider.protocol,
                 apiKeyInput = "",
                 apiKeySaved = false,
                 apiKeyVisible = false,
@@ -256,6 +269,7 @@ class SettingsViewModel(
                 draftName = "",
                 baseUrl = "",
                 model = "",
+                protocol = ChatProtocol.ChatCompletions,
                 apiKeyInput = "",
                 apiKeySaved = false,
                 apiKeyVisible = false,
@@ -317,6 +331,7 @@ class SettingsViewModel(
                     name = name,
                     baseUrl = baseUrl,
                     model = state.model.trim(),
+                    protocol = state.protocol,
                 )
                 settings.updateProvider(provider, makeActive = state.draftMakeActive)
                 val key = state.apiKeyInput.trim()
@@ -376,7 +391,7 @@ class SettingsViewModel(
                     }
                     return@launch
                 }
-                tester.test(ModelEndpoint(baseUrl, state.model.trim()), key)
+                tester.test(ModelEndpoint(baseUrl, state.model.trim()), key, state.protocol)
                 updateState { copy(testing = false, connectionOk = true) }
                 val id = state.editingProviderId
                 if (id != null) {
@@ -471,7 +486,11 @@ class SettingsViewModel(
         if (key.isBlank()) return
         updateState { copy(fetchingModels = true) }
         try {
-            val models = catalog.list(ModelEndpoint(baseUrl, currentState.model.trim()), key)
+            val models = catalog.list(
+                ModelEndpoint(baseUrl, currentState.model.trim()),
+                key,
+                currentState.protocol,
+            )
             if (token != fetchToken) return
             updateState {
                 copy(

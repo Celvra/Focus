@@ -208,6 +208,7 @@ fun IdeaMenuDialog(
     onDismiss: () -> Unit,
     onMoreLike: () -> Unit,
     onNotInterested: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     BasicAlertDialog(onDismissRequest = onDismiss) {
         Surface(
@@ -234,6 +235,11 @@ fun IdeaMenuDialog(
                     icon = FocusIcons.VisibilityOff,
                     text = stringResource(R.string.today_idea_not_interested),
                     onClick = onNotInterested,
+                )
+                DialogOption(
+                    icon = FocusIcons.Delete,
+                    text = stringResource(R.string.today_idea_delete),
+                    onClick = onDelete,
                 )
             }
         }
@@ -346,6 +352,50 @@ fun DeleteGoalDialog(goal: GoalUi, onAction: (TodayAction) -> Unit) {
         },
         dismissButton = {
             TextButton(onClick = { onAction(TodayAction.CancelDeleteGoal) }) {
+                Text(stringResource(R.string.today_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+fun DeleteUpdateDialog(update: UpdateUi, onAction: (TodayAction) -> Unit) {
+    DeleteCardDialog(
+        title = stringResource(R.string.today_update_delete_title),
+        body = stringResource(R.string.today_update_delete_body, update.headline),
+        onDismiss = { onAction(TodayAction.CancelDeleteUpdate) },
+        onConfirm = { onAction(TodayAction.ConfirmDeleteUpdate) },
+    )
+}
+
+@Composable
+fun DeleteIdeaDialog(idea: IdeaUi, onAction: (TodayAction) -> Unit) {
+    DeleteCardDialog(
+        title = stringResource(R.string.today_idea_delete_title),
+        body = stringResource(R.string.today_idea_delete_body, idea.title),
+        onDismiss = { onAction(TodayAction.CancelDeleteIdea) },
+        onConfirm = { onAction(TodayAction.ConfirmDeleteIdea) },
+    )
+}
+
+@Composable
+private fun DeleteCardDialog(
+    title: String,
+    body: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(body) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.today_delete_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.today_cancel))
             }
         },

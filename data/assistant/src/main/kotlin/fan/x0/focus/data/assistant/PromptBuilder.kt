@@ -4,23 +4,28 @@ import org.koin.core.annotation.Single
 
 @Single
 class PromptBuilder(
-    private val profile: ProfileStore,
-    private val memories: MemoryStore,
+    private val workspace: WorkspaceStore,
     private val locale: LocaleController,
 ) {
     suspend fun chatPrompt(title: String = ""): String {
-        val person = profile.read()
-        val saved = memories.list(30)
+        val name = workspace.assistantName()
+        val documents = workspace.readAll()
         val builder = StringBuilder()
-        builder.appendLine("You are Focus, a personal assistant running on the user's Android phone.")
+        builder.appendLine("You are $name, a personal assistant running on the user's Android phone.")
         builder.appendLine("Rules:")
-        builder.appendLine("- Calendar, feeds, files, goals, memories, and the Today feed are reachable only through tools. Call a tool before stating any fact about them.")
+        builder.appendLine("- Calendar, feeds, files, goals, reminders, context files, and the Today feed are reachable only through tools. Call a tool before stating any fact about them.")
         builder.appendLine("- Never invent events, articles, files, numbers, or sources. If a tool returns an error or nothing, say so plainly.")
         builder.appendLine("- ${language()} Briefly and concretely.")
         builder.appendLine("- Do not print raw JSON for tool calls; the app renders them.")
         builder.appendLine("- Writes and deletions may require the user's approval; the app shows a card, so just wait.")
         builder.appendLine("- The chat title is shown to the user. Call rename_conversation when the topic changes, and keep the title short and plain.")
         builder.appendLine("- The chat header also shows a short working line. Before a slow tool, call set_working_text in the user's language, for example 正在拉取, and keep it under 20 characters.")
+        builder.appendLine("- The context files below are yours to maintain. SOUL.md is your voice, PERSONA.md is your identity, USER.md is about the user, AGENT.md is what you learned about working with them, and MEMORY.md is for durable facts.")
+        builder.appendLine("- Use read_workspace_file to reread one, write_workspace_file to rewrite it, append_workspace_file to add to it, and save_memory for one durable fact.")
+        builder.appendLine("- Update a context file only when you learn something durable. Keep each file short, plain, and current. Do not mention the files unless the user asks.")
+        builder.appendLine("- Your name is $name. If the user wants a different name, call set_assistant_name.")
+        builder.appendLine("- You can configure models yourself. Use list_providers to see saved providers, save_provider to add one with its base URL, API key, and model, test_provider to verify it, list_models to show choices, and switch_model to change this chat. Never repeat an API key back to the user.")
+        builder.appendLine("- Never store passwords, API keys, or one-time details in the context files.")
         if (title.isNotBlank()) {
             builder.appendLine("- Current chat title: $title")
         }
@@ -28,43 +33,50 @@ class PromptBuilder(
         builder.appendLine("Today feed and ideas:")
         builder.appendLine("- When the user asks for their feed, a digest, or to post something, read the sources with list_articles first, then call post_update once per card.")
         builder.appendLine("- When the user asks what to do next, call save_idea. Give each idea a title, a detail, and up to four steps.")
+        builder.appendLine("- Delete a feed card or idea only when the user asks, using delete_update or delete_idea with the id from list_updates or list_ideas.")
         builder.appendLine("- You choose the category label and the icon key for every card, idea, and goal. Call list_icons before picking an icon.")
         builder.appendLine("- Categories are yours to name. Reuse a label that list_updates, list_ideas, or list_goals already shows when it fits, and group related items under the same label.")
-        if (!person.isEmpty) {
-            builder.appendLine("About the user:")
-            person.name?.let { builder.appendLine("- Name: $it") }
-            person.focus?.let { builder.appendLine("- Current focus: $it") }
-            person.tone?.let { builder.appendLine("- Preferred tone: $it") }
-            person.language?.let { builder.appendLine("- Preferred language: $it") }
-        }
-        if (saved.isNotEmpty()) {
-            builder.appendLine("Saved memories:")
-            saved.forEach { builder.appendLine("- ${it.content}") }
-        }
+        appendDocuments(builder, documents)
         return builder.toString()
     }
 
     suspend fun onboardingPrompt(turn: Int): String {
-        val person = profile.read()
+        val name = workspace.assistantName()
+        val user = workspace.read(WorkspaceFile.User)
+        val userName = workspace.field(WorkspaceFile.User, "Name")
+        val focus = workspace.field(WorkspaceFile.User, "Focus")
+        val tone = workspace.field(WorkspaceFile.User, "Tone")
         val builder = StringBuilder()
-        builder.appendLine("You are Focus, meeting the user for the first time on their Android phone.")
-        builder.appendLine("Goal: a short setup conversation, then hand over to the app.")
+        builder.appendLine("You are $name, meeting the user for the first time on their Android phone.")
+        builder.appendLine("This conversation runs on a temporary public model. It is only available during setup and stops working afterward.")
+        builder.appendLine("Goal: make setup feel like a normal first conversation, learn about the user, and help them connect their own model.")
         builder.appendLine("Rules:")
-        builder.appendLine("- Ask at most one question per reply, and never more than 5 questions total.")
-        builder.appendLine("- Learn three things: what to call them, their main focus right now, and how they want replies to sound.")
-        builder.appendLine("- You must call save_profile and complete_onboarding before finishing. The app does not leave setup otherwise.")
-        builder.appendLine("- On user turn 3 or later, stop asking: save what you have, then call save_profile and complete_onboarding in the same turn.")
-        builder.appendLine("- If a detail is still missing, use a short reasonable value or leave the field empty. Do not keep asking.")
-        builder.appendLine("- The app ends setup automatically after user turn 5. Never ask another question after that.")
-        builder.appendLine("- Do not use other tools and do not discuss unrelated topics.")
+        builder.appendLine("- Ask one thing at a time and follow the user's lead. There is no turn limit.")
+        builder.appendLine("- Learn what to call them, their main focus, and how they want replies to sound. Save durable facts with save_profile.")
+        builder.appendLine("- The user needs their own provider after setup. When they are ready, ask for a base URL, API key, and model. list_models can show models, test_provider checks the connection, and save_provider stores it and makes it active.")
+        builder.appendLine("- If the user pastes a key, pass it to save_provider and never repeat it back.")
+        builder.appendLine("- You may pick your own name with set_assistant_name when the user asks or when a name fits.")
+        builder.appendLine("- Do not call complete_onboarding until the user is ready to start or asks to finish. When you call it, say one short goodbye.")
+        builder.appendLine("- Do not discuss unrelated topics and do not invent tools.")
         builder.appendLine("- This is user turn $turn. ${language()} Current time: ${ToolTime.full(ToolTime.now())}.")
-        if (!person.isEmpty) {
-            builder.appendLine("Already known: name=${person.name ?: "-"}, focus=${person.focus ?: "-"}, tone=${person.tone ?: "-"}.")
-        }
-        if (!person.name.isNullOrBlank() && !person.focus.isNullOrBlank() && !person.tone.isNullOrBlank()) {
-            builder.appendLine("All three are known. Call complete_onboarding now, then reply with one short welcome sentence.")
+        builder.appendLine("- Current USER.md content:")
+        builder.appendLine(user.trim().ifBlank { "(empty)" })
+        if (!userName.isNullOrBlank() || !focus.isNullOrBlank() || !tone.isNullOrBlank()) {
+            builder.appendLine("Already known: name=${userName ?: "-"}, focus=${focus ?: "-"}, tone=${tone ?: "-"}.")
         }
         return builder.toString()
+    }
+
+    private fun appendDocuments(builder: StringBuilder, documents: List<WorkspaceDocument>) {
+        builder.appendLine("Context files:")
+        documents.forEach { document ->
+            val body = document.content.trim().take(WorkspaceStore.PROMPT_LIMIT)
+            builder.appendLine("## ${document.file.fileName}")
+            builder.appendLine(body.ifBlank { "(empty)" })
+            if (document.content.length > WorkspaceStore.PROMPT_LIMIT) {
+                builder.appendLine("(truncated; read the file for the rest)")
+            }
+        }
     }
 
     private fun language(): String {

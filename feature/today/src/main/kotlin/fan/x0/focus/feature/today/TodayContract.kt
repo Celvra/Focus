@@ -64,8 +64,11 @@ data class TodayUiState(
     val ideas: List<IdeaUi> = emptyList(),
     val goals: List<GoalUi> = emptyList(),
     val reason: UpdateUi? = null,
+    val updateMenu: String? = null,
+    val deleteUpdate: UpdateUi? = null,
     val openIdea: IdeaUi? = null,
     val ideaMenu: IdeaUi? = null,
+    val deleteIdea: IdeaUi? = null,
     val goalDraft: GoalDraft? = null,
     val goalMenu: String? = null,
     val deleteGoal: GoalUi? = null,
@@ -95,6 +98,11 @@ sealed interface TodayAction : UiAction {
     data class OpenReason(val id: String) : TodayAction
     data object CloseReason : TodayAction
     data class Discuss(val id: String) : TodayAction
+    data class UpdateMenu(val id: String) : TodayAction
+    data object CloseUpdateMenu : TodayAction
+    data class AskDeleteUpdate(val id: String) : TodayAction
+    data object CancelDeleteUpdate : TodayAction
+    data object ConfirmDeleteUpdate : TodayAction
     data object AskForUpdates : TodayAction
     data object AskForIdeas : TodayAction
     data class OpenIdea(val id: String) : TodayAction
@@ -102,6 +110,9 @@ sealed interface TodayAction : UiAction {
     data class IdeaMenu(val id: String) : TodayAction
     data object CloseIdeaMenu : TodayAction
     data class DismissIdea(val id: String) : TodayAction
+    data class AskDeleteIdea(val id: String) : TodayAction
+    data object CancelDeleteIdea : TodayAction
+    data object ConfirmDeleteIdea : TodayAction
     data class MoreLikeIdea(val id: String) : TodayAction
     data class StartIdea(val id: String) : TodayAction
     data class GoalMenu(val id: String) : TodayAction

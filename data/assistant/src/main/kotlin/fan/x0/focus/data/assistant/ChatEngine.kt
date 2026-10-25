@@ -6,17 +6,20 @@ import fan.x0.focus.core.error.NetworkException
 import fan.x0.focus.core.error.toAppError
 import fan.x0.focus.core.network.openai.ChatCompletionRequest
 import fan.x0.focus.core.network.openai.ChatMessageDto
+import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ChatStreamEvent
+import fan.x0.focus.core.network.openai.ChatWireClient
 import fan.x0.focus.core.network.openai.FunctionCallDto
 import fan.x0.focus.core.network.openai.MessageContent
 import fan.x0.focus.core.network.openai.ModelEndpoint
 import fan.x0.focus.core.network.openai.ModelProtocolException
-import fan.x0.focus.core.network.openai.OpenAiChatClient
 import fan.x0.focus.core.network.openai.StreamAccumulator
 import fan.x0.focus.core.network.openai.ToolCallDto
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.annotation.Single
 import java.util.concurrent.ConcurrentHashMap
@@ -51,7 +54,7 @@ sealed interface ChatEvent {
 
 @Single
 class ChatEngine(
-    private val client: OpenAiChatClient,
+    private val client: ChatWireClient,
     private val settings: AssistantSettings,
     private val secrets: SecretStore,
     private val chats: ChatStore,
@@ -71,17 +74,33 @@ class ChatEngine(
         mode: ChatMode = ChatMode.Chat,
         options: TurnOptions = TurnOptions(),
     ): Flow<ChatEvent> = flow {
-        val config = settings.configOnce()
-        val provider = config.providers.firstOrNull { it.id == options.providerId } ?: config.activeProvider
-        val providerId = provider?.id ?: config.activeProviderId
-        val baseUrl = provider?.baseUrl ?: config.baseUrl
-        val model = options.model.ifBlank { provider?.model.orEmpty() }
+        val config = if (mode == ChatMode.Chat) settings.configOnce() else null
+        val provider = config?.providers?.firstOrNull { it.id == options.providerId } ?: config?.activeProvider
+        val providerId = when (mode) {
+            ChatMode.Onboarding -> OnboardingDefaults.PROVIDER_ID
+            ChatMode.Chat -> provider?.id ?: config?.activeProviderId.orEmpty()
+        }
+        val baseUrl = when (mode) {
+            ChatMode.Onboarding -> OnboardingDefaults.BASE_URL
+            ChatMode.Chat -> provider?.baseUrl ?: config?.baseUrl.orEmpty()
+        }
+        val protocol = when (mode) {
+            ChatMode.Onboarding -> ChatProtocol.ChatCompletions
+            ChatMode.Chat -> provider?.protocol ?: ChatProtocol.ChatCompletions
+        }
+        val model = when (mode) {
+            ChatMode.Onboarding -> OnboardingDefaults.MODEL
+            ChatMode.Chat -> options.model.ifBlank { provider?.model.orEmpty() }
+        }
         val endpoint = ModelEndpoint(baseUrl, model)
         if (!endpoint.isUsable) {
             emit(ChatEvent.Failed(AppError(AppErrorType.Generic, serverMessage = "Set the model connection first.")))
             return@flow
         }
-        val apiKey = secrets.apiKey(providerId)
+        val apiKey = when (mode) {
+            ChatMode.Onboarding -> OnboardingDefaults.API_KEY
+            ChatMode.Chat -> secrets.apiKey(providerId)
+        }
         if (apiKey.isNullOrBlank()) {
             emit(ChatEvent.Failed(AppError(AppErrorType.Unauthorized, serverMessage = "Set the API key first.")))
             return@flow
@@ -99,11 +118,17 @@ class ChatEngine(
                     emit(ChatEvent.UserMessageAppended(chats.userTurnCount(conversationId)))
                 }
             }
-            val specs = when (mode) {
+            val baseSpecs = when (mode) {
                 ChatMode.Chat -> tools.specs
                 ChatMode.Onboarding -> ToolCatalog.onboarding()
             }
+            var completesOnboarding = false
             repeat(MAX_ROUNDS) {
+                val specs = if (completesOnboarding) {
+                    baseSpecs.filterNot { it.name == "complete_onboarding" }
+                } else {
+                    baseSpecs
+                }
                 val history = chats.messages(conversationId)
                 val system = when (mode) {
                     ChatMode.Chat -> prompt.chatPrompt(chats.conversation(conversationId)?.title.orEmpty())
@@ -128,7 +153,7 @@ class ChatEngine(
                     reasoningEffort = options.reasoning.wire,
                 )
                 val accumulator = StreamAccumulator()
-                client.stream(endpoint, apiKey, request).collect { event ->
+                client.stream(endpoint, protocol, apiKey, request).collect { event ->
                     accumulator.apply(event)
                     when (event) {
                         is ChatStreamEvent.Text -> emit(ChatEvent.Delta(event.delta))
@@ -142,16 +167,22 @@ class ChatEngine(
                     role = ChatRole.Assistant,
                     content = message.text,
                     reasoning = message.reasoning,
-                    toolCalls = message.toolCalls.map { ToolCallRecord(it.id, it.name, it.arguments) },
+                    toolCalls = message.toolCalls.map {
+                        ToolCallRecord(it.id, it.name, ToolCatalog.redactArguments(it.name, it.arguments))
+                    },
                 )
                 if (message.toolCalls.isEmpty()) {
                     emit(ChatEvent.Completed)
+                    if (completesOnboarding) finishOnboarding(conversationId)
                     return@flow
                 }
 
                 for (call in message.toolCalls) {
                     val label = ToolLabels.of(call.name)
                     val result = tools.execute(call, conversationId)
+                    if (mode == ChatMode.Onboarding && result.completesOnboarding) {
+                        completesOnboarding = true
+                    }
                     result.workingText?.let { emit(ChatEvent.WorkingTextChanged(it)) }
                     val approval = result.approval
                     if (approval == null) {
@@ -209,10 +240,18 @@ class ChatEngine(
                 }
             }
             emit(ChatEvent.Completed)
+            if (completesOnboarding) finishOnboarding(conversationId)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
             emit(ChatEvent.Failed(mapError(e)))
+        }
+    }
+
+    private suspend fun finishOnboarding(conversationId: String) {
+        withContext(NonCancellable) {
+            chats.clear(conversationId)
+            settings.completeOnboarding()
         }
     }
 
