@@ -277,7 +277,7 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "list_models",
-            description = "Fetch the model list from a provider's /models endpoint. Use a saved provider id or pass the connection details. Call this before switch_model when unsure about model ids.",
+            description = "Fetch the model list from a provider's /models endpoint, enriched with context window, price, and capability metadata from models.dev. Use a saved provider id or pass the connection details. Always call this before switch_model; never guess model ids.",
             kind = ToolKind.Read,
             parameters = schema {
                 put("provider_id", string("Saved provider id, optional"))

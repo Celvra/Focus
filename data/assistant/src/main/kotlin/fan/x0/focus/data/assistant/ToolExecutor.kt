@@ -5,7 +5,6 @@ import fan.x0.focus.core.network.openai.CompletedToolCall
 import fan.x0.focus.core.network.openai.ConnectionTestException
 import fan.x0.focus.core.network.openai.ModelConnectionTester
 import fan.x0.focus.core.network.openai.ModelEndpoint
-import fan.x0.focus.core.network.openai.OpenAiModelCatalog
 import fan.x0.focus.data.sources.Article
 import fan.x0.focus.data.sources.CalendarRepository
 import fan.x0.focus.data.sources.Feed
@@ -56,7 +55,7 @@ class ToolExecutor(
     private val chats: ChatStore,
     private val secrets: SecretStore,
     private val tester: ModelConnectionTester,
-    private val catalog: OpenAiModelCatalog,
+    private val catalog: ModelCatalogRepository,
 ) {
     val specs: List<ToolSpec> = ToolCatalog.chat()
 
@@ -565,15 +564,37 @@ class ToolExecutor(
                 val key = args.text("api_key")
                     ?: saved?.let { secrets.apiKey(it.id) }
                     ?: return fail("api_key or provider_id is required")
-                val models = catalog.list(
-                    endpoint = ModelEndpoint(baseUrl, saved?.model.orEmpty()),
+                val entries = catalog.models(
+                    providerId = saved?.id ?: baseUrl,
+                    baseUrl = baseUrl,
+                    model = saved?.model.orEmpty(),
                     apiKey = key,
                     protocol = protocol,
                 ).take(200)
                 ok(
-                    "${models.size} models",
+                    "${entries.size} models",
                     buildJsonObject {
-                        putJsonArray("models") { models.forEach { add(JsonPrimitive(it)) } }
+                        putJsonArray("models") {
+                            entries.forEach { entry ->
+                                add(
+                                    buildJsonObject {
+                                        put("id", entry.id)
+                                        val meta = entry.meta
+                                        if (!meta.isEmpty) {
+                                            meta.contextWindow?.let { put("context_window", it) }
+                                            meta.inputPrice?.let { put("input_price_per_m", it) }
+                                            meta.outputPrice?.let { put("output_price_per_m", it) }
+                                            meta.supportsTools?.let { put("supports_tools", it) }
+                                            meta.supportsReasoning?.let { put("supports_reasoning", it) }
+                                            meta.supportsImage?.let { put("supports_image", it) }
+                                            meta.knowledgeCutoff?.let { put("knowledge_cutoff", it) }
+                                            meta.releaseDate?.let { put("released", it) }
+                                            meta.description?.take(200)?.let { put("description", it) }
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }.toString(),
                 )
             }
