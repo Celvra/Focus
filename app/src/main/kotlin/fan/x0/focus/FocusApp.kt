@@ -45,11 +45,13 @@ import androidx.navigation3.ui.NavDisplay
 import fan.x0.focus.app.ShellState
 import fan.x0.focus.app.ShellViewModel
 import fan.x0.focus.core.designsystem.components.FocusAmbientBackground
+import fan.x0.focus.core.designsystem.components.FocusAmbientWorking
 import fan.x0.focus.core.designsystem.components.LocalFocusDrawerAvailable
 import fan.x0.focus.core.designsystem.components.LocalFocusDrawerOpener
 import fan.x0.focus.core.designsystem.components.LocalFocusSettingsOpener
 import fan.x0.focus.core.designsystem.theme.FocusMotionDefaults
 import fan.x0.focus.data.assistant.AssistantSettings
+import fan.x0.focus.data.assistant.ChatTurnRunner
 import fan.x0.focus.feature.assistant.AssistantRoute
 import fan.x0.focus.feature.assistant.SettingsRoute
 import fan.x0.focus.feature.chat.ChatRoute
@@ -57,6 +59,8 @@ import fan.x0.focus.feature.goals.GoalsRoute
 import fan.x0.focus.feature.library.LibraryRoute
 import fan.x0.focus.feature.onboarding.OnboardingRoute
 import fan.x0.focus.feature.today.TodayRoute
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -111,6 +115,10 @@ private fun MainShell() {
     val activity = LocalActivity.current
     val shell: ShellViewModel = koinViewModel()
     val shellState = shell.state.collectAsStateWithLifecycle()
+    val turns = koinInject<ChatTurnRunner>()
+    val working by remember(turns) {
+        turns.states.map { it.isNotEmpty() }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = false)
 
     val navigate: (FocusRoute) -> Unit = { route ->
         backStack.open(route)
@@ -146,6 +154,7 @@ private fun MainShell() {
                 LocalFocusSettingsOpener provides { navigate(FocusRoute.Settings) },
             ) {
                 FocusAmbientBackground {
+                    FocusAmbientWorking(active = working)
                     ShellContent(
                         backStack = backStack,
                         shellState = shellState,

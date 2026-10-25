@@ -86,7 +86,6 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fan.x0.focus.core.designsystem.components.AvatarState
 import fan.x0.focus.core.designsystem.components.AvatarStyle
-import fan.x0.focus.core.designsystem.components.FocusAmbientWorking
 import fan.x0.focus.core.designsystem.components.FocusAvatar
 import fan.x0.focus.core.designsystem.components.FocusChatBubble
 import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
@@ -183,7 +182,6 @@ fun ChatScreen(
     var mascotBottom by remember { mutableStateOf<Offset?>(null) }
     var overlayOrigin by remember { mutableStateOf(Offset.Zero) }
     LaunchedEffect(state.conversationId) { mascotBottom = null }
-    FocusAmbientWorking(active = state.sending || state.streaming.isNotBlank())
     Box(
         modifier = Modifier
             .fillMaxSize()
