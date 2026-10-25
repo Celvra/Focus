@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -27,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -37,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
 private val GroupCorner = 20.dp
@@ -46,6 +49,7 @@ private val InnerCorner = 4.dp
 private data class GroupItem(
     val selected: Boolean = false,
     val onClick: (() -> Unit)?,
+    val role: Role? = null,
     val leadingContent: (@Composable () -> Unit)?,
     val headlineContent: @Composable () -> Unit,
     val supportingContent: (@Composable () -> Unit)?,
@@ -65,6 +69,7 @@ interface FocusCardGroupScope {
         leadingContent: (@Composable () -> Unit)? = null,
         trailingContent: (@Composable () -> Unit)? = null,
         selected: Boolean = false,
+        role: Role? = null,
     )
 
     fun formItem(
@@ -85,10 +90,12 @@ private class CardGroupScopeImpl : FocusCardGroupScope {
         leadingContent: (@Composable () -> Unit)?,
         trailingContent: (@Composable () -> Unit)?,
         selected: Boolean,
+        role: Role?,
     ) {
         items += GroupItem(
             selected = selected,
             onClick = onClick,
+            role = role,
             leadingContent = leadingContent,
             headlineContent = headlineContent,
             supportingContent = supportingContent,
@@ -120,13 +127,28 @@ fun FocusCardGroupScope.switchItem(
     headlineContent: @Composable () -> Unit,
     supportingContent: (@Composable () -> Unit)? = null,
     leadingContent: (@Composable () -> Unit)? = null,
+    checkedIcon: ImageVector? = null,
 ) = item(
     headlineContent = headlineContent,
     onClick = { onCheckedChange(!checked) },
     supportingContent = supportingContent,
     leadingContent = leadingContent,
     trailingContent = {
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            thumbContent = if (checked && checkedIcon != null) {
+                {
+                    Icon(
+                        imageVector = checkedIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                }
+            } else {
+                null
+            },
+        )
     },
 )
 
@@ -310,14 +332,20 @@ private fun GroupListItem(item: GroupItem, index: Int, count: Int) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(top, top, bottom, bottom))
             .then(
-                if (item.onClick != null) {
-                    Modifier.clickable(
+                when {
+                    item.onClick == null -> Modifier
+                    item.role != null -> Modifier.selectable(
+                        selected = item.selected,
+                        interactionSource = interaction,
+                        indication = LocalIndication.current,
+                        role = item.role,
+                        onClick = item.onClick,
+                    )
+                    else -> Modifier.clickable(
                         interactionSource = interaction,
                         indication = LocalIndication.current,
                         onClick = item.onClick,
                     )
-                } else {
-                    Modifier
                 },
             ),
         supportingContent = item.supportingContent,

@@ -4,6 +4,7 @@ import fan.x0.focus.core.mvi.UiAction
 import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
 import fan.x0.focus.core.network.openai.ModelMeta
+import fan.x0.focus.data.assistant.AskKind
 import fan.x0.focus.data.assistant.AttachmentKind
 import fan.x0.focus.data.assistant.ReasoningLevel
 
@@ -23,6 +24,50 @@ data class ApprovalUi(
     val summary: String,
     val steps: List<TraceStep>,
     val phase: ApprovalPhase,
+)
+
+enum class AskPhase { Waiting, Answered, Skipped }
+
+enum class AskField { Answer, Other }
+
+data class AskOptionUi(
+    val label: String,
+    val detail: String,
+    val icon: String,
+)
+
+data class AskQuestionUi(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val kind: AskKind,
+    val icon: String,
+    val options: List<AskOptionUi>,
+    val allowOther: Boolean,
+    val placeholder: String,
+)
+
+data class AskAnswerUi(
+    val questionId: String,
+    val choices: List<String> = emptyList(),
+    val text: String = "",
+    val number: Double? = null,
+    val confirmed: Boolean? = null,
+)
+
+data class AskCardUi(
+    val id: String,
+    val intro: String,
+    val questions: List<AskQuestionUi>,
+    val phase: AskPhase,
+    val answers: List<AskAnswerUi> = emptyList(),
+)
+
+data class AskDraft(
+    val selections: List<String> = emptyList(),
+    val text: String = "",
+    val other: String = "",
+    val confirmed: Boolean? = null,
 )
 
 data class AttachmentUi(
@@ -56,6 +101,8 @@ sealed interface ChatEntry {
     data class Trace(override val key: String, val steps: List<TraceStep>) : ChatEntry
 
     data class Approval(override val key: String, val card: ApprovalUi) : ChatEntry
+
+    data class Ask(override val key: String, val card: AskCardUi) : ChatEntry
 }
 
 data class ProviderOption(
@@ -97,6 +144,7 @@ data class ChatUiState(
     val modelsLoading: Boolean = false,
     val picker: ComposerPicker? = null,
     val modelQuery: String = "",
+    val askDrafts: Map<String, AskDraft> = emptyMap(),
 ) : UiState {
     val entries: List<ChatEntry>
         get() = history + live
@@ -109,6 +157,9 @@ data class ChatUiState(
 
     val approval: ApprovalUi?
         get() = live.filterIsInstance<ChatEntry.Approval>().lastOrNull()?.card
+
+    val ask: AskCardUi?
+        get() = live.filterIsInstance<ChatEntry.Ask>().lastOrNull()?.card
 
     val providerName: String
         get() = providers.firstOrNull { it.id == providerId }?.name ?: providerId
@@ -125,6 +176,16 @@ sealed interface ChatAction : UiAction {
     data object Send : ChatAction
     data object Stop : ChatAction
     data class Decide(val approvalId: String, val approve: Boolean) : ChatAction
+    data class AskSelect(val askId: String, val questionId: String, val label: String) : ChatAction
+    data class AskConfirm(val askId: String, val questionId: String, val value: Boolean) : ChatAction
+    data class AskEdit(
+        val askId: String,
+        val questionId: String,
+        val field: AskField,
+        val value: String,
+    ) : ChatAction
+    data class AskSubmit(val askId: String) : ChatAction
+    data class AskSkip(val askId: String) : ChatAction
     data object NewConversation : ChatAction
     data class OpenPicker(val picker: ComposerPicker?) : ChatAction
     data class SelectProvider(val providerId: String) : ChatAction

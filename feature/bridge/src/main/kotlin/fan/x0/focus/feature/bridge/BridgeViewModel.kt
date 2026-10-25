@@ -17,8 +17,7 @@ class BridgeViewModel(
 ) : BaseViewModel<BridgeAction, BridgeUiState, BridgeEffect>(BridgeUiState()) {
 
     private var refreshJob: Job? = null
-    private var terminal: BridgeTerminal? = null
-    private var terminalJob: Job? = null
+    private val connections = mutableMapOf<String, DeviceConnection>()
     private var endpoints: List<BridgeEndpoint> = emptyList()
 
     init {
@@ -68,11 +67,11 @@ class BridgeViewModel(
             is BridgeAction.OpenSession -> openSession(action.id)
             is BridgeAction.CloseSession -> closeSession(action.id)
             BridgeAction.CloseTerminal -> closeTerminal()
-            is BridgeAction.TerminalInputChanged -> updateState { copy(terminalInput = action.value) }
+            is BridgeAction.TerminalInputChanged -> setTerminalInput(action.value)
             BridgeAction.SendTerminalInput -> {
-                val raw = currentState.terminalInput
-                updateState { copy(terminalInput = "") }
-                sendInput(raw)
+                val raw = activeConnection()?.input.orEmpty()
+                setTerminalInput("")
+                sendInput("$raw\r")
             }
             is BridgeAction.SendTerminalKey -> sendKey(action.key)
         }
@@ -91,13 +90,13 @@ class BridgeViewModel(
                     roots = active?.workspaceRoots.orEmpty(),
                 )
             }
-            val activeEndpoint = list.firstOrNull { it.id == active?.id }
-            if (activeEndpoint != null) {
-                val serverRoots = runCatching { bridge.workspace(activeEndpoint) }.getOrNull()
+            if (active != null) {
+                val serverRoots = runCatching { bridge.workspace(active) }.getOrNull()
                 if (serverRoots != null) {
                     updateState { copy(roots = serverRoots) }
                 }
             }
+            syncActive()
         }
     }
 
@@ -161,8 +160,7 @@ class BridgeViewModel(
     }
 
     private fun select(id: String) {
-        val endpoint = bridgeEndpointFor(id) ?: return
-        closeTerminal()
+        val endpoint = endpointFor(id) ?: return
         launchGuarded(onError = ::emitError) {
             bridge.select(endpoint)
             val roots = runCatching { bridge.workspace(endpoint) }.getOrDefault(emptyList())
@@ -170,25 +168,24 @@ class BridgeViewModel(
                 copy(
                     devices = devices.map { it.copy(active = it.id == id) },
                     roots = roots,
-                    sessions = emptyList(),
                 )
             }
+            syncActive()
         }
     }
 
     private fun forget() {
         val target = currentState.deleteTarget ?: return
         updateState { copy(deleteTarget = null) }
-        val endpoint = bridgeEndpointFor(target.id) ?: return
+        val endpoint = endpointFor(target.id) ?: return
         launchGuarded(onError = ::emitError) {
             bridge.forget(endpoint)
-            closeTerminal()
+            dropConnection(target.id)
             endpoints = bridge.endpointsOnce()
             updateState {
                 copy(
                     loading = false,
                     devices = endpoints.map { it.toUi(null) },
-                    sessions = emptyList(),
                     roots = emptyList(),
                 )
             }
@@ -236,7 +233,8 @@ class BridgeViewModel(
     }
 
     private fun loadSessions() {
-        val endpoint = activeEndpoint() ?: return
+        val deviceId = activeDeviceId() ?: return
+        val endpoint = endpointFor(deviceId) ?: return
         if (currentState.sessionsLoading) return
         updateState { copy(sessionsLoading = true) }
         launchGuarded(
@@ -246,25 +244,24 @@ class BridgeViewModel(
             },
         ) {
             val list = bridge.sessions(endpoint)
-            updateState {
-                copy(
-                    sessionsLoading = false,
-                    sessions = list.map {
-                        BridgeSessionUi(
-                            id = it.id,
-                            name = it.name.ifBlank { it.shell },
-                            shell = it.shell,
-                            cols = it.cols,
-                            rows = it.rows,
-                        )
-                    },
+            val connection = connection(deviceId)
+            connection.sessions = list.map {
+                BridgeSessionUi(
+                    id = it.id,
+                    name = it.name.ifBlank { it.shell },
+                    shell = it.shell,
+                    cols = it.cols,
+                    rows = it.rows,
                 )
             }
+            updateState { copy(sessionsLoading = false) }
+            syncActive()
         }
     }
 
     private fun newSession() {
-        val endpoint = activeEndpoint() ?: return
+        val deviceId = activeDeviceId() ?: return
+        val endpoint = endpointFor(deviceId) ?: return
         launchGuarded(onError = ::emitError) {
             val cwd = currentState.roots.firstOrNull()
             val info = bridge.openSession(endpoint, cwd = cwd, cols = 100, rows = 30)
@@ -275,65 +272,85 @@ class BridgeViewModel(
                 cols = info.cols,
                 rows = info.rows,
             )
-            updateState {
-                copy(
-                    sessions = sessions + session,
-                    tab = BridgeTab.Terminal,
-                )
-            }
+            val connection = connection(deviceId)
+            connection.sessions = connection.sessions + session
+            updateState { copy(tab = BridgeTab.Terminal) }
             openSession(session.id)
         }
     }
 
     private fun openSession(id: String) {
-        val endpoint = activeEndpoint() ?: return
-        val session = currentState.sessions.firstOrNull { it.id == id } ?: return
-        closeTerminal()
-        updateState {
-            copy(
-                opened = session,
-                terminalOutput = "",
-                terminalInput = "",
-                connecting = true,
-                tab = BridgeTab.Terminal,
-            )
+        val deviceId = activeDeviceId() ?: return
+        val endpoint = endpointFor(deviceId) ?: return
+        val connection = connection(deviceId)
+        val session = connection.sessions.firstOrNull { it.id == id } ?: return
+        updateState { copy(tab = BridgeTab.Terminal) }
+        if (connection.opened?.id == id && connection.terminal != null) {
+            syncActive()
+            return
         }
-        launchGuarded(onError = ::emitError) {
+        if (connection.attachJob?.isActive == true) return
+        detachTerminal(connection)
+        connection.opened = session
+        connection.output = ""
+        connection.input = ""
+        connection.connecting = true
+        syncActive()
+        connection.attachJob = launchGuarded(onError = ::emitError) {
             val token = bridge.token(endpoint)
             if (token == null) {
-                updateState { copy(connecting = false, opened = null) }
+                connection.connecting = false
+                connection.opened = null
+                syncActive()
                 return@launchGuarded
             }
             val terminal = bridge.attach(endpoint, token, id, session.cols, session.rows)
-            this.terminal = terminal
-            terminalJob = viewModelScope.launch {
-                terminal.output().collect { event ->
-                    when (event) {
-                        is BridgeTerminalEvent.Output -> appendOutput(event.text)
-                        BridgeTerminalEvent.Closed -> updateState { copy(connecting = false) }
-                        is BridgeTerminalEvent.Failed -> {
-                            updateState { copy(connecting = false) }
-                            emitError(event.error.toAppError())
-                        }
-                    }
-                }
+            connection.terminal = terminal
+            connection.job = viewModelScope.launch {
+                terminal.output().collect { event -> onTerminalEvent(deviceId, event) }
+            }
+            syncActive()
+        }
+    }
+
+    private fun onTerminalEvent(deviceId: String, event: BridgeTerminalEvent) {
+        val connection = connection(deviceId)
+        when (event) {
+            is BridgeTerminalEvent.Output -> appendOutput(connection, deviceId, event.text)
+            BridgeTerminalEvent.Closed -> {
+                connection.connecting = false
+                connection.terminal = null
+                publish(deviceId)
+            }
+            is BridgeTerminalEvent.Failed -> {
+                connection.connecting = false
+                connection.terminal = null
+                publish(deviceId)
+                emitError(event.error.toAppError())
             }
         }
     }
 
-    private fun appendOutput(text: String) {
+    private fun appendOutput(connection: DeviceConnection, deviceId: String, text: String) {
         if (text.isEmpty()) return
-        val merged = currentState.terminalOutput + text
-        val trimmed = if (merged.length > MAX_TERMINAL_CHARS) {
+        val merged = connection.output + text
+        connection.output = if (merged.length > MAX_TERMINAL_CHARS) {
             merged.substring(merged.length - MAX_TERMINAL_CHARS)
         } else {
             merged
         }
-        updateState { copy(terminalOutput = trimmed, connecting = false) }
+        connection.connecting = false
+        publish(deviceId)
+    }
+
+    private fun setTerminalInput(value: String) {
+        val deviceId = activeDeviceId() ?: return
+        connection(deviceId).input = value
+        syncActive()
     }
 
     private fun sendInput(raw: String) {
-        val terminal = terminal ?: return
+        val terminal = activeConnection()?.terminal ?: return
         if (raw.isEmpty()) return
         viewModelScope.launch {
             runCatching { terminal.send(raw) }
@@ -341,10 +358,11 @@ class BridgeViewModel(
     }
 
     private fun sendKey(key: TerminalKey) {
-        val terminal = terminal ?: return
+        val terminal = activeConnection()?.terminal ?: return
         val sequence = when (key) {
             TerminalKey.Escape -> "\u001b"
             TerminalKey.Tab -> "\t"
+            TerminalKey.Enter -> "\r"
             TerminalKey.ControlC -> "\u0003"
             TerminalKey.ControlD -> "\u0004"
         }
@@ -354,31 +372,84 @@ class BridgeViewModel(
     }
 
     private fun closeSession(id: String) {
-        val endpoint = activeEndpoint() ?: return
+        val deviceId = activeDeviceId() ?: return
+        val endpoint = endpointFor(deviceId) ?: return
         launchGuarded(onError = ::emitError) {
             bridge.closeSession(endpoint, id)
-            if (currentState.opened?.id == id) {
-                closeTerminal()
+            val connection = connection(deviceId)
+            if (connection.opened?.id == id) {
+                detachTerminal(connection)
+                connection.opened = null
+                connection.output = ""
+                connection.input = ""
+                connection.connecting = false
             }
-            updateState { copy(sessions = sessions.filterNot { it.id == id }) }
+            connection.sessions = connection.sessions.filterNot { it.id == id }
+            syncActive()
         }
     }
 
     private fun closeTerminal() {
-        terminal?.close()
-        terminal = null
-        terminalJob?.cancel()
-        terminalJob = null
-        updateState { copy(opened = null, terminalOutput = "", terminalInput = "") }
+        val deviceId = activeDeviceId() ?: return
+        val connection = connection(deviceId)
+        detachTerminal(connection)
+        connection.opened = null
+        connection.output = ""
+        connection.input = ""
+        connection.connecting = false
+        syncActive()
     }
 
-    private fun bridgeEndpointFor(id: String?): BridgeEndpoint? =
+    private fun detachTerminal(connection: DeviceConnection) {
+        connection.attachJob?.cancel()
+        connection.attachJob = null
+        connection.job?.cancel()
+        connection.job = null
+        connection.terminal?.close()
+        connection.terminal = null
+    }
+
+    private fun dropConnection(deviceId: String) {
+        connections.remove(deviceId)?.let { detachTerminal(it) }
+    }
+
+    private fun publish(deviceId: String) {
+        if (deviceId == activeDeviceId()) {
+            syncActive()
+        } else {
+            updateState { copy(liveDevices = liveDeviceIds()) }
+        }
+    }
+
+    private fun syncActive() {
+        val connection = activeConnection()
+        updateState {
+            copy(
+                sessions = connection?.sessions.orEmpty(),
+                opened = connection?.opened,
+                terminalOutput = connection?.output.orEmpty(),
+                terminalInput = connection?.input.orEmpty(),
+                connecting = connection?.connecting ?: false,
+                liveDevices = liveDeviceIds(),
+            )
+        }
+    }
+
+    private fun liveDeviceIds(): Set<String> =
+        connections.filterValues { it.terminal != null }.keys.toSet()
+
+    private fun connection(deviceId: String): DeviceConnection =
+        connections.getOrPut(deviceId) { DeviceConnection() }
+
+    private fun activeConnection(): DeviceConnection? =
+        activeDeviceId()?.let { connection(it) }
+
+    private fun endpointFor(id: String?): BridgeEndpoint? =
         endpoints.firstOrNull { it.id == id }
 
-    private fun activeEndpoint(): BridgeEndpoint? {
-        val activeId = currentState.devices.firstOrNull { it.active }?.id ?: return null
-        return bridgeEndpointFor(activeId)
-    }
+    private fun activeDeviceId(): String? = currentState.devices.firstOrNull { it.active }?.id
+
+    private fun activeEndpoint(): BridgeEndpoint? = endpointFor(activeDeviceId())
 
     private fun BridgeEndpoint.toUi(activeId: String?): BridgeDeviceUi = BridgeDeviceUi(
         id = id,
@@ -395,4 +466,15 @@ class BridgeViewModel(
     private companion object {
         const val MAX_TERMINAL_CHARS = 120_000
     }
+}
+
+private class DeviceConnection {
+    var sessions: List<BridgeSessionUi> = emptyList()
+    var opened: BridgeSessionUi? = null
+    var output: String = ""
+    var input: String = ""
+    var connecting: Boolean = false
+    var terminal: BridgeTerminal? = null
+    var job: Job? = null
+    var attachJob: Job? = null
 }

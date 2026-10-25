@@ -5,17 +5,19 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,8 +29,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.FocusChip
@@ -151,9 +156,11 @@ private fun TerminalView(
     session: BridgeSessionUi,
     onAction: (BridgeAction) -> Unit,
 ) {
-    val lines = remember(state.terminalOutput) { state.terminalOutput.split('\n') }
+    val lines = remember(state.terminalOutput) {
+        parseTerminal(state.terminalOutput, MAX_RENDER_CHARS)
+    }
     val listState = rememberLazyListState()
-    LaunchedEffect(state.terminalOutput) {
+    LaunchedEffect(lines.size) {
         if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex)
     }
     Column(modifier = Modifier.fillMaxSize().imePadding()) {
@@ -165,7 +172,9 @@ private fun TerminalView(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = session.name,
+                text = state.devices.firstOrNull { it.active }?.name?.takeIf { it.isNotBlank() }
+                    ?.let { "$it · ${session.name}" }
+                    ?: session.name,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -189,23 +198,21 @@ private fun TerminalView(
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    shape = FocusShapeTokens.card,
-                )
-                .padding(12.dp),
+                .clip(FocusShapeTokens.card)
+                .background(TerminalBackground),
         ) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(12.dp),
                 horizontalAlignment = Alignment.Start,
-                verticalArrangement = Arrangement.spacedBy(1.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                items(lines) { line ->
+                items(count = lines.size) { index ->
+                    val line = lines[index]
                     Text(
-                        text = line.ifEmpty { " " },
+                        text = if (line.isEmpty()) AnnotatedString(" ") else line,
                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                        color = MaterialTheme.colorScheme.onSurface,
                         softWrap = false,
                         maxLines = 1,
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -213,14 +220,16 @@ private fun TerminalView(
                 }
             }
         }
-        Row(
+        FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             TerminalKeyChip(stringResource(R.string.bridge_key_escape), TerminalKey.Escape, onAction)
             TerminalKeyChip(stringResource(R.string.bridge_key_tab), TerminalKey.Tab, onAction)
+            TerminalKeyChip(stringResource(R.string.bridge_key_enter), TerminalKey.Enter, onAction)
             TerminalKeyChip(stringResource(R.string.bridge_key_ctrl_c), TerminalKey.ControlC, onAction)
             TerminalKeyChip(stringResource(R.string.bridge_key_ctrl_d), TerminalKey.ControlD, onAction)
         }
@@ -236,12 +245,13 @@ private fun TerminalView(
                 onValueChange = { onAction(BridgeAction.TerminalInputChanged(it)) },
                 label = { Text(stringResource(R.string.bridge_terminal_input)) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = { onAction(BridgeAction.SendTerminalInput) },
+                ),
                 modifier = Modifier.weight(1f),
             )
-            IconButton(
-                onClick = { onAction(BridgeAction.SendTerminalInput) },
-                enabled = state.terminalInput.isNotEmpty(),
-            ) {
+            IconButton(onClick = { onAction(BridgeAction.SendTerminalInput) }) {
                 Icon(
                     FocusIcons.Send,
                     contentDescription = stringResource(R.string.bridge_terminal_send),
@@ -251,6 +261,8 @@ private fun TerminalView(
         }
     }
 }
+
+private const val MAX_RENDER_CHARS = 60_000
 
 @Composable
 private fun TerminalKeyChip(label: String, key: TerminalKey, onAction: (BridgeAction) -> Unit) {

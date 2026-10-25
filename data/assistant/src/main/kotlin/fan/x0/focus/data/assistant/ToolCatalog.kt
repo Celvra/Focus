@@ -12,7 +12,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
-enum class ToolKind { Read, Write, Gated, Plan }
+enum class ToolKind { Read, Write, Gated, Plan, Ask }
 
 data class ToolSpec(
     val name: String,
@@ -431,23 +431,24 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "bridge_list_devices",
-            description = "List the computers paired to this phone, with host, port, and which one is active. Read-only.",
+            description = "List the computers paired to this phone, with host, port, and which one is active. Use the returned id as device_id to target one computer in other bridge tools. Read-only.",
             kind = ToolKind.Read,
             parameters = schema {},
         ),
         ToolSpec(
             name = "bridge_run_command",
-            description = "Run one shell command on the active paired computer and wait for it to finish. Returns stdout, stderr, and the exit code. Requires approval unless Auto Pilot allows it.",
+            description = "Run one shell command on a paired computer and wait for it to finish. Returns stdout, stderr, and the exit code. Requires approval unless Auto Pilot allows it.",
             kind = ToolKind.Gated,
             parameters = schema(required = listOf("command")) {
                 put("command", string("Shell command line, for example git status"))
                 put("cwd", string("Working directory on the computer, optional"))
                 put("timeout_sec", number("Max seconds to wait, default 120"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_session_open",
-            description = "Open a persistent shell session on the active paired computer. Returns the session id for bridge_session_send. Requires approval unless Auto Pilot allows it.",
+            description = "Open a persistent shell session on a paired computer. Returns the session id for bridge_session_send. Requires approval unless Auto Pilot allows it.",
             kind = ToolKind.Gated,
             parameters = schema {
                 put("name", string("Short session name, optional"))
@@ -455,6 +456,7 @@ object ToolCatalog {
                 put("cwd", string("Working directory, optional"))
                 put("cols", number("Terminal columns, default 100"))
                 put("rows", number("Terminal rows, default 30"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
@@ -465,13 +467,16 @@ object ToolCatalog {
                 put("session_id", string("Session id from bridge_list_sessions"))
                 put("input", string("Text to send, end with a newline to run a command"))
                 put("signal", string("Instead of input, send one signal: interrupt or terminate"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_list_sessions",
-            description = "List the open shell sessions on the active paired computer. Read-only.",
+            description = "List the open shell sessions on a paired computer. Read-only.",
             kind = ToolKind.Read,
-            parameters = schema {},
+            parameters = schema {
+                put("device_id", deviceId())
+            },
         ),
         ToolSpec(
             name = "bridge_read_session",
@@ -479,92 +484,115 @@ object ToolCatalog {
             kind = ToolKind.Read,
             parameters = schema(required = listOf("session_id")) {
                 put("session_id", string("Session id from bridge_list_sessions"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_close_session",
-            description = "Close a shell session on the paired computer. Requires approval unless Auto Pilot allows it.",
+            description = "Close a shell session on a paired computer. Requires approval unless Auto Pilot allows it.",
             kind = ToolKind.Gated,
             parameters = schema(required = listOf("session_id")) {
                 put("session_id", string("Session id from bridge_list_sessions"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_fs_read",
-            description = "Read a text file on the active paired computer. Read-only.",
+            description = "Read a text file on a paired computer. Read-only.",
             kind = ToolKind.Read,
             parameters = schema(required = listOf("path")) {
                 put("path", string("Absolute file path on the computer"))
                 put("offset", number("First line to read, 1-based, optional"))
                 put("limit", number("How many lines to read, optional"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_fs_list",
-            description = "List one directory on the active paired computer. Read-only.",
+            description = "List one directory on a paired computer. Read-only.",
             kind = ToolKind.Read,
             parameters = schema(required = listOf("path")) {
                 put("path", string("Absolute directory path on the computer"))
                 put("depth", number("Recursion depth, default 1"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_fs_glob",
-            description = "Find files on the active paired computer by glob pattern. Read-only.",
+            description = "Find files on a paired computer by glob pattern. Read-only.",
             kind = ToolKind.Read,
             parameters = schema(required = listOf("pattern")) {
                 put("pattern", string("Glob pattern, for example **/*.kt"))
                 put("root", string("Directory to search from, optional"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_fs_grep",
-            description = "Search file contents on the active paired computer with a regular expression. Read-only.",
+            description = "Search file contents on a paired computer with a regular expression. Read-only.",
             kind = ToolKind.Read,
             parameters = schema(required = listOf("pattern")) {
                 put("pattern", string("Regular expression"))
                 put("root", string("Directory to search from, optional"))
                 put("include", string("Only files matching this glob, for example *.rs"))
                 put("literal", boolean("true to match plain text instead of a regular expression"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_fs_write",
-            description = "Write a whole text file on the active paired computer, creating or replacing it. Requires approval unless Auto Pilot allows it.",
+            description = "Write a whole text file on a paired computer, creating or replacing it. Requires approval unless Auto Pilot allows it.",
             kind = ToolKind.Gated,
             parameters = schema(required = listOf("path", "content")) {
                 put("path", string("Absolute file path on the computer"))
                 put("content", string("Full new file content"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_fs_edit",
-            description = "Replace an exact snippet inside one file on the active paired computer. Use bridge_fs_read first. Requires approval unless Auto Pilot allows it.",
+            description = "Replace an exact snippet inside one file on a paired computer. Use bridge_fs_read first. Requires approval unless Auto Pilot allows it.",
             kind = ToolKind.Gated,
             parameters = schema(required = listOf("path", "old", "new")) {
                 put("path", string("Absolute file path on the computer"))
                 put("old", string("Exact text to replace, including indentation"))
                 put("new", string("Replacement text"))
                 put("replace_all", boolean("true to replace every occurrence"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_fs_delete",
-            description = "Delete a file or directory on the active paired computer. Requires approval unless Auto Pilot allows it.",
+            description = "Delete a file or directory on a paired computer. Requires approval unless Auto Pilot allows it.",
             kind = ToolKind.Gated,
             parameters = schema(required = listOf("path")) {
                 put("path", string("Absolute path on the computer"))
+                put("device_id", deviceId())
             },
         ),
         ToolSpec(
             name = "bridge_set_workspace",
-            description = "Limit which directories the agent may touch on the active paired computer. An empty list means no limit. Requires approval.",
+            description = "Limit which directories the agent may touch on a paired computer. An empty list means no limit. Requires approval.",
             kind = ToolKind.Gated,
             parameters = schema {
                 put(
                     "roots",
                     arrayOf(string("Absolute directory path"), "Allowed directories, empty for no limit"),
                 )
+                put("device_id", deviceId())
+            },
+        ),
+        ToolSpec(
+            name = "ask",
+            description = "Ask the user one or more questions and wait for the answers. Use it when a reply needs a decision, a missing detail, or a preference you cannot infer. " +
+                "Fill every question with a title and a subtitle that explains why you ask, so the user knows what the answer is for. " +
+                "Kinds: single picks one option, multi picks several, text takes free text, confirm is yes or no, number takes a value. " +
+                "Set allow_other when a written answer should sit next to the options. " +
+                "Call it alone and wait: the app shows one card and your next message carries the answers.",
+            kind = ToolKind.Ask,
+            parameters = schema(required = listOf("questions")) {
+                put("intro", string("One short line shown above the questions"))
+                put("questions", askQuestions())
             },
         ),
         ToolSpec(
@@ -629,6 +657,45 @@ object ToolCatalog {
 
     private val secretArgumentTools = setOf("save_provider", "test_provider", "list_models")
 
+    private fun askQuestions(): JsonObject = buildJsonObject {
+        put("type", "array")
+        put("description", "One to five questions, all answered in one card before you continue")
+        put("minItems", 1)
+        put("maxItems", 5)
+        putJsonObject("items") {
+            put("type", "object")
+            putJsonObject("properties") {
+                put("id", string("Short stable key for the answer, for example horizon"))
+                put("title", string("The question itself"))
+                put("subtitle", string("One line explaining why you ask"))
+                put("kind", string("single, multi, text, confirm, or number. Default single"))
+                put("icon", string("Icon key from list_icons"))
+                put("allow_other", boolean("Add a written answer next to the options. Default false"))
+                put("placeholder", string("Hint inside the text or number field"))
+                put("options", buildJsonObject {
+                    put("type", "array")
+                    put("description", "Answers to pick from, two to six. Needed for single and multi, optional for confirm")
+                    put("maxItems", 6)
+                    putJsonObject("items") {
+                        put("type", "object")
+                        putJsonObject("properties") {
+                            put("label", string("Short option label"))
+                            put("detail", string("One line explaining the option"))
+                            put("icon", string("Icon key from list_icons"))
+                        }
+                        putJsonArray("required") { add(JsonPrimitive("label")) }
+                        put("additionalProperties", false)
+                    }
+                })
+            }
+            putJsonArray("required") {
+                add(JsonPrimitive("title"))
+                add(JsonPrimitive("subtitle"))
+            }
+            put("additionalProperties", false)
+        }
+    }
+
     private fun objectArray(description: String, fields: List<String>): JsonObject = buildJsonObject {
         put("type", "array")
         put("description", description)
@@ -672,4 +739,7 @@ object ToolCatalog {
         put("description", description)
         put("items", item)
     }
+
+    private fun deviceId(): JsonObject =
+        string("Paired computer id from bridge_list_devices, optional, defaults to the active computer")
 }

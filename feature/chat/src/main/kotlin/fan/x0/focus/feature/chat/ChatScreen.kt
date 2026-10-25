@@ -530,6 +530,7 @@ private fun ChatThread(
                         is ChatEntry.Assistant -> "assistant"
                         is ChatEntry.Trace -> "trace"
                         is ChatEntry.Approval -> "approval"
+                        is ChatEntry.Ask -> "ask"
                     }
                 },
             ) { entry ->
@@ -571,6 +572,11 @@ private fun ChatThread(
                             card = entry.card,
                             onDecide = { onAction(ChatAction.Decide(entry.card.id, it)) },
                         )
+                        is ChatEntry.Ask -> FocusAskCard(
+                            card = entry.card,
+                            drafts = state.askDrafts,
+                            onAction = onAction,
+                        )
                     }
                 }
             }
@@ -605,6 +611,7 @@ private fun ChatThread(
 
 private fun ChatUiState.avatarState(celebrate: Boolean): AvatarState = when {
     approval?.phase == ApprovalPhase.Waiting -> AvatarState.Notify
+    ask?.phase == AskPhase.Waiting -> AvatarState.Notify
     approval?.phase == ApprovalPhase.Declined -> AvatarState.Alert
     approval?.phase == ApprovalPhase.Running -> AvatarState.Orbit
     sending || streaming.isNotBlank() -> AvatarState.Orbit
@@ -618,6 +625,7 @@ private enum class ChatBody { Loading, Home, Thread }
 // Entries created during this session; entries restored from the database skip the pop-in.
 private fun ChatEntry.isFresh(): Boolean = when (this) {
     is ChatEntry.Approval -> true
+    is ChatEntry.Ask -> true
     else -> key.startsWith("local-") ||
         key.startsWith("live-answer-") ||
         key.startsWith("live-trace-")

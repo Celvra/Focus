@@ -96,6 +96,12 @@ class ChatTurnRunner(
                                 },
                             )
                         }
+                        is ChatEvent.AskRequested -> updateEntries(conversationId, turnId) { entries ->
+                            entries + ChatTurnEntry.Ask(event.request.toTurnAsk())
+                        }
+                        is ChatEvent.AskResolved -> updateEntries(conversationId, turnId) { entries ->
+                            entries.resolveAsk(event.request.id, event.reply)
+                        }
                         ChatEvent.Completed -> finish(conversationId, turnId, null)
                         is ChatEvent.Failed -> {
                             persistPartial(conversationId, turnId)
@@ -126,6 +132,10 @@ class ChatTurnRunner(
 
     fun decide(approvalId: String, approved: Boolean) {
         engine.decide(approvalId, approved)
+    }
+
+    fun answer(askId: String, answers: List<AskAnswer>, skipped: Boolean) {
+        engine.reply(askId, answers, skipped)
     }
 
     fun consumeResult(conversationId: String, turnId: Long): Boolean {
@@ -274,6 +284,26 @@ class ChatTurnRunner(
             entry
         }
     }
+
+    private fun List<ChatTurnEntry>.resolveAsk(id: String, reply: AskReply): List<ChatTurnEntry> = map { entry ->
+        if (entry is ChatTurnEntry.Ask && entry.card.id == id) {
+            entry.copy(
+                card = entry.card.copy(
+                    phase = if (reply.skipped) ChatTurnAskPhase.Skipped else ChatTurnAskPhase.Answered,
+                    answers = reply.answers,
+                ),
+            )
+        } else {
+            entry
+        }
+    }
+
+    private fun AskRequest.toTurnAsk(): ChatTurnAsk = ChatTurnAsk(
+        id = id,
+        intro = intro,
+        questions = questions,
+        phase = ChatTurnAskPhase.Waiting,
+    )
 
     private fun ApprovalRequest.toTurnApproval(): ChatTurnApproval = ChatTurnApproval(
         id = id,

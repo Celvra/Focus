@@ -20,10 +20,21 @@ data class ChatTurnApproval(
     val phase: ChatTurnApprovalPhase,
 )
 
+enum class ChatTurnAskPhase { Waiting, Answered, Skipped }
+
+data class ChatTurnAsk(
+    val id: String,
+    val intro: String,
+    val questions: List<AskQuestion>,
+    val phase: ChatTurnAskPhase,
+    val answers: List<AskAnswer> = emptyList(),
+)
+
 sealed interface ChatTurnEntry {
     data class Answer(val text: String, val reasoning: String) : ChatTurnEntry
     data class Trace(val steps: List<ChatTurnStep>) : ChatTurnEntry
     data class Approval(val card: ChatTurnApproval) : ChatTurnEntry
+    data class Ask(val card: ChatTurnAsk) : ChatTurnEntry
 }
 
 data class ChatTurnState(

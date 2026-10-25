@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.AppErrorType
 import fan.x0.focus.core.mvi.BaseViewModel
+import fan.x0.focus.data.assistant.AskKind
 import fan.x0.focus.data.assistant.AttachmentKind
 import fan.x0.focus.data.assistant.AttachmentLoader
 import fan.x0.focus.data.assistant.AssistantSettings
@@ -97,6 +98,13 @@ class ChatViewModel(
             ChatAction.Send -> send()
             ChatAction.Stop -> stop()
             is ChatAction.Decide -> decide(action)
+            is ChatAction.AskSelect -> selectAskOption(action)
+            is ChatAction.AskConfirm -> updateDraft(action.askId, action.questionId) {
+                it.copy(confirmed = action.value)
+            }
+            is ChatAction.AskEdit -> editAsk(action)
+            is ChatAction.AskSubmit -> submitAsk(action.askId, skipped = false)
+            is ChatAction.AskSkip -> submitAsk(action.askId, skipped = true)
             ChatAction.NewConversation -> viewModelScope.launch { newConversation() }
             is ChatAction.OpenPicker -> {
                 updateState { copy(picker = action.picker, modelQuery = "") }
@@ -137,6 +145,7 @@ class ChatViewModel(
                 workingText = "",
                 live = emptyList(),
                 attachments = emptyList(),
+                askDrafts = emptyMap(),
                 turn = turn + 1,
                 history = history + ChatEntry.User(
                     key = "local-${System.currentTimeMillis()}",
@@ -242,6 +251,65 @@ class ChatViewModel(
         turns.decide(action.approvalId, action.approve)
     }
 
+    private fun selectAskOption(action: ChatAction.AskSelect) {
+        val question = askQuestion(action.askId, action.questionId) ?: return
+        updateDraft(action.askId, action.questionId) { draft ->
+            if (question.kind == AskKind.Multi) {
+                draft.copy(
+                    selections = if (action.label in draft.selections) {
+                        draft.selections - action.label
+                    } else {
+                        draft.selections + action.label
+                    },
+                )
+            } else {
+                draft.copy(selections = listOf(action.label))
+            }
+        }
+    }
+
+    private fun editAsk(action: ChatAction.AskEdit) {
+        updateDraft(action.askId, action.questionId) { draft ->
+            when (action.field) {
+                AskField.Answer -> draft.copy(text = action.value)
+                AskField.Other -> draft.copy(other = action.value)
+            }
+        }
+    }
+
+    private fun askQuestion(askId: String, questionId: String): AskQuestionUi? {
+        val card = currentState.ask ?: return null
+        if (card.id != askId || card.phase != AskPhase.Waiting) return null
+        return card.questions.firstOrNull { it.id == questionId }
+    }
+
+    private fun updateDraft(askId: String, questionId: String, reduce: (AskDraft) -> AskDraft) {
+        if (askQuestion(askId, questionId) == null) return
+        updateState {
+            copy(askDrafts = askDrafts + (questionId to reduce(askDrafts[questionId] ?: AskDraft())))
+        }
+    }
+
+    private fun submitAsk(askId: String, skipped: Boolean) {
+        val card = currentState.ask ?: return
+        if (card.id != askId || card.phase != AskPhase.Waiting) return
+        val drafts = currentState.askDrafts
+        if (!skipped && !card.isReady(drafts)) return
+        val answers = if (skipped) emptyList() else card.toAnswers(drafts)
+        updateState {
+            copy(
+                askDrafts = emptyMap(),
+                live = live.resolveAsk(
+                    card.copy(
+                        phase = if (skipped) AskPhase.Skipped else AskPhase.Answered,
+                        answers = answers.map { it.toUi() },
+                    ),
+                ),
+            )
+        }
+        turns.answer(askId, answers, skipped)
+    }
+
     private suspend fun reload() {
         val id = currentState.conversationId
         val messages = chats.messages(id)
@@ -261,6 +329,7 @@ class ChatViewModel(
                 providers = config.providers.map { ProviderOption(it.id, it.name, it.model) },
                 providerId = providerId,
                 model = model,
+                askDrafts = emptyMap(),
             )
         }
     }
@@ -304,6 +373,7 @@ class ChatViewModel(
                 modelsLoading = false,
                 picker = null,
                 modelQuery = "",
+                askDrafts = emptyMap(),
             )
         }
         switcher.markLoaded(conversationId)
@@ -363,7 +433,7 @@ class ChatViewModel(
     private fun applyTurn(turn: ChatTurnState) {
         if (turn.conversationId != currentState.conversationId) return
         if (!turn.running) {
-            updateState { copy(sending = false, live = emptyList(), workingText = "") }
+            updateState { copy(sending = false, live = emptyList(), workingText = "", askDrafts = emptyMap()) }
             return
         }
         updateState {
@@ -410,6 +480,10 @@ class ChatViewModel(
                 steps = card.steps.map { it.toUi() },
                 phase = card.phase.toUi(),
             ),
+        )
+        is ChatTurnEntry.Ask -> ChatEntry.Ask(
+            key = "live-ask-${card.id}",
+            card = card.toUi(),
         )
     }
 

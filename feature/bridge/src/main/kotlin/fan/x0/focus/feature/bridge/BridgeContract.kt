@@ -50,6 +50,7 @@ data class BridgeUiState(
     val savingRoots: Boolean = false,
     val sessions: List<BridgeSessionUi> = emptyList(),
     val sessionsLoading: Boolean = false,
+    val liveDevices: Set<String> = emptySet(),
     val opened: BridgeSessionUi? = null,
     val terminalOutput: String = "",
     val terminalInput: String = "",
@@ -86,6 +87,6 @@ sealed interface BridgeAction : UiAction {
     data class SendTerminalKey(val key: TerminalKey) : BridgeAction
 }
 
-enum class TerminalKey { Escape, Tab, ControlC, ControlD }
+enum class TerminalKey { Escape, Tab, Enter, ControlC, ControlD }
 
 sealed interface BridgeEffect : UiEffect

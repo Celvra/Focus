@@ -48,6 +48,8 @@ sealed interface ChatEvent {
     data class WorkingTextChanged(val text: String) : ChatEvent
     data class ApprovalRequested(val request: ApprovalRequest) : ChatEvent
     data class ApprovalResolved(val request: ApprovalRequest, val approved: Boolean) : ChatEvent
+    data class AskRequested(val request: AskRequest) : ChatEvent
+    data class AskResolved(val request: AskRequest, val reply: AskReply) : ChatEvent
     data object Completed : ChatEvent
     data class Failed(val error: AppError) : ChatEvent
 }
@@ -61,11 +63,18 @@ class ChatEngine(
     private val prompt: PromptBuilder,
     private val tools: ToolExecutor,
     private val approvals: ApprovalStore,
+    private val agent: AgentSettings,
 ) {
     private val waivers = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+    private val askReplies = ConcurrentHashMap<String, CompletableDeferred<AskReply>>()
 
     fun decide(approvalId: String, approved: Boolean) {
         waivers.computeIfAbsent(approvalId) { CompletableDeferred() }.complete(approved)
+    }
+
+    fun reply(askId: String, answers: List<AskAnswer>, skipped: Boolean) {
+        askReplies.computeIfAbsent(askId) { CompletableDeferred() }
+            .complete(AskReply(id = askId, answers = answers, skipped = skipped))
     }
 
     fun send(
@@ -128,8 +137,9 @@ class ChatEngine(
                 ChatMode.Chat -> tools.specs
                 ChatMode.Onboarding -> ToolCatalog.onboarding()
             }
+            val maxRounds = agent.configOnce().roundLimit
             var completesOnboarding = false
-            repeat(MAX_ROUNDS) {
+            repeat(maxRounds) {
                 val specs = if (completesOnboarding) {
                     baseSpecs.filterNot { it.name == "complete_onboarding" }
                 } else {
@@ -190,6 +200,21 @@ class ChatEngine(
                         completesOnboarding = true
                     }
                     result.workingText?.let { emit(ChatEvent.WorkingTextChanged(it)) }
+                    val ask = result.ask
+                    if (ask != null) {
+                        emit(ChatEvent.AskRequested(ask))
+                        val reply = awaitReply(ask.id)
+                        emit(ChatEvent.AskResolved(ask, reply))
+                        chats.append(
+                            conversationId = conversationId,
+                            role = ChatRole.Tool,
+                            content = ask.answerContent(reply),
+                            toolCallId = call.id,
+                            name = call.name,
+                            label = ask.questionLabels(),
+                        )
+                        continue
+                    }
                     val approval = result.approval
                     if (approval == null) {
                         if (call.name == ToolCatalog.SET_WORKING_TEXT) {
@@ -268,6 +293,13 @@ class ChatEngine(
         return decision ?: false
     }
 
+    private suspend fun awaitReply(askId: String): AskReply {
+        val deferred = askReplies.computeIfAbsent(askId) { CompletableDeferred() }
+        val reply = withTimeoutOrNull(APPROVAL_TIMEOUT_MS) { deferred.await() }
+        askReplies.remove(askId)
+        return reply ?: AskReply(id = askId, skipped = true)
+    }
+
     private fun List<ChatMessage>.toDtos(): List<ChatMessageDto> = mapNotNull { message ->
         when (message.role) {
             ChatRole.User -> ChatMessageDto(
@@ -318,7 +350,6 @@ class ChatEngine(
     }
 
     companion object {
-        private const val MAX_ROUNDS = 8
         private const val APPROVAL_TIMEOUT_MS = 15 * 60 * 1000L
     }
 }

@@ -247,6 +247,12 @@ private fun DeviceCard(
                         tone = StatusTone.Active,
                     )
                 }
+                if (state.liveDevices.contains(device.id)) {
+                    FocusStatusPill(
+                        text = stringResource(R.string.bridge_device_live),
+                        tone = StatusTone.Success,
+                    )
+                }
                 Text(
                     text = "${device.host}:${device.port}",
                     style = MaterialTheme.typography.labelSmall,

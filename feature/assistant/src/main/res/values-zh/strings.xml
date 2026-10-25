@@ -97,6 +97,13 @@
     <string name="settings_judge_timeout_item">判定超时</string>
     <string name="settings_judge_timeout_body">判定没有及时返回时，操作会转为等你确认。</string>
     <string name="settings_judge_timeout_value">%1$d 秒</string>
+    <string name="settings_agent_title">代理</string>
+    <string name="settings_agent_rounds_item">工具调用轮数</string>
+    <string name="settings_agent_rounds_body">一条消息最多跑几轮模型调用，跑满后 Focus 用已有结果回复。</string>
+    <string name="settings_agent_rounds_value">%1$d 轮</string>
+    <string name="settings_agent_rounds_unlimited">不限制</string>
+    <string name="settings_agent_unlimited_item">不限制轮数</string>
+    <string name="settings_agent_unlimited_body">一直做到模型不再调用工具为止，只能手动停止。</string>
     <string name="settings_privacy_title">隐私</string>
     <string name="settings_reset_title">重新运行初始设置</string>
     <string name="settings_reset_body">数据会保留，但会回到连接模型和初次对话。</string>

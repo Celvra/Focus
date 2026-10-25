@@ -5,6 +5,7 @@ import fan.x0.focus.core.network.openai.CompletedToolCall
 import fan.x0.focus.core.network.openai.ConnectionTestException
 import fan.x0.focus.core.network.openai.ModelConnectionTester
 import fan.x0.focus.core.network.openai.ModelEndpoint
+import fan.x0.focus.data.bridge.BridgeEndpoint
 import fan.x0.focus.data.bridge.BridgeExecRequest
 import fan.x0.focus.data.bridge.BridgeRepository
 import fan.x0.focus.data.sources.Article
@@ -17,6 +18,7 @@ import fan.x0.focus.data.sources.WebArticleExtractor
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -31,6 +33,7 @@ data class ToolResult(
     val content: String,
     val summary: String,
     val approval: ApprovalRequest? = null,
+    val ask: AskRequest? = null,
     val workingText: String? = null,
     val completesOnboarding: Boolean = false,
 )
@@ -73,7 +76,8 @@ class ToolExecutor(
         val spec = ToolCatalog.find(step.tool)
         val args = parseObject(step.arguments)
         return when {
-            spec == null || spec.kind == ToolKind.Plan -> StepOutcome(step.label, false, "Unknown step")
+            spec == null || spec.kind == ToolKind.Plan || spec.kind == ToolKind.Ask ->
+                StepOutcome(step.label, false, "Unknown step")
             args == null -> StepOutcome(step.label, false, "Invalid arguments")
             else -> {
                 val result = runTool(spec, args, conversationId)
@@ -115,6 +119,16 @@ class ToolExecutor(
                     content = "Waiting for the user to approve: ${draft.title}",
                     summary = draft.label,
                     approval = request,
+                )
+            }
+            ToolKind.Ask -> {
+                if (!allowApproval) return fail("$name needs a conversation")
+                val request = askRequest(args) ?: return fail("$name needs one to five questions with a title")
+                return ToolResult(
+                    ok = true,
+                    content = "Waiting for the user to answer",
+                    summary = "${request.questions.size} questions",
+                    ask = request,
                 )
             }
             ToolKind.Plan -> {
@@ -719,7 +733,7 @@ class ToolExecutor(
                 )
             }
             "bridge_run_command" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val command = args.text("command") ?: return fail("command is required")
                 val timeout = (args.number("timeout_sec") ?: 120).coerceIn(1, 600)
                 val stdout = StringBuilder()
@@ -743,8 +757,10 @@ class ToolExecutor(
                 }
                 if (error != null) return fail("Command failed: $error")
                 ok(
-                    "exit $exitCode${if (timedOut) " (timed out)" else ""}",
+                    "exit $exitCode${if (timedOut) " (timed out)" else ""} on ${endpoint.name}",
                     buildJsonObject {
+                        put("device", endpoint.name)
+                        put("device_id", endpoint.id)
                         put("exit_code", exitCode)
                         put("timed_out", timedOut)
                         put("stdout", stdout.toString().take(20_000))
@@ -753,7 +769,7 @@ class ToolExecutor(
                 )
             }
             "bridge_session_open" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val session = bridge.openSession(
                     endpoint,
                     cwd = args.text("cwd"),
@@ -761,27 +777,32 @@ class ToolExecutor(
                     cols = (args.number("cols") ?: 100).coerceIn(20, 300),
                     rows = (args.number("rows") ?: 30).coerceIn(5, 100),
                 )
-                ok("Session ${session.id}", "Opened session ${session.id} on ${endpoint.name}.")
+                ok("Session ${session.id}", "Opened session ${session.id} on ${endpoint.name} (${endpoint.id}).")
             }
             "bridge_session_send" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val sessionId = args.text("session_id") ?: return fail("session_id is required")
                 val signal = args.text("signal")
                 if (signal.isNullOrBlank()) {
                     val input = args.text("input") ?: return fail("input or signal is required")
                     bridge.sendSessionInput(endpoint, sessionId, input)
-                    ok("Sent to session $sessionId", "Input delivered to session $sessionId.")
+                    ok("Sent to session $sessionId", "Input delivered to session $sessionId on ${endpoint.name}.")
                 } else {
                     bridge.signalSession(endpoint, sessionId, signal)
-                    ok("Sent $signal to session $sessionId", "Signal $signal delivered to session $sessionId.")
+                    ok(
+                        "Sent $signal to session $sessionId",
+                        "Signal $signal delivered to session $sessionId on ${endpoint.name}.",
+                    )
                 }
             }
             "bridge_list_sessions" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val sessions = bridge.sessions(endpoint)
                 ok(
-                    "${sessions.size} sessions",
+                    "${sessions.size} sessions on ${endpoint.name}",
                     buildJsonObject {
+                        put("device", endpoint.name)
+                        put("device_id", endpoint.id)
                         putJsonArray("sessions") {
                             sessions.forEach { session ->
                                 add(
@@ -799,24 +820,26 @@ class ToolExecutor(
                 )
             }
             "bridge_read_session" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val sessionId = args.text("session_id") ?: return fail("session_id is required")
                 val tail = bridge.sessionTail(endpoint, sessionId)
-                ok("Read session $sessionId", tail.take(20_000))
+                ok("Read session $sessionId on ${endpoint.name}", tail.take(20_000))
             }
             "bridge_close_session" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val sessionId = args.text("session_id") ?: return fail("session_id is required")
                 bridge.closeSession(endpoint, sessionId)
-                ok("Closed session $sessionId", "Session $sessionId closed.")
+                ok("Closed session $sessionId", "Session $sessionId closed on ${endpoint.name}.")
             }
             "bridge_fs_read" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val path = args.text("path") ?: return fail("path is required")
                 val result = bridge.read(endpoint, path, args.number("offset"), args.number("limit"))
                 ok(
-                    "Read $path (${result.totalLines} lines)",
+                    "Read $path (${result.totalLines} lines) on ${endpoint.name}",
                     buildJsonObject {
+                        put("device", endpoint.name)
+                        put("device_id", endpoint.id)
                         put("path", path)
                         put("lines", result.lines)
                         put("total_lines", result.totalLines)
@@ -825,12 +848,14 @@ class ToolExecutor(
                 )
             }
             "bridge_fs_list" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val path = args.text("path") ?: return fail("path is required")
                 val entries = bridge.list(endpoint, path, args.number("depth"))
                 ok(
-                    "${entries.size} entries under $path",
+                    "${entries.size} entries under $path on ${endpoint.name}",
                     buildJsonObject {
+                        put("device", endpoint.name)
+                        put("device_id", endpoint.id)
                         put("path", path)
                         putJsonArray("entries") {
                             entries.forEach { entry ->
@@ -848,19 +873,21 @@ class ToolExecutor(
                 )
             }
             "bridge_fs_glob" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val pattern = args.text("pattern") ?: return fail("pattern is required")
                 val matches = bridge.glob(endpoint, pattern, args.text("root"))
                 ok(
-                    "${matches.size} matches",
+                    "${matches.size} matches on ${endpoint.name}",
                     buildJsonObject {
+                        put("device", endpoint.name)
+                        put("device_id", endpoint.id)
                         put("pattern", pattern)
                         putJsonArray("matches") { matches.take(400).forEach { add(JsonPrimitive(it)) } }
                     }.toString(),
                 )
             }
             "bridge_fs_grep" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val pattern = args.text("pattern") ?: return fail("pattern is required")
                 val matches = bridge.grep(
                     endpoint,
@@ -870,8 +897,10 @@ class ToolExecutor(
                     literal = args.flag("literal") ?: false,
                 )
                 ok(
-                    "${matches.size} matches",
+                    "${matches.size} matches on ${endpoint.name}",
                     buildJsonObject {
+                        put("device", endpoint.name)
+                        put("device_id", endpoint.id)
                         put("pattern", pattern)
                         putJsonArray("matches") {
                             matches.take(200).forEach { match ->
@@ -888,28 +917,31 @@ class ToolExecutor(
                 )
             }
             "bridge_fs_write" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val path = args.text("path") ?: return fail("path is required")
                 val content = args.text("content") ?: return fail("content is required")
                 bridge.write(endpoint, path, content)
-                ok("Wrote $path", "File $path written (${content.length} characters).")
+                ok(
+                    "Wrote $path on ${endpoint.name}",
+                    "File $path written on ${endpoint.name} (${content.length} characters).",
+                )
             }
             "bridge_fs_edit" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val path = args.text("path") ?: return fail("path is required")
                 val old = args.text("old") ?: return fail("old is required")
                 val new = args.text("new") ?: return fail("new is required")
                 bridge.edit(endpoint, path, old, new, args.flag("replace_all") ?: false)
-                ok("Edited $path", "Replaced snippet in $path.")
+                ok("Edited $path", "Replaced snippet in $path on ${endpoint.name}.")
             }
             "bridge_fs_delete" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val path = args.text("path") ?: return fail("path is required")
                 bridge.remove(endpoint, path)
-                ok("Deleted $path", "Path $path deleted.")
+                ok("Deleted $path", "Path $path deleted on ${endpoint.name}.")
             }
             "bridge_set_workspace" -> {
-                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val roots = (args["roots"] as? JsonArray)
                     ?.mapNotNull { (it as? JsonPrimitive)?.content }
                     ?.filter { it.isNotBlank() }
@@ -992,17 +1024,19 @@ class ToolExecutor(
         "bridge_run_command" -> {
             val command = args.text("command") ?: return null
             val cwd = args.text("cwd")
+            val device = bridgeTarget(args)?.name
             SimpleDraft(
                 title = "Run command on computer",
                 summary = buildString {
                     append(command.take(400))
                     if (!cwd.isNullOrBlank()) append("\nin ").append(cwd)
+                    if (!device.isNullOrBlank()) append("\non ").append(device)
                 },
                 label = "Run: ${command.take(80)}",
             )
         }
         "bridge_session_open" -> {
-            val endpoint = bridge.activeEndpoint()
+            val endpoint = bridgeTarget(args)
             val shell = args.text("shell") ?: endpoint?.let { "default shell" } ?: "shell"
             SimpleDraft(
                 title = "Open shell session",
@@ -1016,50 +1050,122 @@ class ToolExecutor(
             val signal = args.text("signal")
             if (input.isNullOrBlank() && signal.isNullOrBlank()) return null
             val detail = if (signal != null) "signal $signal" else input.orEmpty().take(400)
+            val device = bridgeTarget(args)?.name
             SimpleDraft(
                 title = "Send input to session",
-                summary = "Session $sessionId\n$detail",
+                summary = "Session $sessionId${device?.let { " on $it" }.orEmpty()}\n$detail",
                 label = "Session $sessionId: ${if (signal != null) signal else input.orEmpty().take(60)}",
             )
         }
         "bridge_close_session" -> {
             val sessionId = args.text("session_id") ?: return null
-            SimpleDraft("Close session", "Close session $sessionId", "Close session $sessionId")
+            val device = bridgeTarget(args)?.name
+            SimpleDraft(
+                "Close session",
+                "Close session $sessionId${device?.let { " on $it" }.orEmpty()}",
+                "Close session $sessionId",
+            )
         }
         "bridge_fs_write" -> {
             val path = args.text("path") ?: return null
             val content = args.text("content")
+            val device = bridgeTarget(args)?.name
             SimpleDraft(
                 title = "Write file on computer",
-                summary = "$path\n${content?.length ?: 0} characters",
+                summary = "$path\n${content?.length ?: 0} characters" +
+                    device?.let { "\non $it" }.orEmpty(),
                 label = "Write: $path",
             )
         }
         "bridge_fs_edit" -> {
             val path = args.text("path") ?: return null
+            val device = bridgeTarget(args)?.name
             SimpleDraft(
                 title = "Edit file on computer",
-                summary = "$path\nreplacing ${args.text("old")?.length ?: 0} characters",
+                summary = "$path\nreplacing ${args.text("old")?.length ?: 0} characters" +
+                    device?.let { "\non $it" }.orEmpty(),
                 label = "Edit: $path",
             )
         }
         "bridge_fs_delete" -> {
             val path = args.text("path") ?: return null
-            SimpleDraft("Delete on computer", path, "Delete: $path")
+            val device = bridgeTarget(args)?.name
+            SimpleDraft(
+                "Delete on computer",
+                "$path${device?.let { " on $it" }.orEmpty()}",
+                "Delete: $path",
+            )
         }
         "bridge_set_workspace" -> {
             val roots = (args["roots"] as? JsonArray)
                 ?.mapNotNull { (it as? JsonPrimitive)?.content }
                 ?.filter { it.isNotBlank() }
                 ?: emptyList()
+            val device = bridgeTarget(args)?.name
             SimpleDraft(
                 title = "Set workspace folders",
-                summary = if (roots.isEmpty()) "No limit" else roots.joinToString("\n"),
+                summary = (if (roots.isEmpty()) "No limit" else roots.joinToString("\n")) +
+                    device?.let { "\non $it" }.orEmpty(),
                 label = if (roots.isEmpty()) "Workspace: no limit" else "Workspace: ${roots.size} folders",
             )
         }
         else -> null
     }
+
+    private fun askRequest(args: JsonObject): AskRequest? {
+        val array = args["questions"] as? JsonArray ?: return null
+        val used = mutableSetOf<String>()
+        val questions = array.mapIndexedNotNull { index, element ->
+            val obj = element as? JsonObject ?: return@mapIndexedNotNull null
+            val title = obj.text("title")?.oneLine()?.take(120).orEmpty()
+            if (title.isBlank()) return@mapIndexedNotNull null
+            val declared = askKindOf(obj.text("kind"))
+            val options = askOptions(obj["options"], declared)
+            val kind = if (options.isEmpty() && declared in choiceKinds) AskKind.Text else declared
+            val requested = obj.text("id")?.oneLine()?.take(40).orEmpty().ifBlank { "q${index + 1}" }
+            var id = requested
+            var suffix = 2
+            while (!used.add(id)) {
+                id = "$requested-$suffix"
+                suffix++
+            }
+            AskQuestion(
+                id = id,
+                title = title,
+                subtitle = obj.text("subtitle")?.oneLine()?.take(160).orEmpty(),
+                kind = kind,
+                icon = obj.text("icon")?.trim()?.take(24).orEmpty(),
+                options = options,
+                allowOther = kind in choiceKinds && (obj.flag("allow_other") ?: false),
+                placeholder = obj.text("placeholder")?.oneLine()?.take(60).orEmpty(),
+            )
+        }.take(5)
+        if (questions.isEmpty()) return null
+        return AskRequest(
+            id = UUID.randomUUID().toString(),
+            intro = args.text("intro")?.oneLine()?.take(120).orEmpty(),
+            questions = questions,
+        )
+    }
+
+    private fun askOptions(element: JsonElement?, kind: AskKind): List<AskOption> {
+        val array = element as? JsonArray ?: return emptyList()
+        val options = array.mapNotNull { item ->
+            val obj = item as? JsonObject ?: return@mapNotNull null
+            val label = obj.text("label")?.oneLine()?.take(60).orEmpty()
+            if (label.isBlank()) return@mapNotNull null
+            AskOption(
+                label = label,
+                detail = obj.text("detail")?.oneLine()?.take(120).orEmpty(),
+                icon = obj.text("icon")?.trim()?.take(24).orEmpty(),
+            )
+        }
+        return if (kind == AskKind.Confirm) options.take(2) else options.take(6)
+    }
+
+    private fun String.oneLine(): String = replace('\n', ' ').replace('\r', ' ').trim()
+
+    private val choiceKinds = setOf(AskKind.Single, AskKind.Multi)
 
     private fun planSteps(args: JsonObject): List<ApprovalStep>? {
         val array = args["steps"] as? JsonArray ?: return null
@@ -1073,7 +1179,11 @@ class ToolExecutor(
                 else -> null
             } ?: return@mapNotNull null
             val spec = ToolCatalog.find(tool) ?: return@mapNotNull null
-            if (spec.kind == ToolKind.Plan || tool == ToolCatalog.SET_WORKING_TEXT) return@mapNotNull null
+            if (spec.kind == ToolKind.Plan || spec.kind == ToolKind.Ask ||
+                tool == ToolCatalog.SET_WORKING_TEXT
+            ) {
+                return@mapNotNull null
+            }
             if (parseObject(arguments) == null) return@mapNotNull null
             ApprovalStep(tool, arguments, label.take(80))
         }
@@ -1159,6 +1269,21 @@ class ToolExecutor(
             }
         }
     }.toString()
+
+    private suspend fun bridgeTarget(args: JsonObject): BridgeEndpoint? {
+        val deviceId = args.text("device_id")
+        if (deviceId.isNullOrBlank()) return bridge.activeEndpoint()
+        return bridge.endpointsOnce().firstOrNull { it.id == deviceId }
+    }
+
+    private fun bridgeTargetError(args: JsonObject): String {
+        val deviceId = args.text("device_id")
+        return if (deviceId.isNullOrBlank()) {
+            "No paired computer is active"
+        } else {
+            "No paired computer with id $deviceId, run bridge_list_devices"
+        }
+    }
 
     private fun JsonObject.text(key: String): String? {
         val primitive = this[key] as? JsonPrimitive ?: return null

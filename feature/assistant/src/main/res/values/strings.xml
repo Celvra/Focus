@@ -97,6 +97,13 @@
     <string name="settings_judge_timeout_item">Judge timeout</string>
     <string name="settings_judge_timeout_body">If the judge stays silent, the action waits for your approval.</string>
     <string name="settings_judge_timeout_value">%1$ds</string>
+    <string name="settings_agent_title">Agent</string>
+    <string name="settings_agent_rounds_item">Tool rounds</string>
+    <string name="settings_agent_rounds_body">How many model rounds one message may run before Focus replies with what it has.</string>
+    <string name="settings_agent_rounds_value">%1$d rounds</string>
+    <string name="settings_agent_rounds_unlimited">Unlimited</string>
+    <string name="settings_agent_unlimited_item">No round limit</string>
+    <string name="settings_agent_unlimited_body">Keeps working until the model stops calling tools. Only you can stop it.</string>
     <string name="settings_privacy_title">Privacy</string>
     <string name="settings_reset_title">Run setup again</string>
     <string name="settings_reset_body">Keeps your data, but returns to the connection and first-run conversation.</string>

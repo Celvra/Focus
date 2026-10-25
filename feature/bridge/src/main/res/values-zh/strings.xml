@@ -19,6 +19,7 @@
     <string name="bridge_forget_title">移除这台电脑？</string>
     <string name="bridge_forget_body">%1$s 会从手机上移除，之后还可以重新配对。</string>
     <string name="bridge_active">当前</string>
+    <string name="bridge_device_live">终端在线</string>
     <string name="bridge_use">使用</string>
     <string name="bridge_workspace_title">工作区</string>
     <string name="bridge_workspace_body">允许 agent 操作的目录。留空表示不限制。</string>
@@ -36,6 +37,7 @@
     <string name="bridge_terminal_connecting">连接中</string>
     <string name="bridge_key_escape">Esc</string>
     <string name="bridge_key_tab">Tab</string>
+    <string name="bridge_key_enter">回车</string>
     <string name="bridge_key_ctrl_c">Ctrl-C</string>
     <string name="bridge_key_ctrl_d">Ctrl-D</string>
     <string name="bridge_discovered_title">局域网里发现</string>

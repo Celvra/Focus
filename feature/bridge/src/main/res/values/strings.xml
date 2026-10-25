@@ -19,6 +19,7 @@
     <string name="bridge_forget_title">Remove this computer?</string>
     <string name="bridge_forget_body">%1$s will be removed from this phone. You can pair it again later.</string>
     <string name="bridge_active">Active</string>
+    <string name="bridge_device_live">Terminal live</string>
     <string name="bridge_use">Use</string>
     <string name="bridge_workspace_title">Workspace</string>
     <string name="bridge_workspace_body">Directories the agent may touch. Leave empty to allow everything.</string>
@@ -36,6 +37,7 @@
     <string name="bridge_terminal_connecting">Connecting</string>
     <string name="bridge_key_escape">Esc</string>
     <string name="bridge_key_tab">Tab</string>
+    <string name="bridge_key_enter">Enter</string>
     <string name="bridge_key_ctrl_c">Ctrl-C</string>
     <string name="bridge_key_ctrl_d">Ctrl-D</string>
     <string name="bridge_discovered_title">Found on network</string>

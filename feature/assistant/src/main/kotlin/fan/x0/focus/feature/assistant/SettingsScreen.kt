@@ -210,19 +210,24 @@ fun SettingsScreen(
                     PolicyCard(state = state, onAction = onAction)
                 }
             }
+            item(key = "agent") {
+                FocusReveal(index = 4) {
+                    AgentCard(state = state, onAction = onAction)
+                }
+            }
             item(key = "judge") {
                 AnimatedVisibility(
                     visible = state.policy == CommandPolicy.AutoPilot,
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically(),
                 ) {
-                    FocusReveal(index = 4) {
+                    FocusReveal(index = 5) {
                         JudgeCard(state = state, onAction = onAction)
                     }
                 }
             }
             item(key = "about") {
-                FocusReveal(index = 5) {
+                FocusReveal(index = 6) {
                     AboutGroup(onReset = { onAction(SettingsAction.AskReset) })
                 }
             }

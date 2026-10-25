@@ -6,6 +6,7 @@ import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
 import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ProviderBalance
+import fan.x0.focus.data.assistant.AgentDefaults
 import fan.x0.focus.data.assistant.CommandPolicy
 import fan.x0.focus.data.assistant.JudgeKind
 import fan.x0.focus.data.assistant.ProviderConfig
@@ -50,6 +51,8 @@ data class SettingsUiState(
     val judgeContextWindow: Int = 2,
     val judgeMaxRisk: Int = 3,
     val judgeTimeoutSeconds: Int = 8,
+    val maxRounds: Int = AgentDefaults.MAX_ROUNDS,
+    val unlimitedRounds: Boolean = false,
     val modelPickerTarget: ModelPickerTarget = ModelPickerTarget.Provider,
 ) : UiState {
     val activeProvider: ProviderConfig? get() = providers.firstOrNull { it.id == activeProviderId }
@@ -95,6 +98,8 @@ sealed interface SettingsAction : UiAction {
     data class JudgeContextChanged(val value: Int) : SettingsAction
     data class JudgeMaxRiskChanged(val value: Int) : SettingsAction
     data class JudgeTimeoutChanged(val value: Int) : SettingsAction
+    data class MaxRoundsChanged(val value: Int) : SettingsAction
+    data class UnlimitedRoundsChanged(val value: Boolean) : SettingsAction
 }
 
 sealed interface SettingsEffect : UiEffect {

@@ -12,6 +12,7 @@ import fan.x0.focus.core.network.openai.ModelConnectionTester
 import fan.x0.focus.core.network.openai.ModelEndpoint
 import fan.x0.focus.core.network.openai.OpenAiModelCatalog
 import fan.x0.focus.core.network.openai.ProviderBalanceClient
+import fan.x0.focus.data.assistant.AgentSettings
 import fan.x0.focus.data.assistant.AssistantSettings
 import fan.x0.focus.data.assistant.CommandPolicy
 import fan.x0.focus.data.assistant.JudgeKind
@@ -40,6 +41,7 @@ class SettingsViewModel(
     private val balanceClient: ProviderBalanceClient,
     private val locale: LocaleController,
     private val policy: PolicySettings,
+    private val agent: AgentSettings,
 ) : BaseViewModel<SettingsAction, SettingsUiState, SettingsEffect>(SettingsUiState()) {
 
     private var fetchJob: Job? = null
@@ -51,6 +53,7 @@ class SettingsViewModel(
             val config = settings.configOnce()
             val source = sources.settings.first()
             val policyConfig = policy.configOnce()
+            val agentConfig = agent.configOnce()
             updateState {
                 copy(
                     loading = false,
@@ -65,6 +68,8 @@ class SettingsViewModel(
                     judgeContextWindow = policyConfig.contextWindow,
                     judgeMaxRisk = policyConfig.maxRisk,
                     judgeTimeoutSeconds = policyConfig.timeoutSeconds,
+                    maxRounds = agentConfig.maxRounds,
+                    unlimitedRounds = agentConfig.unlimited,
                 )
             }
             loadBalances(config.providers)
@@ -191,6 +196,8 @@ class SettingsViewModel(
             is SettingsAction.JudgeContextChanged -> setJudgeContext(action.value)
             is SettingsAction.JudgeMaxRiskChanged -> setJudgeMaxRisk(action.value)
             is SettingsAction.JudgeTimeoutChanged -> setJudgeTimeout(action.value)
+            is SettingsAction.MaxRoundsChanged -> setMaxRounds(action.value)
+            is SettingsAction.UnlimitedRoundsChanged -> setUnlimitedRounds(action.value)
         }
     }
 
@@ -266,6 +273,16 @@ class SettingsViewModel(
     private fun setJudgeTimeout(value: Int) {
         updateState { copy(judgeTimeoutSeconds = value) }
         viewModelScope.launch { policy.setTimeoutSeconds(value) }
+    }
+
+    private fun setMaxRounds(value: Int) {
+        updateState { copy(maxRounds = value) }
+        viewModelScope.launch { agent.setMaxRounds(value) }
+    }
+
+    private fun setUnlimitedRounds(value: Boolean) {
+        updateState { copy(unlimitedRounds = value) }
+        viewModelScope.launch { agent.setUnlimited(value) }
     }
 
     private fun fetchBalance() {

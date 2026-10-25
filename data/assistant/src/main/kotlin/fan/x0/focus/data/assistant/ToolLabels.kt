@@ -28,6 +28,7 @@ object ToolLabels {
         "bridge_fs_read", "bridge_fs_list", "bridge_fs_glob", "bridge_fs_grep" -> "Computer files"
         "bridge_fs_write", "bridge_fs_edit", "bridge_fs_delete", "bridge_set_workspace" -> "Computer files"
         ToolCatalog.SET_WORKING_TEXT -> "Status"
+        "ask" -> "Question"
         "create_plan" -> "Plan"
         else -> name?.replace('_', ' ') ?: "Tool"
     }
