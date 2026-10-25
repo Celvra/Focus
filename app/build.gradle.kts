@@ -5,6 +5,13 @@ plugins {
     alias(libs.plugins.koin.compiler)
 }
 
+val releaseKeystoreFile = System.getenv("FOCUS_KEYSTORE_FILE")
+val releaseKeystorePassword = System.getenv("FOCUS_KEYSTORE_PASSWORD")
+val releaseKeyAlias = System.getenv("FOCUS_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("FOCUS_KEY_PASSWORD")
+val releaseVersionName = System.getenv("FOCUS_VERSION_NAME")
+val releaseVersionCode = System.getenv("FOCUS_VERSION_CODE")?.toIntOrNull()
+
 android {
     namespace = "fan.x0.focus"
     compileSdk = 37
@@ -13,13 +20,27 @@ android {
         applicationId = "fan.x0.focus"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = releaseVersionCode ?: 1
+        versionName = releaseVersionName ?: "1.0"
+    }
+
+    signingConfigs {
+        if (releaseKeystoreFile != null) {
+            create("release") {
+                storeFile = file(releaseKeystoreFile)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            if (releaseKeystoreFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
