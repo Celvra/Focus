@@ -84,6 +84,7 @@ impl Session {
         Ok(())
     }
 
+    #[cfg(unix)]
     pub async fn signal(&self, name: &str) -> Result<()> {
         let signal = match name {
             "int" | "sigint" => libc::SIGINT,
@@ -97,17 +98,21 @@ impl Session {
             child.process_id().map(|p| p as i32)
         };
         let pid = pid.ok_or_else(|| anyhow!("session has no process id"))?;
-        #[cfg(unix)]
         unsafe {
             libc::kill(pid, signal);
         }
-        #[cfg(not(unix))]
-        {
-            let _ = signal;
-            return Err(anyhow!("signals are not supported on this platform"));
-        }
         self.touch();
         Ok(())
+    }
+
+    #[cfg(not(unix))]
+    pub async fn signal(&self, name: &str) -> Result<()> {
+        match name {
+            "int" | "sigint" | "term" | "sigterm" | "quit" | "sigquit" | "hup" | "sighup" => {
+                Err(anyhow!("signals are not supported on this platform"))
+            }
+            other => Err(anyhow!("unknown signal: {other}")),
+        }
     }
 
     pub async fn tail(&self) -> String {
