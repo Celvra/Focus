@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.TaskAlt
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.ThumbDown
 import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material.icons.rounded.Tune
@@ -102,4 +103,5 @@ object FocusIcons {
     val Info: ImageVector = Icons.Rounded.Info
     val MoreHoriz: ImageVector = Icons.Rounded.MoreHoriz
     val Checklist: ImageVector = Icons.Rounded.Checklist
+    val Terminal: ImageVector = Icons.Rounded.Terminal
 }

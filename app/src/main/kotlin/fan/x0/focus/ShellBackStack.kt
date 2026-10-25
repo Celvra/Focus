@@ -9,6 +9,7 @@ enum class FocusRoute {
     Today,
     Goals,
     Library,
+    Bridge,
     Assistant,
     Settings,
     History,

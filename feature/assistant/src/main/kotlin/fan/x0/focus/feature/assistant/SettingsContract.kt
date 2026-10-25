@@ -6,6 +6,8 @@ import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
 import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ProviderBalance
+import fan.x0.focus.data.assistant.CommandPolicy
+import fan.x0.focus.data.assistant.JudgeKind
 import fan.x0.focus.data.assistant.ProviderConfig
 
 data class SettingsUiState(
@@ -39,6 +41,13 @@ data class SettingsUiState(
     val balance: ProviderBalance? = null,
     val fetchingBalance: Boolean = false,
     val balanceError: AppError? = null,
+    val policy: CommandPolicy = CommandPolicy.Manual,
+    val judgeKind: JudgeKind = JudgeKind.Jev,
+    val judgeProviderId: String = "",
+    val judgeModel: String = "",
+    val judgeContextWindow: Int = 2,
+    val judgeMaxRisk: Int = 3,
+    val judgeTimeoutSeconds: Int = 8,
 ) : UiState {
     val activeProvider: ProviderConfig? get() = providers.firstOrNull { it.id == activeProviderId }
     val canDelete: Boolean get() = providers.size > 1 && !isNewProvider
@@ -73,6 +82,13 @@ sealed interface SettingsAction : UiAction {
     data class ModelQueryChanged(val value: String) : SettingsAction
     data class SelectModel(val id: String) : SettingsAction
     data object FetchBalance : SettingsAction
+    data class PolicyChanged(val value: CommandPolicy) : SettingsAction
+    data class JudgeKindChanged(val value: JudgeKind) : SettingsAction
+    data class JudgeProviderChanged(val providerId: String) : SettingsAction
+    data class JudgeModelChanged(val value: String) : SettingsAction
+    data class JudgeContextChanged(val value: Int) : SettingsAction
+    data class JudgeMaxRiskChanged(val value: Int) : SettingsAction
+    data class JudgeTimeoutChanged(val value: Int) : SettingsAction
 }
 
 sealed interface SettingsEffect : UiEffect {

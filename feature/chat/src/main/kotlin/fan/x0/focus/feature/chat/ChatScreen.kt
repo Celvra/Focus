@@ -203,7 +203,9 @@ fun ChatScreen(
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
                 FocusCompactTopBar(
-                    title = state.title.ifBlank { stringResource(R.string.chat_title) },
+                    title = state.title.ifBlank {
+                        state.assistantName.ifBlank { stringResource(R.string.chat_title) }
+                    },
                     subtitle = when {
                         state.sending -> state.workingText.ifBlank {
                             stringResource(R.string.chat_working)

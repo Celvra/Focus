@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bridge_title">Computer</string>
+    <string name="bridge_tab_devices">Computers</string>
+    <string name="bridge_tab_terminal">Shell</string>
+    <string name="bridge_add_device">Add computer</string>
+    <string name="bridge_scan">Scan network</string>
+    <string name="bridge_scanning">Scanning</string>
+    <string name="bridge_empty_title">No computer yet</string>
+    <string name="bridge_empty_body">Run focus-bridge on a computer, then pair it to use its shell from here.</string>
+    <string name="bridge_pair_title">Pair computer</string>
+    <string name="bridge_pair_body">Run focus-bridge pair on the computer and type the six digit code it prints.</string>
+    <string name="bridge_host">Address</string>
+    <string name="bridge_port">Port</string>
+    <string name="bridge_code">Pairing code</string>
+    <string name="bridge_pair">Pair</string>
+    <string name="bridge_cancel">Cancel</string>
+    <string name="bridge_forget">Remove</string>
+    <string name="bridge_forget_title">Remove this computer?</string>
+    <string name="bridge_forget_body">%1$s will be removed from this phone. You can pair it again later.</string>
+    <string name="bridge_active">Active</string>
+    <string name="bridge_use">Use</string>
+    <string name="bridge_workspace_title">Workspace</string>
+    <string name="bridge_workspace_body">Directories the agent may touch. Leave empty to allow everything.</string>
+    <string name="bridge_workspace_add">Add directory</string>
+    <string name="bridge_workspace_path">Directory path</string>
+    <string name="bridge_workspace_save">Save</string>
+    <string name="bridge_workspace_empty">No directory added</string>
+    <string name="bridge_sessions_title">Shell sessions</string>
+    <string name="bridge_sessions_empty">No session running</string>
+    <string name="bridge_new_session">New session</string>
+    <string name="bridge_session_close">Close session</string>
+    <string name="bridge_terminal_disconnect">Disconnect</string>
+    <string name="bridge_terminal_input">Command</string>
+    <string name="bridge_terminal_send">Send</string>
+    <string name="bridge_terminal_connecting">Connecting</string>
+    <string name="bridge_key_escape">Esc</string>
+    <string name="bridge_key_tab">Tab</string>
+    <string name="bridge_key_ctrl_c">Ctrl-C</string>
+    <string name="bridge_key_ctrl_d">Ctrl-D</string>
+    <string name="bridge_discovered_title">Found on network</string>
+    <string name="bridge_refresh">Refresh</string>
+    <string name="bridge_select">Select</string>
+</resources>

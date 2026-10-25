@@ -79,6 +79,7 @@ data class ChatUiState(
     val loading: Boolean = true,
     val conversationId: String = "",
     val title: String = "",
+    val assistantName: String = "",
     val workingText: String = "",
     val name: String? = null,
     val history: List<ChatEntry> = emptyList(),

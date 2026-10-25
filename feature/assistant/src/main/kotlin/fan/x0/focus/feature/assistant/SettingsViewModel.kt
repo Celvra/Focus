@@ -13,7 +13,10 @@ import fan.x0.focus.core.network.openai.ModelEndpoint
 import fan.x0.focus.core.network.openai.OpenAiModelCatalog
 import fan.x0.focus.core.network.openai.ProviderBalanceClient
 import fan.x0.focus.data.assistant.AssistantSettings
+import fan.x0.focus.data.assistant.CommandPolicy
+import fan.x0.focus.data.assistant.JudgeKind
 import fan.x0.focus.data.assistant.LocaleController
+import fan.x0.focus.data.assistant.PolicySettings
 import fan.x0.focus.data.assistant.ProviderConfig
 import fan.x0.focus.data.assistant.SecretStore
 import fan.x0.focus.data.sources.FeedRefreshScheduler
@@ -36,6 +39,7 @@ class SettingsViewModel(
     private val catalog: OpenAiModelCatalog,
     private val balanceClient: ProviderBalanceClient,
     private val locale: LocaleController,
+    private val policy: PolicySettings,
 ) : BaseViewModel<SettingsAction, SettingsUiState, SettingsEffect>(SettingsUiState()) {
 
     private var fetchJob: Job? = null
@@ -46,6 +50,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             val config = settings.configOnce()
             val source = sources.settings.first()
+            val policyConfig = policy.configOnce()
             updateState {
                 copy(
                     loading = false,
@@ -53,6 +58,13 @@ class SettingsViewModel(
                     activeProviderId = config.activeProviderId,
                     refreshHours = source.refreshIntervalHours,
                     language = locale.current(),
+                    policy = policyConfig.policy,
+                    judgeKind = policyConfig.judgeKind,
+                    judgeProviderId = policyConfig.judgeProviderId,
+                    judgeModel = policyConfig.judgeModel,
+                    judgeContextWindow = policyConfig.contextWindow,
+                    judgeMaxRisk = policyConfig.maxRisk,
+                    judgeTimeoutSeconds = policyConfig.timeoutSeconds,
                 )
             }
             loadBalances(config.providers)
@@ -152,7 +164,50 @@ class SettingsViewModel(
                 copy(model = action.id, modelPickerOpen = false, modelQuery = "", connectionOk = false)
             }
             SettingsAction.FetchBalance -> fetchBalance()
+            is SettingsAction.PolicyChanged -> setPolicy(action.value)
+            is SettingsAction.JudgeKindChanged -> setJudgeKind(action.value)
+            is SettingsAction.JudgeProviderChanged -> setJudgeProvider(action.providerId)
+            is SettingsAction.JudgeModelChanged -> setJudgeModel(action.value)
+            is SettingsAction.JudgeContextChanged -> setJudgeContext(action.value)
+            is SettingsAction.JudgeMaxRiskChanged -> setJudgeMaxRisk(action.value)
+            is SettingsAction.JudgeTimeoutChanged -> setJudgeTimeout(action.value)
         }
+    }
+
+    private fun setPolicy(value: CommandPolicy) {
+        updateState { copy(policy = value) }
+        viewModelScope.launch { policy.setPolicy(value) }
+    }
+
+    private fun setJudgeKind(value: JudgeKind) {
+        updateState { copy(judgeKind = value) }
+        viewModelScope.launch { policy.setJudgeKind(value) }
+    }
+
+    private fun setJudgeProvider(providerId: String) {
+        val model = currentState.providers.firstOrNull { it.id == providerId }?.model.orEmpty()
+        updateState { copy(judgeProviderId = providerId, judgeModel = model) }
+        viewModelScope.launch { policy.setJudgeProvider(providerId, model) }
+    }
+
+    private fun setJudgeContext(value: Int) {
+        updateState { copy(judgeContextWindow = value) }
+        viewModelScope.launch { policy.setContextWindow(value) }
+    }
+
+    private fun setJudgeModel(value: String) {
+        updateState { copy(judgeModel = value) }
+        viewModelScope.launch { policy.setJudgeModel(value) }
+    }
+
+    private fun setJudgeMaxRisk(value: Int) {
+        updateState { copy(judgeMaxRisk = value) }
+        viewModelScope.launch { policy.setMaxRisk(value) }
+    }
+
+    private fun setJudgeTimeout(value: Int) {
+        updateState { copy(judgeTimeoutSeconds = value) }
+        viewModelScope.launch { policy.setTimeoutSeconds(value) }
     }
 
     private fun fetchBalance() {

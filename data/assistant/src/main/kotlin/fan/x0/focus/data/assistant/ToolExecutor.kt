@@ -5,6 +5,8 @@ import fan.x0.focus.core.network.openai.CompletedToolCall
 import fan.x0.focus.core.network.openai.ConnectionTestException
 import fan.x0.focus.core.network.openai.ModelConnectionTester
 import fan.x0.focus.core.network.openai.ModelEndpoint
+import fan.x0.focus.data.bridge.BridgeExecRequest
+import fan.x0.focus.data.bridge.BridgeRepository
 import fan.x0.focus.data.sources.Article
 import fan.x0.focus.data.sources.CalendarRepository
 import fan.x0.focus.data.sources.Feed
@@ -56,6 +58,8 @@ class ToolExecutor(
     private val secrets: SecretStore,
     private val tester: ModelConnectionTester,
     private val catalog: ModelCatalogRepository,
+    private val bridge: BridgeRepository,
+    private val gate: AutoPilotGate,
 ) {
     val specs: List<ToolSpec> = ToolCatalog.chat()
 
@@ -91,6 +95,19 @@ class ToolExecutor(
             ToolKind.Gated -> {
                 if (!allowApproval) return fail("$name needs approval and is not allowed here")
                 val draft = gatedDraft(spec, args) ?: return fail("Missing or invalid fields for $name")
+                val decision = if (spec.name.startsWith("bridge_") && spec.name != "bridge_set_workspace") {
+                    gate.evaluate(
+                        JudgeAction(kind = spec.name, title = draft.title, detail = draft.summary),
+                        conversationId,
+                    )
+                } else {
+                    GateDecision.NeedsApproval("approval required")
+                }
+                when (decision) {
+                    is GateDecision.Allowed -> return runTool(spec, args, conversationId)
+                    is GateDecision.Refused -> return fail("Refused: ${decision.reason}")
+                    is GateDecision.NeedsApproval -> Unit
+                }
                 val step = ApprovalStep(spec.name, args.toString(), draft.label)
                 val request = approvals.create(draft.title, draft.summary, listOf(step))
                 return ToolResult(
@@ -673,12 +690,236 @@ class ToolExecutor(
                 if (!today.deleteIdea(id)) return fail("Idea not found")
                 ok("Deleted idea", "Idea deleted.")
             }
-            "complete_onboarding" -> ToolResult(
+"complete_onboarding" -> ToolResult(
                 ok = true,
                 content = "Setup will finish after your goodbye.",
                 summary = "Onboarding complete",
                 completesOnboarding = true,
             )
+            "bridge_list_devices" -> {
+                val devices = bridge.endpointsOnce()
+                val activeId = bridge.activeEndpoint()?.id
+                ok(
+                    "${devices.size} devices",
+                    buildJsonObject {
+                        putJsonArray("devices") {
+                            devices.forEach { endpoint ->
+                                add(
+                                    buildJsonObject {
+                                        put("id", endpoint.id)
+                                        put("name", endpoint.name)
+                                        put("host", endpoint.host)
+                                        put("port", endpoint.port)
+                                        put("active", endpoint.id == activeId)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                )
+            }
+            "bridge_run_command" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val command = args.text("command") ?: return fail("command is required")
+                val timeout = (args.number("timeout_sec") ?: 120).coerceIn(1, 600)
+                val stdout = StringBuilder()
+                val stderr = StringBuilder()
+                var exitCode = 0
+                var timedOut = false
+                var error: String? = null
+                bridge.exec(
+                    endpoint,
+                    BridgeExecRequest(command = command, cwd = args.text("cwd"), timeoutSec = timeout.toLong()),
+                ) { event ->
+                    when (event.type) {
+                        "stdout" -> stdout.append(event.data.orEmpty())
+                        "stderr" -> stderr.append(event.data.orEmpty())
+                        "exit" -> {
+                            exitCode = event.code
+                            timedOut = event.timedOut
+                        }
+                        "error" -> error = event.message
+                    }
+                }
+                if (error != null) return fail("Command failed: $error")
+                ok(
+                    "exit $exitCode${if (timedOut) " (timed out)" else ""}",
+                    buildJsonObject {
+                        put("exit_code", exitCode)
+                        put("timed_out", timedOut)
+                        put("stdout", stdout.toString().take(20_000))
+                        put("stderr", stderr.toString().take(5_000))
+                    }.toString(),
+                )
+            }
+            "bridge_session_open" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val session = bridge.openSession(
+                    endpoint,
+                    cwd = args.text("cwd"),
+                    shell = args.text("shell"),
+                    cols = (args.number("cols") ?: 100).coerceIn(20, 300),
+                    rows = (args.number("rows") ?: 30).coerceIn(5, 100),
+                )
+                ok("Session ${session.id}", "Opened session ${session.id} on ${endpoint.name}.")
+            }
+            "bridge_session_send" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val sessionId = args.text("session_id") ?: return fail("session_id is required")
+                val signal = args.text("signal")
+                if (signal.isNullOrBlank()) {
+                    val input = args.text("input") ?: return fail("input or signal is required")
+                    bridge.sendSessionInput(endpoint, sessionId, input)
+                    ok("Sent to session $sessionId", "Input delivered to session $sessionId.")
+                } else {
+                    bridge.signalSession(endpoint, sessionId, signal)
+                    ok("Sent $signal to session $sessionId", "Signal $signal delivered to session $sessionId.")
+                }
+            }
+            "bridge_list_sessions" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val sessions = bridge.sessions(endpoint)
+                ok(
+                    "${sessions.size} sessions",
+                    buildJsonObject {
+                        putJsonArray("sessions") {
+                            sessions.forEach { session ->
+                                add(
+                                    buildJsonObject {
+                                        put("id", session.id)
+                                        put("name", session.name)
+                                        put("shell", session.shell)
+                                        put("cols", session.cols)
+                                        put("rows", session.rows)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                )
+            }
+            "bridge_read_session" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val sessionId = args.text("session_id") ?: return fail("session_id is required")
+                val tail = bridge.sessionTail(endpoint, sessionId)
+                ok("Read session $sessionId", tail.take(20_000))
+            }
+            "bridge_close_session" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val sessionId = args.text("session_id") ?: return fail("session_id is required")
+                bridge.closeSession(endpoint, sessionId)
+                ok("Closed session $sessionId", "Session $sessionId closed.")
+            }
+            "bridge_fs_read" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val path = args.text("path") ?: return fail("path is required")
+                val result = bridge.read(endpoint, path, args.number("offset"), args.number("limit"))
+                ok(
+                    "Read $path (${result.totalLines} lines)",
+                    buildJsonObject {
+                        put("path", path)
+                        put("lines", result.lines)
+                        put("total_lines", result.totalLines)
+                        put("truncated", result.truncated)
+                    }.toString(),
+                )
+            }
+            "bridge_fs_list" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val path = args.text("path") ?: return fail("path is required")
+                val entries = bridge.list(endpoint, path, args.number("depth"))
+                ok(
+                    "${entries.size} entries under $path",
+                    buildJsonObject {
+                        put("path", path)
+                        putJsonArray("entries") {
+                            entries.forEach { entry ->
+                                add(
+                                    buildJsonObject {
+                                        put("path", entry.path)
+                                        put("name", entry.name)
+                                        put("is_dir", entry.isDir)
+                                        put("size", entry.size)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                )
+            }
+            "bridge_fs_glob" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val pattern = args.text("pattern") ?: return fail("pattern is required")
+                val matches = bridge.glob(endpoint, pattern, args.text("root"))
+                ok(
+                    "${matches.size} matches",
+                    buildJsonObject {
+                        put("pattern", pattern)
+                        putJsonArray("matches") { matches.take(400).forEach { add(JsonPrimitive(it)) } }
+                    }.toString(),
+                )
+            }
+            "bridge_fs_grep" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val pattern = args.text("pattern") ?: return fail("pattern is required")
+                val matches = bridge.grep(
+                    endpoint,
+                    pattern,
+                    root = args.text("root"),
+                    include = args.text("include"),
+                    literal = args.flag("literal") ?: false,
+                )
+                ok(
+                    "${matches.size} matches",
+                    buildJsonObject {
+                        put("pattern", pattern)
+                        putJsonArray("matches") {
+                            matches.take(200).forEach { match ->
+                                add(
+                                    buildJsonObject {
+                                        put("path", match.path)
+                                        put("line", match.line)
+                                        put("text", match.text)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                )
+            }
+            "bridge_fs_write" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val path = args.text("path") ?: return fail("path is required")
+                val content = args.text("content") ?: return fail("content is required")
+                bridge.write(endpoint, path, content)
+                ok("Wrote $path", "File $path written (${content.length} characters).")
+            }
+            "bridge_fs_edit" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val path = args.text("path") ?: return fail("path is required")
+                val old = args.text("old") ?: return fail("old is required")
+                val new = args.text("new") ?: return fail("new is required")
+                bridge.edit(endpoint, path, old, new, args.flag("replace_all") ?: false)
+                ok("Edited $path", "Replaced snippet in $path.")
+            }
+            "bridge_fs_delete" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val path = args.text("path") ?: return fail("path is required")
+                bridge.remove(endpoint, path)
+                ok("Deleted $path", "Path $path deleted.")
+            }
+            "bridge_set_workspace" -> {
+                val endpoint = bridge.activeEndpoint() ?: return fail("No paired computer is active")
+                val roots = (args["roots"] as? JsonArray)
+                    ?.mapNotNull { (it as? JsonPrimitive)?.content }
+                    ?.filter { it.isNotBlank() }
+                    ?: emptyList()
+                val applied = bridge.setWorkspace(endpoint, roots)
+                ok(
+                    if (applied.isEmpty()) "Workspace unlimited" else "Workspace: ${applied.joinToString(", ")}",
+                    "Workspace roots updated on ${endpoint.name}.",
+                )
+            }
             else -> fail("Unsupported tool: ${spec.name}")
         }
     } catch (e: CancellationException) {
@@ -747,6 +988,75 @@ class ToolExecutor(
             val uri = args.text("uri") ?: return null
             val name = runCatching { files.list().firstOrNull { it.uri == uri }?.name }.getOrNull()
             SimpleDraft("Delete file", name ?: uri, "Delete file: ${name ?: uri}")
+        }
+        "bridge_run_command" -> {
+            val command = args.text("command") ?: return null
+            val cwd = args.text("cwd")
+            SimpleDraft(
+                title = "Run command on computer",
+                summary = buildString {
+                    append(command.take(400))
+                    if (!cwd.isNullOrBlank()) append("\nin ").append(cwd)
+                },
+                label = "Run: ${command.take(80)}",
+            )
+        }
+        "bridge_session_open" -> {
+            val endpoint = bridge.activeEndpoint()
+            val shell = args.text("shell") ?: endpoint?.let { "default shell" } ?: "shell"
+            SimpleDraft(
+                title = "Open shell session",
+                summary = "Open $shell on ${endpoint?.name ?: "the paired computer"}",
+                label = "Open session: $shell",
+            )
+        }
+        "bridge_session_send" -> {
+            val sessionId = args.text("session_id") ?: return null
+            val input = args.text("input")
+            val signal = args.text("signal")
+            if (input.isNullOrBlank() && signal.isNullOrBlank()) return null
+            val detail = if (signal != null) "signal $signal" else input.orEmpty().take(400)
+            SimpleDraft(
+                title = "Send input to session",
+                summary = "Session $sessionId\n$detail",
+                label = "Session $sessionId: ${if (signal != null) signal else input.orEmpty().take(60)}",
+            )
+        }
+        "bridge_close_session" -> {
+            val sessionId = args.text("session_id") ?: return null
+            SimpleDraft("Close session", "Close session $sessionId", "Close session $sessionId")
+        }
+        "bridge_fs_write" -> {
+            val path = args.text("path") ?: return null
+            val content = args.text("content")
+            SimpleDraft(
+                title = "Write file on computer",
+                summary = "$path\n${content?.length ?: 0} characters",
+                label = "Write: $path",
+            )
+        }
+        "bridge_fs_edit" -> {
+            val path = args.text("path") ?: return null
+            SimpleDraft(
+                title = "Edit file on computer",
+                summary = "$path\nreplacing ${args.text("old")?.length ?: 0} characters",
+                label = "Edit: $path",
+            )
+        }
+        "bridge_fs_delete" -> {
+            val path = args.text("path") ?: return null
+            SimpleDraft("Delete on computer", path, "Delete: $path")
+        }
+        "bridge_set_workspace" -> {
+            val roots = (args["roots"] as? JsonArray)
+                ?.mapNotNull { (it as? JsonPrimitive)?.content }
+                ?.filter { it.isNotBlank() }
+                ?: emptyList()
+            SimpleDraft(
+                title = "Set workspace folders",
+                summary = if (roots.isEmpty()) "No limit" else roots.joinToString("\n"),
+                label = if (roots.isEmpty()) "Workspace: no limit" else "Workspace: ${roots.size} folders",
+            )
         }
         else -> null
     }

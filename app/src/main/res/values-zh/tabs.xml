@@ -4,5 +4,6 @@
     <string name="tab_today">今日</string>
     <string name="tab_goals">目标</string>
     <string name="tab_library">资料库</string>
+    <string name="tab_bridge">电脑</string>
     <string name="tab_assistant">助理</string>
 </resources>

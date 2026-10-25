@@ -25,6 +25,12 @@ object ProviderCatalog {
             baseUrl = "https://api.anthropic.com/v1",
             protocol = ChatProtocol.AnthropicMessages,
         ),
+        ProviderConfig(
+            id = PolicyDefaults.JUDGE_PROVIDER_ID,
+            name = "TypeSafe",
+            baseUrl = "https://api.typesafe.ai/v1",
+            model = PolicyDefaults.JEV_MODEL,
+        ),
     )
 
     fun isPreset(id: String): Boolean = presets.any { it.id == id }

@@ -65,6 +65,9 @@ fun ShellDrawer(
         DrawerEntry(FocusIcons.Library, stringResource(R.string.tab_library), current == FocusRoute.Library) {
             onNavigate(FocusRoute.Library)
         }
+        DrawerEntry(FocusIcons.Terminal, stringResource(R.string.tab_bridge), current == FocusRoute.Bridge) {
+            onNavigate(FocusRoute.Bridge)
+        }
         DrawerEntry(FocusIcons.Assistant, stringResource(R.string.tab_assistant), current == FocusRoute.Assistant) {
             onNavigate(FocusRoute.Assistant)
         }

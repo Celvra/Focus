@@ -4,5 +4,6 @@
     <string name="tab_today">Today</string>
     <string name="tab_goals">Goals</string>
     <string name="tab_library">Library</string>
+    <string name="tab_bridge">Computer</string>
     <string name="tab_assistant">Assistant</string>
 </resources>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bridge_title">电脑</string>
+    <string name="bridge_tab_devices">电脑</string>
+    <string name="bridge_tab_terminal">终端</string>
+    <string name="bridge_add_device">添加电脑</string>
+    <string name="bridge_scan">扫描局域网</string>
+    <string name="bridge_scanning">扫描中</string>
+    <string name="bridge_empty_title">还没有电脑</string>
+    <string name="bridge_empty_body">在电脑上运行 focus-bridge，配对后就能在手机上操作它的 shell。</string>
+    <string name="bridge_pair_title">配对电脑</string>
+    <string name="bridge_pair_body">在电脑上运行 focus-bridge pair，把打印出来的六位配对码填进来。</string>
+    <string name="bridge_host">地址</string>
+    <string name="bridge_port">端口</string>
+    <string name="bridge_code">配对码</string>
+    <string name="bridge_pair">配对</string>
+    <string name="bridge_cancel">取消</string>
+    <string name="bridge_forget">移除</string>
+    <string name="bridge_forget_title">移除这台电脑？</string>
+    <string name="bridge_forget_body">%1$s 会从手机上移除，之后还可以重新配对。</string>
+    <string name="bridge_active">当前</string>
+    <string name="bridge_use">使用</string>
+    <string name="bridge_workspace_title">工作区</string>
+    <string name="bridge_workspace_body">允许 agent 操作的目录。留空表示不限制。</string>
+    <string name="bridge_workspace_add">添加目录</string>
+    <string name="bridge_workspace_path">目录路径</string>
+    <string name="bridge_workspace_save">保存</string>
+    <string name="bridge_workspace_empty">还没有添加目录</string>
+    <string name="bridge_sessions_title">终端会话</string>
+    <string name="bridge_sessions_empty">没有运行中的会话</string>
+    <string name="bridge_new_session">新建会话</string>
+    <string name="bridge_session_close">关闭会话</string>
+    <string name="bridge_terminal_disconnect">断开</string>
+    <string name="bridge_terminal_input">命令</string>
+    <string name="bridge_terminal_send">发送</string>
+    <string name="bridge_terminal_connecting">连接中</string>
+    <string name="bridge_key_escape">Esc</string>
+    <string name="bridge_key_tab">Tab</string>
+    <string name="bridge_key_ctrl_c">Ctrl-C</string>
+    <string name="bridge_key_ctrl_d">Ctrl-D</string>
+    <string name="bridge_discovered_title">局域网里发现</string>
+    <string name="bridge_refresh">刷新</string>
+    <string name="bridge_select">选择</string>
+</resources>

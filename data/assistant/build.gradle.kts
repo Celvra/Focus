@@ -12,6 +12,7 @@ dependencies {
     implementation(projects.core.error)
     implementation(projects.core.network)
     implementation(projects.data.sources)
+    implementation(projects.data.bridge)
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)
     implementation(libs.koin.android)

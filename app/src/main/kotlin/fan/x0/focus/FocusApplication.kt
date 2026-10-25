@@ -13,7 +13,9 @@ import fan.x0.focus.data.assistant.ReminderWorker
 import fan.x0.focus.data.sources.FeedRefreshScheduler
 import fan.x0.focus.data.sources.SourcePreferences
 import fan.x0.focus.data.sources.SourcesModule
+import fan.x0.focus.data.bridge.BridgeModule as BridgeDataModule
 import fan.x0.focus.feature.assistant.AssistantFeatureModule
+import fan.x0.focus.feature.bridge.BridgeModule as BridgeFeatureModule
 import fan.x0.focus.feature.chat.ChatModule
 import fan.x0.focus.feature.goals.GoalsModule
 import fan.x0.focus.feature.library.LibraryModule
@@ -41,6 +43,8 @@ import org.koin.plugin.module.dsl.startKoin
         TodayModule::class,
         GoalsModule::class,
         LibraryModule::class,
+        BridgeDataModule::class,
+        BridgeFeatureModule::class,
         AssistantFeatureModule::class,
     ],
 )

@@ -54,6 +54,7 @@ import fan.x0.focus.data.assistant.AssistantSettings
 import fan.x0.focus.data.assistant.ChatTurnRunner
 import fan.x0.focus.feature.assistant.AssistantRoute
 import fan.x0.focus.feature.assistant.SettingsRoute
+import fan.x0.focus.feature.bridge.BridgeRoute
 import fan.x0.focus.feature.chat.ChatRoute
 import fan.x0.focus.feature.goals.GoalsRoute
 import fan.x0.focus.feature.library.LibraryRoute
@@ -262,6 +263,7 @@ private fun ShellContent(
                 }
                 FocusRoute.Goals -> NavEntry(route) { GoalsRoute() }
                 FocusRoute.Library -> NavEntry(route) { LibraryRoute() }
+                FocusRoute.Bridge -> NavEntry(route) { BridgeRoute() }
                 FocusRoute.Assistant -> NavEntry(route) { AssistantRoute() }
                 FocusRoute.Settings -> NavEntry(route) { SettingsRoute() }
                 FocusRoute.History -> NavEntry(route) {

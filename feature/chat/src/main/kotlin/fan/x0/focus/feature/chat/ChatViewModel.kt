@@ -270,6 +270,7 @@ class ChatViewModel(
         val messages = chats.messages(conversationId)
         val conversation = chats.conversation(conversationId)
         val name = workspace.userName()
+        val assistantName = workspace.assistantName()
         val config = settings.configOnce()
         val providerId = conversation?.providerId?.takeIf { id ->
             config.providers.any { it.id == id }
@@ -286,6 +287,7 @@ class ChatViewModel(
                 conversationId = conversationId,
                 title = conversation?.title.orEmpty(),
                 name = name,
+                assistantName = assistantName,
                 history = messages.toEntries(),
                 live = emptyList(),
                 suggestions = emptyList(),
