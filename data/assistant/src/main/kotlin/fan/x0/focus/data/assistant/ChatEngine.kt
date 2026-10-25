@@ -74,32 +74,38 @@ class ChatEngine(
         mode: ChatMode = ChatMode.Chat,
         options: TurnOptions = TurnOptions(),
     ): Flow<ChatEvent> = flow {
-        val config = if (mode == ChatMode.Chat) settings.configOnce() else null
-        val provider = config?.providers?.firstOrNull { it.id == options.providerId } ?: config?.activeProvider
-        val providerId = when (mode) {
-            ChatMode.Onboarding -> OnboardingDefaults.PROVIDER_ID
-            ChatMode.Chat -> provider?.id ?: config?.activeProviderId.orEmpty()
+        val config = settings.configOnce()
+        val savedActive = config.activeProvider
+        val hasUsableSaved = savedActive != null &&
+            savedActive.baseUrl.isNotBlank() &&
+            savedActive.model.isNotBlank() &&
+            !secrets.apiKey(savedActive.id).isNullOrBlank()
+        val useSaved = mode == ChatMode.Chat || hasUsableSaved
+        val provider = config.providers.firstOrNull { it.id == options.providerId } ?: savedActive
+        val providerId = when {
+            !useSaved -> OnboardingDefaults.PROVIDER_ID
+            else -> provider?.id ?: config.activeProviderId.orEmpty()
         }
-        val baseUrl = when (mode) {
-            ChatMode.Onboarding -> OnboardingDefaults.BASE_URL
-            ChatMode.Chat -> provider?.baseUrl ?: config?.baseUrl.orEmpty()
+        val baseUrl = when {
+            !useSaved -> OnboardingDefaults.BASE_URL
+            else -> provider?.baseUrl ?: config?.baseUrl.orEmpty()
         }
-        val protocol = when (mode) {
-            ChatMode.Onboarding -> ChatProtocol.ChatCompletions
-            ChatMode.Chat -> provider?.protocol ?: ChatProtocol.ChatCompletions
+        val protocol = when {
+            !useSaved -> ChatProtocol.ChatCompletions
+            else -> provider?.protocol ?: ChatProtocol.ChatCompletions
         }
-        val model = when (mode) {
-            ChatMode.Onboarding -> OnboardingDefaults.MODEL
-            ChatMode.Chat -> options.model.ifBlank { provider?.model.orEmpty() }
+        val model = when {
+            !useSaved -> OnboardingDefaults.MODEL
+            else -> options.model.ifBlank { provider?.model.orEmpty() }
         }
         val endpoint = ModelEndpoint(baseUrl, model)
         if (!endpoint.isUsable) {
             emit(ChatEvent.Failed(AppError(AppErrorType.Generic, serverMessage = "Set the model connection first.")))
             return@flow
         }
-        val apiKey = when (mode) {
-            ChatMode.Onboarding -> OnboardingDefaults.API_KEY
-            ChatMode.Chat -> secrets.apiKey(providerId)
+        val apiKey = when {
+            !useSaved -> OnboardingDefaults.API_KEY
+            else -> secrets.apiKey(providerId)
         }
         if (apiKey.isNullOrBlank()) {
             emit(ChatEvent.Failed(AppError(AppErrorType.Unauthorized, serverMessage = "Set the API key first.")))
