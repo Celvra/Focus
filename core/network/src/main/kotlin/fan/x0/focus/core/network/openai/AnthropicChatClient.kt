@@ -48,7 +48,11 @@ class AnthropicChatClient(
         }
         val body = response.bodyAsText()
         if (!response.status.isSuccess()) {
-            throw NetworkExceptionMapper.http(response.status.value, body)
+            throw NetworkExceptionMapper.http(
+                response.status.value,
+                body,
+                response.headers[HttpHeaders.RetryAfter]?.toLongOrNull(),
+            )
         }
         return decodeResponse(body)
     }
@@ -73,7 +77,11 @@ class AnthropicChatClient(
         }
         if (!response.status.isSuccess()) {
             val body = response.bodyAsText()
-            throw NetworkExceptionMapper.http(response.status.value, body)
+            throw NetworkExceptionMapper.http(
+                response.status.value,
+                body,
+                response.headers[HttpHeaders.RetryAfter]?.toLongOrNull(),
+            )
         }
         val contentType = response.headers[HttpHeaders.ContentType].orEmpty()
         if (contentType.contains("application/json")) {
@@ -98,7 +106,7 @@ class AnthropicChatClient(
     }
 
     private fun io.ktor.client.request.HttpRequestBuilder.anthropicHeaders(apiKey: String) {
-        header("x-api-key", apiKey)
+        if (apiKey.isNotBlank()) header("x-api-key", apiKey)
         header("anthropic-version", "2023-06-01")
     }
 
@@ -266,6 +274,7 @@ class AnthropicChatClient(
 
 private class AnthropicStreamDecoder {
     private var inputTokens = 0
+    private var cachedTokens = 0
 
     fun decode(root: JsonObject): List<ChatStreamEvent> {
         val events = mutableListOf<ChatStreamEvent>()
@@ -273,6 +282,7 @@ private class AnthropicStreamDecoder {
             "message_start" -> {
                 val usage = root.wireObject("message")?.wireObject("usage")
                 inputTokens = usage?.wireInt("input_tokens") ?: 0
+                cachedTokens = usage?.wireInt("cache_read_input_tokens") ?: 0
             }
             "content_block_start" -> {
                 val index = root.wireInt("index") ?: 0
@@ -319,6 +329,7 @@ private class AnthropicStreamDecoder {
                         prompt = inputTokens,
                         completion = output,
                         total = inputTokens + output,
+                        cached = cachedTokens,
                     )
                 }
                 val reason = root.wireObject("delta")?.wireString("stop_reason")

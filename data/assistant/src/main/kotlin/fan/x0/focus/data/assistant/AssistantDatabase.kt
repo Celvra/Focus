@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 6) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 9) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -19,7 +19,12 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 archived INTEGER NOT NULL DEFAULT 0,
                 provider_id TEXT NOT NULL DEFAULT '',
                 model TEXT NOT NULL DEFAULT '',
-                reasoning TEXT NOT NULL DEFAULT ''
+                reasoning TEXT NOT NULL DEFAULT '',
+                mode TEXT NOT NULL DEFAULT 'build',
+                plan_json TEXT,
+                plan_status TEXT NOT NULL DEFAULT 'none',
+                plan_request_id TEXT NOT NULL DEFAULT '',
+                variant TEXT NOT NULL DEFAULT ''
             )
             """.trimIndent(),
         )
@@ -36,7 +41,10 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 name TEXT,
                 created_at INTEGER NOT NULL,
                 attachments TEXT,
-                label TEXT
+                label TEXT,
+                reply_to_id INTEGER,
+                stats_json TEXT,
+                reaction TEXT
             )
             """.trimIndent(),
         )
@@ -131,6 +139,41 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             )
             """.trimIndent(),
         )
+        db.execSQL(
+            """
+            CREATE TABLE conversation_todos(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                priority TEXT NOT NULL DEFAULT 'medium',
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX idx_todos_conversation ON conversation_todos(conversation_id, position)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE file_index(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                root TEXT NOT NULL DEFAULT '',
+                path TEXT NOT NULL,
+                size INTEGER NOT NULL DEFAULT 0,
+                modified_at INTEGER NOT NULL DEFAULT 0,
+                content_hash TEXT NOT NULL DEFAULT '',
+                content TEXT NOT NULL DEFAULT '',
+                language TEXT,
+                summary TEXT,
+                indexed_at INTEGER NOT NULL,
+                UNIQUE(root, path)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX idx_file_index_path ON file_index(path)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -182,5 +225,112 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 """.trimIndent(),
             )
         }
+        if (oldVersion < 7) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN reply_to_id INTEGER")
+            db.execSQL("ALTER TABLE messages ADD COLUMN stats_json TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN reaction TEXT")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN mode TEXT NOT NULL DEFAULT 'build'")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN plan_json TEXT")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN plan_status TEXT NOT NULL DEFAULT 'none'")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN plan_request_id TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN variant TEXT NOT NULL DEFAULT ''")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS conversation_todos(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversation_id TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    priority TEXT NOT NULL DEFAULT 'medium',
+                    position INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_todos_conversation ON conversation_todos(conversation_id, position)",
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS file_index(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    root TEXT NOT NULL DEFAULT '',
+                    path TEXT NOT NULL,
+                    size INTEGER NOT NULL DEFAULT 0,
+                    modified_at INTEGER NOT NULL DEFAULT 0,
+                    content_hash TEXT NOT NULL DEFAULT '',
+                    content TEXT NOT NULL DEFAULT '',
+                    language TEXT,
+                    summary TEXT,
+                    indexed_at INTEGER NOT NULL,
+                    UNIQUE(root, path)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_file_index_path ON file_index(path)")
+        }
+        if (oldVersion < 8) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS file_index(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    root TEXT NOT NULL DEFAULT '',
+                    path TEXT NOT NULL,
+                    size INTEGER NOT NULL DEFAULT 0,
+                    modified_at INTEGER NOT NULL DEFAULT 0,
+                    content_hash TEXT NOT NULL DEFAULT '',
+                    content TEXT NOT NULL DEFAULT '',
+                    language TEXT,
+                    summary TEXT,
+                    indexed_at INTEGER NOT NULL,
+                    UNIQUE(root, path)
+                )
+                """.trimIndent(),
+            )
+            if (!hasColumn(db, "file_index", "content")) {
+                db.execSQL("ALTER TABLE file_index ADD COLUMN content TEXT NOT NULL DEFAULT ''")
+            }
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_file_index_path ON file_index(path)")
+        }
+        if (oldVersion < 9) {
+            if (!hasTable(db, "file_index")) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS file_index(
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        root TEXT NOT NULL DEFAULT '',
+                        path TEXT NOT NULL,
+                        size INTEGER NOT NULL DEFAULT 0,
+                        modified_at INTEGER NOT NULL DEFAULT 0,
+                        content_hash TEXT NOT NULL DEFAULT '',
+                        content TEXT NOT NULL DEFAULT '',
+                        language TEXT,
+                        summary TEXT,
+                        indexed_at INTEGER NOT NULL,
+                        UNIQUE(root, path)
+                    )
+                    """.trimIndent(),
+                )
+            } else if (!hasColumn(db, "file_index", "content")) {
+                db.execSQL("ALTER TABLE file_index ADD COLUMN content TEXT NOT NULL DEFAULT ''")
+            }
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_file_index_path ON file_index(path)")
+        }
     }
+
+    private fun hasTable(db: SQLiteDatabase, table: String): Boolean =
+        db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            arrayOf(table),
+        ).use { cursor -> cursor.moveToFirst() }
+
+    private fun hasColumn(db: SQLiteDatabase, table: String, column: String): Boolean =
+        db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+            val nameIndex = cursor.getColumnIndex("name")
+            while (cursor.moveToNext()) {
+                if (nameIndex >= 0 && cursor.getString(nameIndex) == column) return true
+            }
+            false
+        }
 }

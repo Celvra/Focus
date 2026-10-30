@@ -51,7 +51,7 @@ class OpenAiChatClient(
     ): ChatCompletionResponse {
         val response = try {
             http.post(endpoint.chatUrl) {
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
+                if (apiKey.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $apiKey")
                 header(HttpHeaders.Accept, "application/json")
                 contentType(ContentType.Application.Json)
                 setBody(json.encodeToString(ChatCompletionRequest.serializer(), request))
@@ -63,7 +63,11 @@ class OpenAiChatClient(
         }
         val body = response.bodyAsText()
         if (!response.status.isSuccess()) {
-            throw NetworkExceptionMapper.http(response.status.value, body)
+            throw NetworkExceptionMapper.http(
+                response.status.value,
+                body,
+                response.headers[HttpHeaders.RetryAfter]?.toLongOrNull(),
+            )
         }
         return runCatching { json.decodeFromString(ChatCompletionResponse.serializer(), body) }
             .getOrElse { throw ModelProtocolException(it.message ?: "invalid response body") }
@@ -77,7 +81,7 @@ class OpenAiChatClient(
         val response = try {
             http.post(endpoint.chatUrl) {
                 allowLongStream()
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
+                if (apiKey.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $apiKey")
                 header(HttpHeaders.Accept, "text/event-stream")
                 contentType(ContentType.Application.Json)
                 setBody(json.encodeToString(ChatCompletionRequest.serializer(), request))
@@ -89,7 +93,11 @@ class OpenAiChatClient(
         }
         if (!response.status.isSuccess()) {
             val body = response.bodyAsText()
-            throw NetworkExceptionMapper.http(response.status.value, body)
+            throw NetworkExceptionMapper.http(
+                response.status.value,
+                body,
+                response.headers[HttpHeaders.RetryAfter]?.toLongOrNull(),
+            )
         }
         val contentType = response.headers[HttpHeaders.ContentType].orEmpty()
         if (contentType.contains("application/json")) {
@@ -138,13 +146,18 @@ class OpenAiChatClient(
             }
         val events = mutableListOf<ChatStreamEvent>()
         chunk.usage?.let {
-            events += ChatStreamEvent.Usage(it.promptTokens, it.completionTokens, it.totalTokens)
+            events += ChatStreamEvent.Usage(
+                prompt = it.promptTokens,
+                completion = it.completionTokens,
+                total = it.totalTokens,
+                cached = it.promptDetails?.cachedTokens ?: 0,
+            )
         }
         chunk.choices.forEach { choice: ChoiceDto ->
             choice.delta?.let { delta ->
                 (delta.reasoningContent?.takeIf { it.isNotBlank() } ?: delta.reasoning?.takeIf { it.isNotBlank() })
                     ?.let { events += ChatStreamEvent.Reasoning(it) }
-                delta.content?.let { events += ChatStreamEvent.Text(it) }
+                delta.content?.takeIf { it.isNotEmpty() }?.let { events += ChatStreamEvent.Text(it) }
             }
             choice.delta?.toolCalls?.forEach { call: ToolCallDeltaDto ->
                 events += ChatStreamEvent.ToolDelta(

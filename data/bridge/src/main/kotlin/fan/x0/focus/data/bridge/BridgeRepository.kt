@@ -142,9 +142,9 @@ class BridgeRepository(
         return client.list(endpoint, token, BridgeListRequest(path, depth)).entries
     }
 
-    suspend fun glob(endpoint: BridgeEndpoint, pattern: String, root: String? = null): List<String> {
+    suspend fun glob(endpoint: BridgeEndpoint, pattern: String, root: String? = null): BridgeGlobResult {
         val token = requireToken(endpoint)
-        return client.glob(endpoint, token, BridgeGlobRequest(pattern, root)).matches
+        return client.glob(endpoint, token, BridgeGlobRequest(pattern, root))
     }
 
     suspend fun grep(
@@ -152,10 +152,71 @@ class BridgeRepository(
         pattern: String,
         root: String? = null,
         include: String? = null,
+        exclude: String? = null,
         literal: Boolean = false,
-    ): List<BridgeGrepMatch> {
+        caseSensitive: Boolean = false,
+        context: Int? = null,
+        limit: Int? = null,
+    ): BridgeGrepResult {
         val token = requireToken(endpoint)
-        return client.grep(endpoint, token, BridgeGrepRequest(pattern, root, include, literal)).matches
+        return client.grep(
+            endpoint,
+            token,
+            BridgeGrepRequest(
+                pattern = pattern,
+                root = root,
+                include = include,
+                exclude = exclude,
+                literal = literal,
+                caseSensitive = caseSensitive,
+                context = context,
+                limit = limit,
+            ),
+        )
+    }
+
+    suspend fun backgroundStart(
+        endpoint: BridgeEndpoint,
+        command: String,
+        cwd: String? = null,
+        timeoutSec: Long? = null,
+    ): BridgeBgJob {
+        val token = requireToken(endpoint)
+        return client.bgStart(
+            endpoint,
+            token,
+            BridgeBgStartRequest(command = command, cwd = cwd, timeoutSec = timeoutSec),
+        )
+    }
+
+    suspend fun backgroundLogs(
+        endpoint: BridgeEndpoint,
+        id: String,
+        after: Long = 0,
+        follow: Boolean = true,
+        onFrame: suspend (BridgeBgLogsResult) -> Unit,
+    ) {
+        val token = requireToken(endpoint)
+        if (follow) {
+            client.bgFollow(endpoint, token, id, after, onFrame)
+        } else {
+            onFrame(client.bgLogs(endpoint, token, id, after))
+        }
+    }
+
+    suspend fun backgroundList(endpoint: BridgeEndpoint): List<BridgeBgJob> {
+        val token = requireToken(endpoint)
+        return client.bgList(endpoint, token)
+    }
+
+    suspend fun backgroundKill(endpoint: BridgeEndpoint, id: String): Boolean {
+        val token = requireToken(endpoint)
+        return client.bgKill(endpoint, token, id).killed
+    }
+
+    suspend fun backgroundClear(endpoint: BridgeEndpoint, id: String? = null) {
+        val token = requireToken(endpoint)
+        client.bgClear(endpoint, token, id)
     }
 
     suspend fun mkdir(endpoint: BridgeEndpoint, path: String): BridgeOkResult {

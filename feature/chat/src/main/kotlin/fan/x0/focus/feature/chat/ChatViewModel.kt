@@ -4,12 +4,15 @@ import androidx.lifecycle.viewModelScope
 import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.AppErrorType
 import fan.x0.focus.core.mvi.BaseViewModel
+import fan.x0.focus.data.assistant.AgentMode
+import fan.x0.focus.data.assistant.AskAnswer
 import fan.x0.focus.data.assistant.AskKind
 import fan.x0.focus.data.assistant.AttachmentKind
 import fan.x0.focus.data.assistant.AttachmentLoader
 import fan.x0.focus.data.assistant.AssistantSettings
 import fan.x0.focus.data.assistant.ChatAttachment
 import fan.x0.focus.data.assistant.ChatCommand
+import fan.x0.focus.data.assistant.ChatDetailSettings
 import fan.x0.focus.data.assistant.ChatMessage
 import fan.x0.focus.data.assistant.ChatRole
 import fan.x0.focus.data.assistant.ChatStore
@@ -22,9 +25,17 @@ import fan.x0.focus.data.assistant.ChatTurnRunner
 import fan.x0.focus.data.assistant.ChatTurnState
 import fan.x0.focus.data.assistant.ChatTurnStep
 import fan.x0.focus.data.assistant.ChatTurnStepStatus
+import fan.x0.focus.data.assistant.CommandPolicy
+import fan.x0.focus.data.assistant.ConversationTodo
+import fan.x0.focus.data.assistant.MessageStats
 import fan.x0.focus.data.assistant.ModelCatalogRepository
+import fan.x0.focus.data.assistant.PlanStatus
+import fan.x0.focus.data.assistant.PolicySettings
+import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ReasoningLevel
 import fan.x0.focus.data.assistant.SecretStore
+import fan.x0.focus.data.assistant.TodoPriority
+import fan.x0.focus.data.assistant.TodoStatus
 import fan.x0.focus.data.assistant.ToolCatalog
 import fan.x0.focus.data.assistant.ToolLabels
 import fan.x0.focus.data.assistant.TurnOptions
@@ -46,11 +57,15 @@ class ChatViewModel(
     private val loader: AttachmentLoader,
     private val turns: ChatTurnRunner,
     private val suggestionGenerator: ChatSuggestionGenerator,
+    private val details: ChatDetailSettings,
+    private val policy: PolicySettings,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
     private var modelJob: Job? = null
     private var suggestionJob: Job? = null
+    private var lastSend: PendingSend? = null
+    private var redoEntry: PendingSend? = null
 
     init {
         viewModelScope.launch {
@@ -86,11 +101,16 @@ class ChatViewModel(
                 if (id == currentState.conversationId && !currentState.loading) refreshTitle()
             }
         }
+        viewModelScope.launch {
+            details.config.collect { config ->
+                updateState { copy(statsConfig = config) }
+            }
+        }
     }
 
     override fun onAction(action: ChatAction) {
         when (action) {
-            is ChatAction.InputChanged -> updateState { copy(input = action.value) }
+            is ChatAction.InputChanged -> inputChanged(action.value)
             is ChatAction.Suggest -> {
                 updateState { copy(input = action.text) }
                 send()
@@ -98,6 +118,7 @@ class ChatViewModel(
             ChatAction.Send -> send()
             ChatAction.Stop -> stop()
             is ChatAction.Decide -> decide(action)
+            is ChatAction.DecidePlan -> decidePlan(action)
             is ChatAction.AskSelect -> selectAskOption(action)
             is ChatAction.AskConfirm -> updateDraft(action.askId, action.questionId) {
                 it.copy(confirmed = action.value)
@@ -117,27 +138,144 @@ class ChatViewModel(
             is ChatAction.ModelQueryChanged -> updateState { copy(modelQuery = action.value) }
             ChatAction.RefreshModels -> loadModels()
             is ChatAction.SelectReasoning -> selectReasoning(action.level)
+            is ChatAction.SetVariant -> setVariant(action.variant)
             is ChatAction.AttachPicked -> attach(action.uris)
             is ChatAction.RemoveAttachment -> updateState {
                 copy(attachments = attachments.filterNot { it.id == action.id })
             }
+            is ChatAction.SetMode -> setMode(action.mode)
+            is ChatAction.OpenMessageMenu -> openMenu(action.key)
+            ChatAction.CloseMessageMenu -> updateState { copy(menu = null) }
+            is ChatAction.ReplyTo -> replyTo(action.key)
+            ChatAction.CancelReply -> updateState { copy(reply = null) }
+            is ChatAction.ToggleReaction -> toggleReaction(action.key, action.reaction)
+            is ChatAction.StartEdit -> startEdit(action.key)
+            is ChatAction.EditDraftChanged -> updateState {
+                copy(edit = edit?.copy(draft = action.value))
+            }
+            ChatAction.SaveEdit -> saveEdit()
+            ChatAction.CancelEdit -> updateState { copy(edit = null) }
+            is ChatAction.AskDelete -> askDelete(action.key)
+            ChatAction.ConfirmDelete -> confirmDelete()
+            ChatAction.CancelDelete -> updateState { copy(pendingDelete = null) }
+            is ChatAction.SelectText -> updateState {
+                copy(selectionKey = action.key, menu = null)
+            }
+            ChatAction.ClearSelection -> updateState { copy(selectionKey = null) }
+            is ChatAction.JumpToMessage -> updateState {
+                copy(highlightKey = action.key, menu = null)
+            }
+            ChatAction.ConsumeHighlight -> updateState { copy(highlightKey = null) }
+            is ChatAction.SlashInputChanged -> inputChanged(action.value)
+            is ChatAction.SlashMove -> moveSlash(action.delta)
+            is ChatAction.SlashPick -> pickSlash(action.id)
+            ChatAction.SlashSelect -> selectSlash()
+            ChatAction.SlashClose -> updateState { copy(slash = slash.copy(open = false)) }
+            ChatAction.RetryLast -> retryLast()
+            ChatAction.OpenSessions -> sendEffect(ChatEffect.OpenSessions)
+            ChatAction.OpenSettings -> sendEffect(ChatEffect.OpenSettings)
+            ChatAction.ConsumeMessage -> updateState { copy(message = null) }
+        }
+    }
+
+    private fun inputChanged(value: String) {
+        val state = currentState
+        val slash = if (value.startsWith("/") && !value.contains('\n')) {
+            val query = value.substringBefore(' ')
+            val matches = SlashCommands.filter(query)
+            if (query.contains(' ') || matches.isEmpty() || value.count { it == ' ' } > 0) {
+                state.slash.copy(open = false)
+            } else {
+                SlashUi(
+                    open = true,
+                    query = query,
+                    selected = 0,
+                    commandIds = matches.map { it.id },
+                )
+            }
+        } else {
+            state.slash.copy(open = false)
+        }
+        updateState { copy(input = value, slash = slash) }
+    }
+
+    private fun moveSlash(delta: Int) {
+        val state = currentState
+        if (!state.slash.visible) return
+        val count = state.slash.commandIds.size
+        val next = (state.slash.selected + delta).mod(count)
+        updateState { copy(slash = slash.copy(selected = next)) }
+    }
+
+    private fun selectSlash() {
+        val state = currentState
+        val spec = SlashCommands.filter(state.slash.query)
+            .getOrNull(state.slash.selected)
+            ?: return
+        insertSlash(spec)
+    }
+
+    private fun pickSlash(id: SlashCommandId) {
+        val spec = SlashCommands.all.firstOrNull { it.id == id } ?: return
+        insertSlash(spec)
+    }
+
+    private fun insertSlash(spec: SlashCommandSpec) {
+        val text = if (spec.acceptsArgument) "${spec.command} " else spec.command
+        updateState {
+            copy(
+                input = text,
+                slash = slash.copy(open = false, query = ""),
+            )
         }
     }
 
     private fun send() {
         val state = currentState
         val text = state.input.trim()
-        if ((text.isBlank() && state.attachments.isEmpty()) || state.sending) return
+        if (state.sending) return
+        if (state.slash.visible) {
+            selectSlash()
+            return
+        }
+        if (text.startsWith("/")) {
+            val command = text.substringBefore(' ').lowercase()
+            val spec = SlashCommands.find(command)
+            if (spec != null) {
+                updateState { copy(input = "", slash = slash.copy(open = false)) }
+                executeCommand(spec, text.removePrefix(spec.command).trim())
+                return
+            }
+        }
+        if (text.isBlank() && state.attachments.isEmpty()) return
+        sendText(
+            text = text,
+            attachments = state.attachments,
+            replyToId = state.reply?.messageId,
+        )
+    }
+
+    private fun sendText(
+        text: String,
+        attachments: List<AttachmentUi>,
+        replyToId: Long?,
+        displayText: String = text,
+    ) {
+        val state = currentState
         val conversationId = state.conversationId
         if (conversationId.isBlank() || turns.isRunning(conversationId)) return
-        val attachments = state.attachments.map { it.toModel() }
         val options = TurnOptions(
             providerId = state.providerId,
-            model = state.model,
+            model = state.modelWithVariant(),
             reasoning = state.reasoningLevel,
-            attachments = attachments,
+            attachments = attachments.map { it.toModel() },
+            agentMode = state.mode,
+            replyToId = replyToId,
         )
+        lastSend = PendingSend(text, attachments, replyToId)
+        redoEntry = null
         suggestionJob?.cancel()
+        val reply = state.reply
         updateState {
             copy(
                 input = "",
@@ -146,98 +284,351 @@ class ChatViewModel(
                 live = emptyList(),
                 attachments = emptyList(),
                 askDrafts = emptyMap(),
+                reply = null,
+                retry = null,
+                liveStats = MessageStats(),
                 turn = turn + 1,
                 history = history + ChatEntry.User(
                     key = "local-${System.currentTimeMillis()}",
-                    text = text,
-                    attachments = state.attachments,
+                    text = displayText,
+                    attachments = attachments,
+                    replyTo = reply?.let {
+                        QuotedMessageUi(
+                            id = it.messageId,
+                            author = it.author,
+                            text = it.preview,
+                            fromUser = true,
+                        )
+                    },
                 ),
             )
         }
         turns.start(conversationId, text, options)
     }
 
-    private fun selectProvider(providerId: String) {
-        val option = currentState.providers.firstOrNull { it.id == providerId } ?: return
-        persistTurnSettings(providerId = option.id, model = option.model)
+    private fun executeCommand(spec: SlashCommandSpec, argument: String) {
+        when (spec.id) {
+            SlashCommandId.Undo -> undo()
+            SlashCommandId.Redo -> redo()
+            SlashCommandId.Btw -> {
+                if (argument.isBlank()) {
+                    showMessage(R.string.chat_btw_usage)
+                } else {
+                    sendText(
+                        text = "[Side note. Answer briefly without changing the main task.] $argument",
+                        attachments = emptyList(),
+                        replyToId = null,
+                        displayText = argument,
+                    )
+                }
+            }
+            SlashCommandId.New -> viewModelScope.launch { newConversation() }
+            SlashCommandId.Resume -> resume(argument)
+            SlashCommandId.Sessions -> sendEffect(ChatEffect.OpenSessions)
+            SlashCommandId.Models -> {
+                if (argument.isNotBlank()) {
+                    updateState { copy(modelQuery = argument) }
+                }
+                onAction(ChatAction.OpenPicker(ComposerPicker.Model))
+            }
+            SlashCommandId.Effort -> {
+                val level = ReasoningLevel.entries.firstOrNull {
+                    it.name.equals(argument, ignoreCase = true)
+                }
+                if (level != null) selectReasoning(level) else onAction(ChatAction.OpenPicker(ComposerPicker.Reasoning))
+            }
+            SlashCommandId.Variant -> {
+                if (argument.isBlank()) {
+                    if (currentState.variant.isBlank()) {
+                        showMessage(R.string.chat_variant_none)
+                    } else {
+                        showMessage(R.string.chat_variant_current, listOf(currentState.variant))
+                    }
+                } else {
+                    setVariant(argument)
+                }
+            }
+            SlashCommandId.Settings -> sendEffect(ChatEffect.OpenSettings)
+            SlashCommandId.Help -> showMessage(R.string.chat_command_usage)
+        }
+    }
+
+    private fun showMessage(resId: Int, args: List<Any> = emptyList()) {
+        updateState { copy(message = UiMessage(resId, args, System.nanoTime())) }
+    }
+
+    private fun undo() {
+        viewModelScope.launch {
+            val id = currentState.conversationId
+            if (turns.isRunning(id)) return@launch
+            val messages = chats.messages(id, 200)
+            val lastUser = messages.lastOrNull { it.role == ChatRole.User } ?: return@launch
+            redoEntry = PendingSend(
+                text = lastUser.content,
+                attachments = lastUser.attachments.map { it.toUi() },
+                replyToId = lastUser.replyToId,
+            )
+            chats.deleteMessage(lastUser.id)
+            chats.deleteAfter(id, lastUser.id)
+            reload()
+            showMessage(R.string.chat_undo_done)
+        }
+    }
+
+    private fun redo() {
+        val entry = redoEntry ?: return
+        redoEntry = null
+        sendText(entry.text, entry.attachments, entry.replyToId)
+    }
+
+    private fun resume(argument: String) {
+        viewModelScope.launch {
+            val conversations = chats.conversations()
+            val target = if (argument.isBlank()) {
+                null
+            } else {
+                conversations.firstOrNull { it.id == argument || it.id.startsWith(argument) }
+                    ?: conversations.firstOrNull { it.title.contains(argument, ignoreCase = true) }
+            }
+            if (target == null) {
+                showMessage(R.string.chat_resume_help)
+            } else {
+                switchTo(target.id)
+            }
+        }
+    }
+
+    private fun openMenu(key: String) {
+        val entry = currentState.history.lastOrNull { it.key == key } ?: return
+        val messageId = entry.messageId ?: return
+        val fromUser = entry is ChatEntry.User
+        val text = when (entry) {
+            is ChatEntry.User -> entry.text
+            is ChatEntry.Assistant -> entry.text
+            else -> return
+        }
+        val reaction = when (entry) {
+            is ChatEntry.User -> entry.reaction
+            is ChatEntry.Assistant -> entry.reaction
+            else -> null
+        }
         updateState {
             copy(
-                providerId = option.id,
-                model = option.model,
-                picker = null,
-                models = emptyList(),
+                menu = ChatMenuUi(
+                    key = key,
+                    messageId = messageId,
+                    author = if (fromUser) name.orEmpty() else assistantName,
+                    text = text,
+                    fromUser = fromUser,
+                    reaction = reaction,
+                    canEdit = fromUser,
+                    canDelete = true,
+                ),
             )
         }
-        loadModels()
     }
 
-    private fun selectModel(model: String) {
-        persistTurnSettings(model = model)
-        updateState { copy(model = model, picker = null) }
-    }
-
-    private fun selectReasoning(level: ReasoningLevel) {
-        persistTurnSettings(reasoning = level.name)
-        updateState { copy(reasoningLevel = level) }
-    }
-
-    private fun persistTurnSettings(
-        providerId: String = currentState.providerId,
-        model: String = currentState.model,
-        reasoning: String = currentState.reasoningLevel.name,
-    ) {
-        val conversationId = currentState.conversationId
-        if (conversationId.isBlank()) return
-        viewModelScope.launch {
-            chats.setProvider(conversationId, providerId, model, reasoning)
+    private fun replyTo(key: String) {
+        val entry = currentState.history.lastOrNull { it.key == key } ?: return
+        val messageId = entry.messageId ?: return
+        val text = when (entry) {
+            is ChatEntry.User -> entry.text
+            is ChatEntry.Assistant -> entry.text
+            else -> return
+        }
+        updateState {
+            copy(
+                reply = ReplyUi(
+                    messageId = messageId,
+                    author = if (entry is ChatEntry.User) name.orEmpty() else assistantName,
+                    preview = text,
+                ),
+                menu = null,
+            )
         }
     }
 
-    private fun loadModels() {
-        val state = currentState
-        modelJob?.cancel()
-        updateState { copy(modelsLoading = true, models = emptyList()) }
-        modelJob = viewModelScope.launch {
-            val config = settings.configOnce()
-            val provider = config.providers.firstOrNull { it.id == state.providerId }
-            val key = secrets.apiKey(state.providerId).orEmpty()
-            if (provider == null || key.isBlank()) {
-                updateState { copy(modelsLoading = false) }
-                return@launch
+    private fun toggleReaction(key: String, reaction: String) {
+        viewModelScope.launch {
+            val entry = currentState.history.lastOrNull { it.key == key } ?: return@launch
+            val messageId = entry.messageId ?: return@launch
+            val current = when (entry) {
+                is ChatEntry.User -> entry.reaction
+                is ChatEntry.Assistant -> entry.reaction
+                else -> null
             }
-            val models = try {
-                catalog.models(state.providerId, provider.baseUrl, state.model, key, provider.protocol)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                emptyList()
-            }
-            val options = models.map { ModelOption(it.id, it.meta) }
+            val next = if (reaction.isBlank() || reaction == current) null else reaction
+            chats.setReaction(messageId, next)
             updateState {
                 copy(
-                    models = options,
-                    modelsLoading = false,
-                    model = if (model.isBlank() && options.isNotEmpty()) options.first().id else model,
+                    history = history.map {
+                        when {
+                            it is ChatEntry.User && it.key == key -> it.copy(reaction = next)
+                            it is ChatEntry.Assistant && it.key == key -> it.copy(reaction = next)
+                            else -> it
+                        }
+                    },
+                    menu = menu?.copy(reaction = next),
                 )
             }
         }
     }
 
-    private fun attach(uris: List<String>) {
-        if (uris.isEmpty()) return
-        viewModelScope.launch {
-            val loaded = uris.mapNotNull { loader.load(it) }.map { it.toUi() }
-            if (loaded.isEmpty()) {
-                emitError(AppError(AppErrorType.Generic, serverMessage = "Could not read the selected file."))
-                return@launch
-            }
-            updateState { copy(attachments = attachments + loaded) }
+    private fun startEdit(key: String) {
+        val entry = currentState.history.lastOrNull { it.key == key } as? ChatEntry.User ?: return
+        val messageId = entry.messageId ?: return
+        updateState {
+            copy(
+                edit = EditUi(messageId = messageId, key = key, original = entry.text, draft = entry.text),
+                menu = null,
+            )
         }
     }
 
-    private fun stop() {
-        val conversationId = currentState.conversationId
-        if (conversationId.isNotBlank()) turns.stop(conversationId)
+    private fun saveEdit() {
+        val edit = currentState.edit ?: return
+        val draft = edit.draft.trim()
+        if (draft.isBlank()) {
+            showMessage(R.string.chat_edit_empty)
+            return
+        }
+        viewModelScope.launch {
+            val id = currentState.conversationId
+            chats.updateContent(edit.messageId, draft)
+            chats.deleteAfter(id, edit.messageId)
+            updateState { copy(edit = null) }
+            reload()
+            sendEffect(ChatEffect.EditSaved)
+            turns.start(
+                conversationId = id,
+                text = "",
+                options = TurnOptions(
+                    providerId = currentState.providerId,
+                    model = currentState.modelWithVariant(),
+                    reasoning = currentState.reasoningLevel,
+                    agentMode = currentState.mode,
+                ),
+                appendUser = false,
+            )
+        }
+    }
+
+    private fun askDelete(key: String) {
+        val menu = currentState.menu?.takeIf { it.key == key } ?: run {
+            openMenu(key)
+            currentState.menu
+        } ?: return
+        updateState { copy(pendingDelete = menu, menu = null) }
+    }
+
+    private fun confirmDelete() {
+        val target = currentState.pendingDelete ?: return
+        viewModelScope.launch {
+            chats.deleteMessage(target.messageId)
+            if (target.fromUser) {
+                chats.deleteAfter(currentState.conversationId, target.messageId)
+            }
+            updateState { copy(pendingDelete = null) }
+            reload()
+            sendEffect(ChatEffect.Deleted)
+        }
+    }
+
+    private fun retryLast() {
+        viewModelScope.launch {
+            val id = currentState.conversationId
+            if (turns.isRunning(id)) return@launch
+            val messages = chats.messages(id, 200)
+            val lastUser = messages.lastOrNull { it.role == ChatRole.User } ?: return@launch
+            chats.deleteAfter(id, lastUser.id)
+            reload()
+            turns.start(
+                conversationId = id,
+                text = "",
+                options = TurnOptions(
+                    providerId = currentState.providerId,
+                    model = currentState.modelWithVariant(),
+                    reasoning = currentState.reasoningLevel,
+                    agentMode = currentState.mode,
+                    replyToId = lastUser.replyToId,
+                ),
+                appendUser = false,
+            )
+        }
+    }
+
+    private fun setMode(mode: AgentMode) {
+        val id = currentState.conversationId
+        updateState { copy(mode = mode) }
+        if (id.isNotBlank()) {
+            viewModelScope.launch {
+                chats.setMode(id, mode)
+                if (mode == AgentMode.Build && currentState.planStatus == PlanStatus.Pending) {
+                    chats.setPlan(id, currentState.plan, PlanStatus.Approved)
+                }
+            }
+        }
+    }
+
+    private fun decidePlan(action: ChatAction.DecidePlan) {
+        val plan = currentState.planCard ?: return
+        if (plan.card.id != action.approvalId && action.approvalId.isNotBlank()) return
+        if (plan.card.phase != ApprovalPhase.Waiting) return
+        val approved = action.approve
+        val hasLivePlan = currentState.live.any { it is ChatEntry.Plan }
+        updateState {
+            copy(
+                planStatus = if (approved) PlanStatus.Approved else PlanStatus.Rejected,
+                live = live.resolvePlan(
+                    plan.card.copy(
+                        phase = if (approved) ApprovalPhase.Running else ApprovalPhase.Declined,
+                    ),
+                ),
+                history = history.map { entry ->
+                    if (entry is ChatEntry.Plan && entry.card.id == plan.card.id) {
+                        entry.copy(
+                            card = entry.card.copy(
+                                phase = if (approved) ApprovalPhase.Running else ApprovalPhase.Declined,
+                            ),
+                        )
+                    } else {
+                        entry
+                    }
+                },
+            )
+        }
+        viewModelScope.launch {
+            val id = currentState.conversationId
+            if (approved) {
+                policy.setPolicy(action.policy)
+                chats.setPlan(id, plan.plan, PlanStatus.Approved, plan.card.id)
+                chats.setMode(id, AgentMode.Build)
+                updateState { copy(mode = AgentMode.Build) }
+            } else {
+                chats.setPlan(id, plan.plan, PlanStatus.Rejected, plan.card.id)
+            }
+            if (hasLivePlan) {
+                turns.decide(action.approvalId, approved)
+            } else if (approved) {
+                chats.append(
+                    conversationId = id,
+                    role = ChatRole.System,
+                    content = "The user approved the plan. Continue in build mode and execute it.",
+                    label = "plan",
+                )
+                turns.start(
+                    conversationId = id,
+                    text = "",
+                    options = TurnOptions(
+                        providerId = currentState.providerId,
+                        model = currentState.modelWithVariant(),
+                        reasoning = currentState.reasoningLevel,
+                        agentMode = AgentMode.Build,
+                    ),
+                    appendUser = false,
+                )
+            }
+        }
     }
 
     private fun decide(action: ChatAction.Decide) {
@@ -310,6 +701,106 @@ class ChatViewModel(
         turns.answer(askId, answers, skipped)
     }
 
+    private fun selectProvider(providerId: String) {
+        val option = currentState.providers.firstOrNull { it.id == providerId } ?: return
+        persistTurnSettings(providerId = option.id, model = option.model)
+        updateState {
+            copy(
+                providerId = option.id,
+                model = option.model,
+                variant = "",
+                picker = null,
+                models = emptyList(),
+            )
+        }
+        loadModels()
+    }
+
+    private fun selectModel(model: String) {
+        persistTurnSettings(model = model)
+        updateState { copy(model = model, variant = "", picker = null) }
+        viewModelScope.launch {
+            val id = currentState.conversationId
+            if (id.isNotBlank()) chats.setVariant(id, "")
+        }
+    }
+
+    private fun selectReasoning(level: ReasoningLevel) {
+        persistTurnSettings(reasoning = level.name)
+        updateState { copy(reasoningLevel = level, picker = null) }
+    }
+
+    private fun setVariant(variant: String) {
+        val value = variant.trim().removePrefix(":").take(80)
+        val id = currentState.conversationId
+        updateState { copy(variant = value, model = model.substringBefore(':').ifBlank { model }) }
+        if (id.isNotBlank()) {
+            viewModelScope.launch { chats.setVariant(id, value) }
+        }
+    }
+
+    private fun ChatUiState.modelWithVariant(): String =
+        if (variant.isBlank()) model else "${model.substringBefore(':')}:$variant"
+
+    private fun persistTurnSettings(
+        providerId: String = currentState.providerId,
+        model: String = currentState.model,
+        reasoning: String = currentState.reasoningLevel.name,
+    ) {
+        val conversationId = currentState.conversationId
+        if (conversationId.isBlank()) return
+        viewModelScope.launch {
+            chats.setProvider(conversationId, providerId, model, reasoning)
+        }
+    }
+
+    private fun loadModels() {
+        val state = currentState
+        modelJob?.cancel()
+        updateState { copy(modelsLoading = true, models = emptyList()) }
+        modelJob = viewModelScope.launch {
+            val config = settings.configOnce()
+            val provider = config.providers.firstOrNull { it.id == state.providerId }
+            val key = secrets.apiKey(state.providerId).orEmpty()
+            if (provider == null || (provider.requiresKey && key.isBlank())) {
+                updateState { copy(modelsLoading = false) }
+                return@launch
+            }
+            val models = try {
+                catalog.models(state.providerId, provider.baseUrl, state.model, key, provider.protocol)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                emptyList()
+            }
+            val options = models.map { ModelOption(it.id, it.meta) }
+            updateState {
+                copy(
+                    models = options,
+                    modelsLoading = false,
+                    model = if (model.isBlank() && options.isNotEmpty()) options.first().id else model,
+                )
+            }
+        }
+    }
+
+    private fun attach(uris: List<String>) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            val loaded = uris.mapNotNull { loader.load(it) }.map { it.toUi() }
+            if (loaded.isEmpty()) {
+                emitError(AppError(AppErrorType.Generic, serverMessage = "Could not read the selected file."))
+                return@launch
+            }
+            updateState { copy(attachments = attachments + loaded) }
+        }
+    }
+
+    private fun stop() {
+        val conversationId = currentState.conversationId
+        if (conversationId.isNotBlank()) turns.stop(conversationId)
+    }
+
     private suspend fun reload() {
         val id = currentState.conversationId
         val messages = chats.messages(id)
@@ -320,16 +811,25 @@ class ChatViewModel(
         } ?: config.activeProviderId
         val provider = config.providers.firstOrNull { it.id == providerId } ?: config.activeProvider
         val model = conversation?.model?.ifBlank { null } ?: provider?.model.orEmpty()
+        val todos = chats.todos(id)
+        val entries = messages.toEntries() + listOfNotNull(planEntry(conversation))
         updateState {
             copy(
-                history = messages.toEntries(),
+                history = entries,
                 live = emptyList(),
                 sending = false,
                 workingText = "",
                 providers = config.providers.map { ProviderOption(it.id, it.name, it.model) },
                 providerId = providerId,
                 model = model,
+                variant = conversation?.variant.orEmpty(),
                 askDrafts = emptyMap(),
+                retry = null,
+                liveStats = MessageStats(),
+                todos = todos,
+                mode = conversation?.mode ?: AgentMode.Build,
+                plan = conversation?.plan,
+                planStatus = conversation?.planStatus ?: PlanStatus.None,
             )
         }
     }
@@ -350,6 +850,8 @@ class ChatViewModel(
             ?.takeIf { it.isNotBlank() }
             ?.let { ReasoningLevel.fromName(it) }
             ?: ReasoningLevel.Auto
+        val todos = chats.todos(conversationId)
+        val entries = messages.toEntries() + listOfNotNull(planEntry(conversation))
         updateState {
             copy(
                 loading = false,
@@ -357,7 +859,7 @@ class ChatViewModel(
                 title = conversation?.title.orEmpty(),
                 name = name,
                 assistantName = assistantName,
-                history = messages.toEntries(),
+                history = entries,
                 live = emptyList(),
                 suggestions = emptyList(),
                 sending = false,
@@ -368,12 +870,26 @@ class ChatViewModel(
                 providers = config.providers.map { ProviderOption(it.id, it.name, it.model) },
                 providerId = providerId,
                 model = model,
+                variant = conversation?.variant.orEmpty(),
                 reasoningLevel = level,
+                mode = conversation?.mode ?: AgentMode.Build,
                 models = emptyList(),
                 modelsLoading = false,
                 picker = null,
                 modelQuery = "",
                 askDrafts = emptyMap(),
+                retry = null,
+                liveStats = MessageStats(),
+                todos = todos,
+                menu = null,
+                edit = null,
+                reply = null,
+                pendingDelete = null,
+                slash = SlashUi(open = false),
+                highlightKey = null,
+                selectionKey = null,
+                plan = conversation?.plan,
+                planStatus = conversation?.planStatus ?: PlanStatus.None,
             )
         }
         switcher.markLoaded(conversationId)
@@ -420,7 +936,7 @@ class ChatViewModel(
             load(currentState.conversationId)
             return
         }
-        val conversation = chats.createConversation("")
+        val conversation = chats.createConversation("", currentState.mode)
         load(conversation.id)
     }
 
@@ -433,7 +949,17 @@ class ChatViewModel(
     private fun applyTurn(turn: ChatTurnState) {
         if (turn.conversationId != currentState.conversationId) return
         if (!turn.running) {
-            updateState { copy(sending = false, live = emptyList(), workingText = "", askDrafts = emptyMap()) }
+            updateState {
+                copy(
+                    sending = false,
+                    live = emptyList(),
+                    workingText = "",
+                    askDrafts = emptyMap(),
+                    retry = null,
+                    liveStats = MessageStats(),
+                    todos = if (turn.todos.isNotEmpty()) turn.todos else todos,
+                )
+            }
             return
         }
         updateState {
@@ -441,6 +967,10 @@ class ChatViewModel(
                 sending = true,
                 workingText = turn.workingText,
                 live = turn.entries.mapIndexed { index, entry -> entry.toUi(turn.turnId, index) },
+                retry = turn.retry?.let { RetryUi(it.attempt, it.max, it.reason) },
+                liveStats = turn.stats,
+                todos = turn.todos.ifEmpty { todos },
+                plan = turn.plan ?: plan,
             )
         }
     }
@@ -448,6 +978,15 @@ class ChatViewModel(
     private suspend fun handleResult(result: ChatTurnResult) {
         if (result.conversationId != currentState.conversationId) return
         if (!turns.consumeResult(result.conversationId, result.turnId)) return
+        result.error?.let { error ->
+            val message = error.serverMessage ?: error.serverTitle ?: error.type.name
+            chats.append(
+                conversationId = result.conversationId,
+                role = ChatRole.System,
+                content = message,
+                label = "failure",
+            )
+        }
         reload()
         result.error?.let { emitError(it) }
         refreshTitle()
@@ -481,6 +1020,19 @@ class ChatViewModel(
                 phase = card.phase.toUi(),
             ),
         )
+        is ChatTurnEntry.Plan -> ChatEntry.Plan(
+            key = "live-plan-${card.id}",
+            plan = plan,
+            card = ApprovalUi(
+                id = card.id,
+                title = card.title,
+                summary = card.summary,
+                steps = card.steps.map { it.toUi() },
+                phase = card.phase.toUi(),
+                kind = ApprovalKind.Plan,
+                plan = plan,
+            ),
+        )
         is ChatTurnEntry.Ask -> ChatEntry.Ask(
             key = "live-ask-${card.id}",
             card = card.toUi(),
@@ -496,6 +1048,10 @@ class ChatViewModel(
             ChatTurnStepStatus.Failed -> TraceStatus.Failed
         },
         summary = summary,
+        id = id,
+        tool = tool,
+        arguments = arguments,
+        output = output,
     )
 
     private fun ChatTurnApprovalPhase.toUi(): ApprovalPhase = when (this) {
@@ -505,43 +1061,109 @@ class ChatViewModel(
         ChatTurnApprovalPhase.Declined -> ApprovalPhase.Declined
     }
 
-    private fun List<ChatMessage>.toEntries(): List<ChatEntry> {
+    private suspend fun List<ChatMessage>.toEntries(): List<ChatEntry> {
+        val quotes = chats.messagesByIds(mapNotNull { it.replyToId }.toSet())
         val entries = mutableListOf<ChatEntry>()
-        val steps = mutableListOf<TraceStep>()
-
-        fun flushSteps() {
-            if (steps.isEmpty()) return
-            entries += ChatEntry.Trace("trace-${entries.size}", steps.toList())
-            steps.clear()
-        }
-
+        var pendingStats: MessageStats? = null
+        val assistant = currentState.assistantName
         forEach { message ->
             when (message.role) {
                 ChatRole.User -> {
-                    flushSteps()
+                    pendingStats = null
                     entries += ChatEntry.User(
                         key = "m${message.id}",
                         text = message.content,
                         attachments = message.attachments.map { it.toUi() },
+                        messageId = message.id,
+                        replyTo = message.replyToId?.let { id ->
+                            val quoted = quotes[id]
+                            QuotedMessageUi(
+                                id = id,
+                                author = if (quoted?.role == ChatRole.User) {
+                                    currentState.name.orEmpty()
+                                } else {
+                                    assistant
+                                },
+                                text = quoted?.content.orEmpty(),
+                                deleted = quoted == null,
+                                fromUser = quoted?.role == ChatRole.User,
+                            )
+                        },
+                        reaction = message.reaction?.takeIf { it.isNotBlank() },
                     )
                 }
                 ChatRole.Assistant -> {
+                    val stats = message.stats ?: pendingStats
                     if (message.content.isNotBlank() || message.reasoning.isNotBlank()) {
-                        flushSteps()
+                        pendingStats = null
                         entries += ChatEntry.Assistant(
-                            "m${message.id}",
-                            message.content,
+                            key = "m${message.id}",
+                            text = message.content,
                             live = false,
                             reasoning = message.reasoning,
+                            messageId = message.id,
+                            reaction = message.reaction?.takeIf { it.isNotBlank() },
+                            stats = stats,
+                        )
+                    } else if (stats != null) {
+                        pendingStats = stats
+                    }
+                }
+                ChatRole.Tool -> {
+                    if (message.name != ToolCatalog.SET_WORKING_TEXT) {
+                        entries += ChatEntry.Trace(
+                            key = "m${message.id}",
+                            steps = message.toSteps(),
                         )
                     }
                 }
-                ChatRole.Tool -> if (message.name != ToolCatalog.SET_WORKING_TEXT) steps += message.toSteps()
-                ChatRole.System -> Unit
+                ChatRole.System -> {
+                    if (message.label == "failure") {
+                        entries += ChatEntry.Failure(
+                            key = "m${message.id}",
+                            message = message.content,
+                            retryable = true,
+                        )
+                    } else {
+                        entries += ChatEntry.Notice(
+                            key = "m${message.id}",
+                            text = message.content,
+                        )
+                    }
+                }
             }
         }
-        flushSteps()
         return entries
+    }
+
+    private fun planEntry(conversation: fan.x0.focus.data.assistant.Conversation?): ChatEntry.Plan? {
+        val plan = conversation?.plan ?: return null
+        val phase = when (conversation.planStatus) {
+            PlanStatus.Pending -> ApprovalPhase.Waiting
+            PlanStatus.Approved -> ApprovalPhase.Finished
+            PlanStatus.Rejected -> ApprovalPhase.Declined
+            PlanStatus.None -> return null
+        }
+        return ChatEntry.Plan(
+            key = "plan-${conversation.id}",
+            plan = plan,
+            card = ApprovalUi(
+                id = conversation.planRequestId.ifBlank { "plan-${conversation.id}" },
+                title = plan.title,
+                summary = plan.summary,
+                steps = plan.steps.map {
+                    TraceStep(
+                        label = it.title,
+                        status = TraceStatus.Pending,
+                        tool = it.tool,
+                        arguments = it.arguments,
+                    )
+                },
+                phase = phase,
+                kind = ApprovalKind.Plan,
+                plan = plan,
+            ),
+        )
     }
 
     private fun ChatMessage.toSteps(): List<TraceStep> {
@@ -553,11 +1175,19 @@ class ChatViewModel(
                     label = labels.firstOrNull() ?: ToolLabels.of(name),
                     status = TraceStatus.Done,
                     summary = summaries.firstOrNull()?.take(120),
+                    tool = name.orEmpty(),
+                    output = content.take(2000),
                 ),
             )
         }
         return labels.mapIndexed { index, value ->
-            TraceStep(value, TraceStatus.Done, summaries.getOrNull(index)?.take(120))
+            TraceStep(
+                label = value,
+                status = TraceStatus.Done,
+                summary = summaries.getOrNull(index)?.take(120),
+                tool = name.orEmpty(),
+                output = content.take(2000),
+            )
         }
     }
 
@@ -577,5 +1207,19 @@ class ChatViewModel(
         mime = mime,
         text = text,
         base64 = base64,
+    )
+
+    private fun List<ChatEntry>.resolvePlan(card: ApprovalUi): List<ChatEntry> = map { entry ->
+        if (entry is ChatEntry.Plan && entry.card.id == card.id) {
+            entry.copy(card = card)
+        } else {
+            entry
+        }
+    }
+
+    private data class PendingSend(
+        val text: String,
+        val attachments: List<AttachmentUi>,
+        val replyToId: Long?,
     )
 }

@@ -30,6 +30,13 @@ object ToolLabels {
         ToolCatalog.SET_WORKING_TEXT -> "Status"
         "ask" -> "Question"
         "create_plan" -> "Plan"
+        "propose_plan" -> "Plan"
+        "todowrite", "todoread" -> "Tasks"
+        "web_search" -> "Web search"
+        "spawn_agent" -> "Subagent"
+        "mcp_list_tools", "mcp_call_tool", "mcp_list_resources", "mcp_read_resource" -> "MCP"
+        "index_workspace", "search_files", "workspace_files" -> "Workspace"
+        "bridge_bg_start", "bridge_bg_logs", "bridge_bg_kill", "bridge_bg_list", "bridge_bg_clear" -> "Background command"
         else -> name?.replace('_', ' ') ?: "Tool"
     }
 }

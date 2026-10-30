@@ -4,8 +4,14 @@ import fan.x0.focus.core.mvi.UiAction
 import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
 import fan.x0.focus.core.network.openai.ModelMeta
+import fan.x0.focus.data.assistant.AgentMode
 import fan.x0.focus.data.assistant.AskKind
 import fan.x0.focus.data.assistant.AttachmentKind
+import fan.x0.focus.data.assistant.ChatDetailConfig
+import fan.x0.focus.data.assistant.ConversationTodo
+import fan.x0.focus.data.assistant.MessageStats
+import fan.x0.focus.data.assistant.PlanStatus
+import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ReasoningLevel
 
 enum class TraceStatus { Pending, Running, Done, Failed }
@@ -14,9 +20,15 @@ data class TraceStep(
     val label: String,
     val status: TraceStatus,
     val summary: String? = null,
+    val id: String = "",
+    val tool: String = "",
+    val arguments: String = "",
+    val output: String? = null,
 )
 
 enum class ApprovalPhase { Waiting, Running, Finished, Declined }
+
+enum class ApprovalKind { Action, Plan }
 
 data class ApprovalUi(
     val id: String,
@@ -24,6 +36,8 @@ data class ApprovalUi(
     val summary: String,
     val steps: List<TraceStep>,
     val phase: ApprovalPhase,
+    val kind: ApprovalKind = ApprovalKind.Action,
+    val plan: ProposedPlan? = null,
 )
 
 enum class AskPhase { Waiting, Answered, Skipped }
@@ -82,13 +96,71 @@ data class AttachmentUi(
         get() = base64?.let { "data:$mime;base64,$it" }
 }
 
+data class QuotedMessageUi(
+    val id: Long,
+    val author: String,
+    val text: String,
+    val deleted: Boolean = false,
+    val fromUser: Boolean = false,
+)
+
+data class ChatMenuUi(
+    val key: String,
+    val messageId: Long,
+    val author: String,
+    val text: String,
+    val fromUser: Boolean,
+    val reaction: String?,
+    val canEdit: Boolean,
+    val canDelete: Boolean,
+)
+
+data class EditUi(
+    val messageId: Long,
+    val key: String,
+    val original: String,
+    val draft: String,
+    val saving: Boolean = false,
+)
+
+data class ReplyUi(
+    val messageId: Long,
+    val author: String,
+    val preview: String,
+)
+
+data class RetryUi(
+    val attempt: Int,
+    val max: Int,
+    val reason: String,
+)
+
+data class UiMessage(
+    val resId: Int,
+    val args: List<Any> = emptyList(),
+    val nonce: Long = 0,
+)
+
+data class SlashUi(
+    val open: Boolean = false,
+    val query: String = "",
+    val selected: Int = 0,
+    val commandIds: List<SlashCommandId> = SlashCommands.all.map { it.id },
+) {
+    val visible: Boolean get() = open && commandIds.isNotEmpty()
+}
+
 sealed interface ChatEntry {
     val key: String
+    val messageId: Long? get() = null
 
     data class User(
         override val key: String,
         val text: String,
         val attachments: List<AttachmentUi> = emptyList(),
+        override val messageId: Long? = null,
+        val replyTo: QuotedMessageUi? = null,
+        val reaction: String? = null,
     ) : ChatEntry
 
     data class Assistant(
@@ -96,13 +168,23 @@ sealed interface ChatEntry {
         val text: String,
         val live: Boolean,
         val reasoning: String = "",
+        override val messageId: Long? = null,
+        val replyTo: QuotedMessageUi? = null,
+        val reaction: String? = null,
+        val stats: MessageStats? = null,
     ) : ChatEntry
 
     data class Trace(override val key: String, val steps: List<TraceStep>) : ChatEntry
 
     data class Approval(override val key: String, val card: ApprovalUi) : ChatEntry
 
+    data class Plan(override val key: String, val plan: ProposedPlan, val card: ApprovalUi) : ChatEntry
+
     data class Ask(override val key: String, val card: AskCardUi) : ChatEntry
+
+    data class Failure(override val key: String, val message: String, val retryable: Boolean) : ChatEntry
+
+    data class Notice(override val key: String, val text: String) : ChatEntry
 }
 
 data class ProviderOption(
@@ -138,16 +220,41 @@ data class ChatUiState(
     val providers: List<ProviderOption> = emptyList(),
     val providerId: String = "",
     val model: String = "",
+    val variant: String = "",
     val reasoningLevel: ReasoningLevel = ReasoningLevel.Auto,
+    val mode: AgentMode = AgentMode.Build,
     val attachments: List<AttachmentUi> = emptyList(),
     val models: List<ModelOption> = emptyList(),
     val modelsLoading: Boolean = false,
     val picker: ComposerPicker? = null,
     val modelQuery: String = "",
     val askDrafts: Map<String, AskDraft> = emptyMap(),
+    val retry: RetryUi? = null,
+    val liveStats: MessageStats = MessageStats(),
+    val statsConfig: ChatDetailConfig = ChatDetailConfig(),
+    val todos: List<ConversationTodo> = emptyList(),
+    val menu: ChatMenuUi? = null,
+    val edit: EditUi? = null,
+    val reply: ReplyUi? = null,
+    val pendingDelete: ChatMenuUi? = null,
+    val slash: SlashUi = SlashUi(),
+    val highlightKey: String? = null,
+    val selectionKey: String? = null,
+    val plan: ProposedPlan? = null,
+    val planStatus: PlanStatus = PlanStatus.None,
+    val message: UiMessage? = null,
 ) : UiState {
     val entries: List<ChatEntry>
         get() = history + live
+
+    val stats: MessageStats?
+        get() {
+            if (liveStats.hasUsage || liveStats.round > 0) return liveStats
+            return history.filterIsInstance<ChatEntry.Assistant>().lastOrNull()?.stats
+        }
+
+    val lastAssistantKey: String?
+        get() = entries.filterIsInstance<ChatEntry.Assistant>().lastOrNull()?.key
 
     val streaming: String
         get() = live.filterIsInstance<ChatEntry.Assistant>().lastOrNull()?.text.orEmpty()
@@ -158,11 +265,17 @@ data class ChatUiState(
     val approval: ApprovalUi?
         get() = live.filterIsInstance<ChatEntry.Approval>().lastOrNull()?.card
 
+    val planCard: ChatEntry.Plan?
+        get() = entries.filterIsInstance<ChatEntry.Plan>().lastOrNull()
+
     val ask: AskCardUi?
         get() = live.filterIsInstance<ChatEntry.Ask>().lastOrNull()?.card
 
     val providerName: String
         get() = providers.firstOrNull { it.id == providerId }?.name ?: providerId
+
+    val displayModel: String
+        get() = if (variant.isBlank()) model else "${model.substringBefore(':')}:$variant"
 
     val canSend: Boolean get() = (input.isNotBlank() || attachments.isNotEmpty()) && !sending
     val isEmpty: Boolean get() = history.isEmpty() && !sending && streaming.isBlank() && reasoning.isBlank()
@@ -176,6 +289,7 @@ sealed interface ChatAction : UiAction {
     data object Send : ChatAction
     data object Stop : ChatAction
     data class Decide(val approvalId: String, val approve: Boolean) : ChatAction
+    data class DecidePlan(val approvalId: String, val approve: Boolean, val policy: fan.x0.focus.data.assistant.CommandPolicy) : ChatAction
     data class AskSelect(val askId: String, val questionId: String, val label: String) : ChatAction
     data class AskConfirm(val askId: String, val questionId: String, val value: Boolean) : ChatAction
     data class AskEdit(
@@ -193,8 +307,42 @@ sealed interface ChatAction : UiAction {
     data class ModelQueryChanged(val value: String) : ChatAction
     data object RefreshModels : ChatAction
     data class SelectReasoning(val level: ReasoningLevel) : ChatAction
+    data class SetVariant(val variant: String) : ChatAction
     data class AttachPicked(val uris: List<String>) : ChatAction
     data class RemoveAttachment(val id: String) : ChatAction
+    data class SetMode(val mode: AgentMode) : ChatAction
+    data class OpenMessageMenu(val key: String) : ChatAction
+    data object CloseMessageMenu : ChatAction
+    data class ReplyTo(val key: String) : ChatAction
+    data object CancelReply : ChatAction
+    data class ToggleReaction(val key: String, val reaction: String) : ChatAction
+    data class StartEdit(val key: String) : ChatAction
+    data class EditDraftChanged(val value: String) : ChatAction
+    data object SaveEdit : ChatAction
+    data object CancelEdit : ChatAction
+    data class AskDelete(val key: String) : ChatAction
+    data object ConfirmDelete : ChatAction
+    data object CancelDelete : ChatAction
+    data class SelectText(val key: String) : ChatAction
+    data object ClearSelection : ChatAction
+    data class JumpToMessage(val key: String) : ChatAction
+    data object ConsumeHighlight : ChatAction
+    data class SlashInputChanged(val value: String) : ChatAction
+    data class SlashMove(val delta: Int) : ChatAction
+    data class SlashPick(val id: SlashCommandId) : ChatAction
+    data object SlashSelect : ChatAction
+    data object SlashClose : ChatAction
+    data object RetryLast : ChatAction
+    data object OpenSessions : ChatAction
+    data object OpenSettings : ChatAction
+    data object ConsumeMessage : ChatAction
 }
 
-sealed interface ChatEffect : UiEffect
+sealed interface ChatEffect : UiEffect {
+    data object Copied : ChatEffect
+    data object Deleted : ChatEffect
+    data object EditSaved : ChatEffect
+    data object ReplySent : ChatEffect
+    data object OpenSettings : ChatEffect
+    data object OpenSessions : ChatEffect
+}

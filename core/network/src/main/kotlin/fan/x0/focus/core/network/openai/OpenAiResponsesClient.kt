@@ -36,7 +36,7 @@ class OpenAiResponsesClient(
     ): ChatReply {
         val response = try {
             http.post(endpoint.responsesUrl) {
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
+                if (apiKey.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $apiKey")
                 header(HttpHeaders.Accept, "application/json")
                 contentType(ContentType.Application.Json)
                 setBody(payload(request, stream = false))
@@ -48,7 +48,11 @@ class OpenAiResponsesClient(
         }
         val body = response.bodyAsText()
         if (!response.status.isSuccess()) {
-            throw NetworkExceptionMapper.http(response.status.value, body)
+            throw NetworkExceptionMapper.http(
+                response.status.value,
+                body,
+                response.headers[HttpHeaders.RetryAfter]?.toLongOrNull(),
+            )
         }
         return decodeResponse(body)
     }
@@ -61,7 +65,7 @@ class OpenAiResponsesClient(
         val response = try {
             http.post(endpoint.responsesUrl) {
                 allowLongStream()
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
+                if (apiKey.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $apiKey")
                 header(HttpHeaders.Accept, "text/event-stream")
                 contentType(ContentType.Application.Json)
                 setBody(payload(request, stream = true))
@@ -73,7 +77,11 @@ class OpenAiResponsesClient(
         }
         if (!response.status.isSuccess()) {
             val body = response.bodyAsText()
-            throw NetworkExceptionMapper.http(response.status.value, body)
+            throw NetworkExceptionMapper.http(
+                response.status.value,
+                body,
+                response.headers[HttpHeaders.RetryAfter]?.toLongOrNull(),
+            )
         }
         val contentType = response.headers[HttpHeaders.ContentType].orEmpty()
         if (contentType.contains("application/json")) {
@@ -323,6 +331,7 @@ private class ResponseStreamDecoder {
                         prompt = inputTokens,
                         completion = output,
                         total = usage.wireInt("total_tokens") ?: (inputTokens + output),
+                        cached = usage.wireObject("input_tokens_details")?.wireInt("cached_tokens") ?: 0,
                     )
                 }
                 if (type == "response.failed") {

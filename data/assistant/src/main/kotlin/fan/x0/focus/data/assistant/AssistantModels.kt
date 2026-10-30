@@ -23,6 +23,61 @@ data class ChatMessage(
     val createdAt: Long = 0,
     val attachments: List<ChatAttachment> = emptyList(),
     val label: String? = null,
+    val replyToId: Long? = null,
+    val stats: MessageStats? = null,
+    val reaction: String? = null,
+)
+
+enum class AgentMode {
+    Build,
+    Plan,
+    ;
+
+    val wire: String get() = name.lowercase()
+
+    companion object {
+        fun fromWire(value: String): AgentMode = when (value.lowercase()) {
+            "plan" -> Plan
+            else -> Build
+        }
+    }
+}
+
+enum class PlanStatus {
+    None,
+    Pending,
+    Approved,
+    Rejected,
+    ;
+
+    val wire: String get() = name.lowercase()
+
+    companion object {
+        fun fromWire(value: String): PlanStatus = when (value.lowercase()) {
+            "pending" -> Pending
+            "approved" -> Approved
+            "rejected" -> Rejected
+            else -> None
+        }
+    }
+}
+
+@Serializable
+data class ProposedPlan(
+    val title: String = "",
+    val summary: String = "",
+    val steps: List<PlanStep> = emptyList(),
+    val files: List<String> = emptyList(),
+    val risks: List<String> = emptyList(),
+    val verification: List<String> = emptyList(),
+)
+
+@Serializable
+data class PlanStep(
+    val title: String,
+    val detail: String = "",
+    val tool: String = "",
+    val arguments: String = "",
 )
 
 enum class AttachmentKind { Text, Image }
@@ -49,6 +104,11 @@ data class Conversation(
     val providerId: String = "",
     val model: String = "",
     val reasoning: String = "",
+    val mode: AgentMode = AgentMode.Build,
+    val plan: ProposedPlan? = null,
+    val planStatus: PlanStatus = PlanStatus.None,
+    val planRequestId: String = "",
+    val variant: String = "",
 )
 
 enum class GoalStatus { Active, Paused, Done }

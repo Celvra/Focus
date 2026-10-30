@@ -70,6 +70,7 @@ class SettingsViewModel(
                     judgeTimeoutSeconds = policyConfig.timeoutSeconds,
                     maxRounds = agentConfig.maxRounds,
                     unlimitedRounds = agentConfig.unlimited,
+                    maxRetries = agentConfig.retry.maxRetries,
                 )
             }
             loadBalances(config.providers)
@@ -145,6 +146,9 @@ class SettingsViewModel(
             SettingsAction.ToggleApiKeyVisibility -> updateState {
                 copy(apiKeyVisible = !apiKeyVisible)
             }
+            is SettingsAction.RequiresKeyChanged -> updateState {
+                copy(requiresKey = action.value, connectionOk = false, connectionError = null)
+            }
             is SettingsAction.MakeActiveChanged -> updateState { copy(draftMakeActive = action.value) }
             SettingsAction.SaveProvider -> saveProvider()
             SettingsAction.TestProvider -> testProvider()
@@ -197,6 +201,7 @@ class SettingsViewModel(
             is SettingsAction.JudgeMaxRiskChanged -> setJudgeMaxRisk(action.value)
             is SettingsAction.JudgeTimeoutChanged -> setJudgeTimeout(action.value)
             is SettingsAction.MaxRoundsChanged -> setMaxRounds(action.value)
+            is SettingsAction.MaxRetriesChanged -> setMaxRetries(action.value)
             is SettingsAction.UnlimitedRoundsChanged -> setUnlimitedRounds(action.value)
         }
     }
@@ -280,6 +285,11 @@ class SettingsViewModel(
         viewModelScope.launch { agent.setMaxRounds(value) }
     }
 
+    private fun setMaxRetries(value: Int) {
+        updateState { copy(maxRetries = value) }
+        viewModelScope.launch { agent.setMaxRetries(value) }
+    }
+
     private fun setUnlimitedRounds(value: Boolean) {
         updateState { copy(unlimitedRounds = value) }
         viewModelScope.launch { agent.setUnlimited(value) }
@@ -358,6 +368,7 @@ class SettingsViewModel(
                 apiKeyInput = "",
                 apiKeySaved = false,
                 apiKeyVisible = false,
+                requiresKey = provider.requiresKey,
                 draftMakeActive = provider.id == activeProviderId,
                 connectionError = null,
                 connectionOk = false,
@@ -403,6 +414,7 @@ class SettingsViewModel(
                 apiKeyInput = "",
                 apiKeySaved = false,
                 apiKeyVisible = false,
+                requiresKey = true,
                 draftMakeActive = true,
                 connectionError = null,
                 connectionOk = false,
@@ -428,6 +440,7 @@ class SettingsViewModel(
                 isNewProvider = false,
                 apiKeyInput = "",
                 apiKeyVisible = false,
+                requiresKey = true,
                 connectionError = null,
                 connectionOk = false,
                 models = emptyList(),
@@ -456,12 +469,14 @@ class SettingsViewModel(
         viewModelScope.launch {
             try {
                 val id = state.editingProviderId ?: UUID.randomUUID().toString()
+                val existing = state.providers.firstOrNull { it.id == id }
                 val provider = ProviderConfig(
                     id = id,
                     name = name,
                     baseUrl = baseUrl,
                     model = state.model.trim(),
                     protocol = state.protocol,
+                    requiresKey = state.requiresKey,
                 )
                 settings.updateProvider(provider, makeActive = state.draftMakeActive)
                 val key = state.apiKeyInput.trim()
@@ -512,7 +527,8 @@ class SettingsViewModel(
                 val key = state.apiKeyInput.trim().ifBlank {
                     state.editingProviderId?.let { secrets.apiKey(it) }.orEmpty()
                 }
-                if (key.isBlank()) {
+                val requiresKey = state.requiresKey
+                if (key.isBlank() && requiresKey) {
                     updateState {
                         copy(
                             testing = false,
@@ -596,7 +612,9 @@ class SettingsViewModel(
             updateState { copy(fetchingModels = false) }
             return
         }
-        if (currentState.apiKeyInput.isBlank() && currentState.editingProviderId == null) {
+        val editingProvider = currentState.providers
+            .firstOrNull { it.id == currentState.editingProviderId }
+        if (currentState.apiKeyInput.isBlank() && currentState.requiresKey) {
             updateState { copy(fetchingModels = false) }
             return
         }
@@ -613,7 +631,7 @@ class SettingsViewModel(
         val key = currentState.apiKeyInput.trim().ifBlank {
             currentState.editingProviderId?.let { secrets.apiKey(it) }.orEmpty()
         }
-        if (key.isBlank()) return
+        if (key.isBlank() && currentState.requiresKey) return
         updateState { copy(fetchingModels = true) }
         try {
             val models = catalog.list(

@@ -1,4 +1,5 @@
 mod auth;
+mod background;
 mod cli;
 mod config;
 mod discovery;

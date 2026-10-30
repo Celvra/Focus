@@ -15,6 +15,23 @@ data class OnboardingMessage(
     val steps: List<FocusTraceStep> = emptyList(),
 )
 
+sealed interface OnboardingEntry {
+    val key: String
+
+    data class User(override val key: String, val text: String) : OnboardingEntry
+
+    data class Assistant(
+        override val key: String,
+        val text: String,
+        val reasoning: String = "",
+        val live: Boolean = false,
+    ) : OnboardingEntry
+
+    data class Trace(override val key: String, val steps: List<FocusTraceStep>) : OnboardingEntry
+
+    data class Notice(override val key: String, val text: String) : OnboardingEntry
+}
+
 sealed interface ProviderFailure {
     enum class Field { BaseUrl, Model, ApiKey }
 
@@ -26,10 +43,7 @@ sealed interface ProviderFailure {
 data class OnboardingUiState(
     val loading: Boolean = true,
     val assistantName: String = "",
-    val messages: List<OnboardingMessage> = emptyList(),
-    val streamingText: String = "",
-    val reasoning: String = "",
-    val steps: List<FocusTraceStep> = emptyList(),
+    val entries: List<OnboardingEntry> = emptyList(),
     val sending: Boolean = false,
     val lastMessageId: Long = -1L,
     val restored: Boolean = false,
@@ -41,6 +55,7 @@ data class OnboardingUiState(
     val model: String = "",
     val protocol: ChatProtocol = ChatProtocol.ChatCompletions,
     val apiKey: String = "",
+    val keyOptional: Boolean = false,
     val apiKeyVisible: Boolean = false,
     val testing: Boolean = false,
     val saving: Boolean = false,
@@ -54,6 +69,7 @@ data class OnboardingUiState(
     val canSend: Boolean get() = !loading && input.isNotBlank() && !sending
     val canTestProvider: Boolean get() = !testing && !saving && baseUrl.isNotBlank() && model.isNotBlank()
     val canSaveProvider: Boolean get() = !saving && !testing && baseUrl.isNotBlank() && model.isNotBlank()
+    val isEmpty: Boolean get() = entries.isEmpty() && !sending
 }
 
 sealed interface OnboardingAction : UiAction {
@@ -69,6 +85,7 @@ sealed interface OnboardingAction : UiAction {
     data class ModelChanged(val value: String) : OnboardingAction
     data class ProtocolChanged(val value: ChatProtocol) : OnboardingAction
     data class ApiKeyChanged(val value: String) : OnboardingAction
+    data object ToggleKeyOptional : OnboardingAction
     data object ToggleApiKeyVisibility : OnboardingAction
     data object TestProvider : OnboardingAction
     data object SaveProvider : OnboardingAction

@@ -261,6 +261,7 @@ object ToolCatalog {
                 put("api_key", string("API key. Stored encrypted and never shown again."))
                 put("protocol", string("chat, responses, or anthropic. Default chat."))
                 put("make_active", boolean("Make this the active provider. Default true."))
+                put("requires_key", boolean("False only when the provider serves models without an API key."))
             },
         ),
         ToolSpec(
@@ -535,6 +536,10 @@ object ToolCatalog {
                 put("pattern", string("Regular expression"))
                 put("root", string("Directory to search from, optional"))
                 put("include", string("Only files matching this glob, for example *.rs"))
+                put("exclude", string("Skip files matching this glob"))
+                put("case_sensitive", boolean("Match case"))
+                put("context", number("Lines of context before and after, 0 to 5"))
+                put("limit", number("Maximum matches, default 400"))
                 put("literal", boolean("true to match plain text instead of a regular expression"))
                 put("device_id", deviceId())
             },
@@ -620,6 +625,220 @@ object ToolCatalog {
             description = "Finish first-run setup. Only for onboarding.",
             kind = ToolKind.Write,
             parameters = schema {},
+        ),
+        ToolSpec(
+            name = "todowrite",
+            description = "Replace the task list for the current conversation. Use at the start of multi-step work and update it as items finish. Keep exactly one item in_progress.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("todos")) {
+                put("todos", buildJsonObject {
+                    put("type", "array")
+                    put("description", "Ordered task list")
+                    putJsonObject("items") {
+                        put("type", "object")
+                        putJsonObject("properties") {
+                            put("content", string("What to do, short and concrete"))
+                            put("status", string("pending, in_progress, completed, or cancelled"))
+                            put("priority", string("high, medium, or low"))
+                        }
+                        putJsonArray("required") {
+                            add(JsonPrimitive("content"))
+                            add(JsonPrimitive("status"))
+                            add(JsonPrimitive("priority"))
+                        }
+                        put("additionalProperties", false)
+                    }
+                })
+            },
+        ),
+        ToolSpec(
+            name = "todoread",
+            description = "Read the current task list for this conversation.",
+            kind = ToolKind.Read,
+            parameters = schema {},
+        ),
+        ToolSpec(
+            name = "propose_plan",
+            description = "In plan mode, submit a concrete plan for approval. Include steps with the tools and arguments you intend to use, files, risks, and how you will verify.",
+            kind = ToolKind.Plan,
+            parameters = schema(required = listOf("title", "summary", "steps")) {
+                put("title", string("Short plan title"))
+                put("summary", string("What the plan will change and why"))
+                put("steps", buildJsonObject {
+                    put("type", "array")
+                    put("description", "One to eight steps in execution order")
+                    putJsonObject("items") {
+                        put("type", "object")
+                        putJsonObject("properties") {
+                            put("label", string("Short step label"))
+                            put("tool", string("Tool name to run in build mode"))
+                            put("arguments", buildJsonObject { put("type", "object") })
+                        }
+                        putJsonArray("required") {
+                            add(JsonPrimitive("label"))
+                            add(JsonPrimitive("tool"))
+                            add(JsonPrimitive("arguments"))
+                        }
+                        put("additionalProperties", false)
+                    }
+                })
+                put("files", buildJsonObject {
+                    put("type", "array")
+                    put("description", "Files the plan will inspect or change")
+                    putJsonObject("items") { put("type", "string") }
+                })
+                put("risks", buildJsonObject {
+                    put("type", "array")
+                    put("description", "What could go wrong")
+                    putJsonObject("items") { put("type", "string") }
+                })
+                put("verification", buildJsonObject {
+                    put("type", "array")
+                    put("description", "How you will check the result")
+                    putJsonObject("items") { put("type", "string") }
+                })
+            },
+        ),
+        ToolSpec(
+            name = "web_search",
+            description = "Search the web with the configured provider. Returns titles, links, and snippets. Use it for current facts and cite the links.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("query")) {
+                put("query", string("Search query"))
+                put("count", number("How many results, 1 to 10"))
+                put("provider", string("deepseek, tavily, tinyfish, exa, bing, duckduckgo, or yandex"))
+                put("language", string("Language hint, optional"))
+                put("time_range", string("day, week, month, or year, optional"))
+            },
+        ),
+        ToolSpec(
+            name = "spawn_agent",
+            description = "Run a self-contained subtask in a separate read-only agent context. Use it to inspect a large area without flooding this chat. Returns a summary, files, and steps.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("task")) {
+                put("task", string("Clear task with the expected result"))
+                put("tools", buildJsonObject {
+                    put("type", "array")
+                    put("description", "Optional read-only tool names for the subagent")
+                    putJsonObject("items") { put("type", "string") }
+                })
+                put("model", string("Optional model id"))
+                put("max_rounds", number("Maximum tool rounds, default 6"))
+            },
+        ),
+        ToolSpec(
+            name = "mcp_list_tools",
+            description = "List the tools exposed by one connected MCP server.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("server", string("Server name or id, optional when only one is enabled"))
+            },
+        ),
+        ToolSpec(
+            name = "mcp_call_tool",
+            description = "Call one tool on a connected MCP server. The arguments object is passed through unchanged.",
+            kind = ToolKind.Gated,
+            parameters = schema(required = listOf("tool", "arguments")) {
+                put("server", string("Server name or id, optional when only one is enabled"))
+                put("tool", string("Tool name from mcp_list_tools"))
+                put("arguments", buildJsonObject {
+                    put("type", "object")
+                    put("description", "Tool arguments")
+                })
+            },
+        ),
+        ToolSpec(
+            name = "mcp_list_resources",
+            description = "List resources exposed by one connected MCP server.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("server", string("Server name or id, optional when only one is enabled"))
+            },
+        ),
+        ToolSpec(
+            name = "mcp_read_resource",
+            description = "Read one resource from a connected MCP server.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("uri")) {
+                put("server", string("Server name or id, optional when only one is enabled"))
+                put("uri", string("Resource uri from mcp_list_resources"))
+            },
+        ),
+        ToolSpec(
+            name = "index_workspace",
+            description = "Build or update the search index for the active workspace on the paired computer.",
+            kind = ToolKind.Write,
+            parameters = schema {
+                put("force", boolean("Rebuild every file instead of reusing unchanged entries"))
+            },
+        ),
+        ToolSpec(
+            name = "search_files",
+            description = "Search indexed workspace files by path and content.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("query")) {
+                put("query", string("Text or regular expression"))
+                put("regex", boolean("Treat query as a regular expression"))
+                put("glob", string("Only paths matching this glob, for example **/*.kt"))
+                put("case_sensitive", boolean("Match case"))
+                put("limit", number("Maximum matches, default 80"))
+            },
+        ),
+        ToolSpec(
+            name = "workspace_files",
+            description = "List indexed workspace files, optionally filtered by glob.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("glob", string("Glob filter, optional"))
+                put("limit", number("Maximum files, default 200"))
+            },
+        ),
+        ToolSpec(
+            name = "bridge_bg_start",
+            description = "Start a shell command in the background on a paired computer and return immediately. The chat continues working. When it finishes, the app sends you the exit status and log tail in a new turn.",
+            kind = ToolKind.Gated,
+            parameters = schema(required = listOf("command")) {
+                put("command", string("Shell command line"))
+                put("cwd", string("Working directory, optional"))
+                put("timeout_sec", number("Maximum seconds before the process group is stopped, default 600"))
+                put("device_id", deviceId())
+            },
+        ),
+        ToolSpec(
+            name = "bridge_bg_logs",
+            description = "Read the captured stdout and stderr of a background command.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("id")) {
+                put("id", string("Background command id"))
+                put("after", number("Only lines after this sequence number"))
+                put("device_id", deviceId())
+            },
+        ),
+        ToolSpec(
+            name = "bridge_bg_kill",
+            description = "Stop a background command and its process group.",
+            kind = ToolKind.Gated,
+            parameters = schema(required = listOf("id")) {
+                put("id", string("Background command id"))
+                put("device_id", deviceId())
+            },
+        ),
+        ToolSpec(
+            name = "bridge_bg_list",
+            description = "List background commands on a paired computer.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("device_id", deviceId())
+            },
+        ),
+        ToolSpec(
+            name = "bridge_bg_clear",
+            description = "Clear logs of finished background commands.",
+            kind = ToolKind.Write,
+            parameters = schema {
+                put("id", string("One command id, optional"))
+                put("device_id", deviceId())
+            },
         ),
     )
 

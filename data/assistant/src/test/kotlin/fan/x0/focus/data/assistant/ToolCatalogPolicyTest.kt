@@ -27,6 +27,9 @@ class ToolCatalogPolicyTest {
                 "bridge_fs_edit",
                 "bridge_fs_delete",
                 "bridge_set_workspace",
+                "mcp_call_tool",
+                "bridge_bg_start",
+                "bridge_bg_kill",
             ),
             gated,
         )
@@ -35,7 +38,7 @@ class ToolCatalogPolicyTest {
     @Test
     fun `plan tool is the only plan kind`() {
         val plans = ToolCatalog.all.filter { it.kind == ToolKind.Plan }.map { it.name }
-        assertEquals(listOf("create_plan"), plans)
+        assertEquals(listOf("create_plan", "propose_plan"), plans)
     }
 
     @Test

@@ -17,6 +17,7 @@ pub struct ExecPlan {
     pub env: HashMap<String, String>,
     pub stdin: Option<String>,
     pub timeout_sec: u64,
+    pub max_output_bytes: usize,
     pub display: String,
 }
 
@@ -77,6 +78,7 @@ pub fn plan(req: &ExecRequest, config: &AppConfig, workspace: &Workspace, sessio
         env,
         stdin: req.stdin.clone(),
         timeout_sec: req.timeout_sec.unwrap_or(config.exec_default_timeout),
+        max_output_bytes: config.max_output_bytes.max(64 * 1024) as usize,
         display,
     })
 }
@@ -123,6 +125,11 @@ pub async fn run(plan: ExecPlan, sender: mpsc::UnboundedSender<Event>) -> Result
     let stderr = child.stderr.take();
     let out_tx = sender.clone();
     let err_tx = sender.clone();
+    let emitted = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let out_bytes = emitted.clone();
+    let out_limit = plan.max_output_bytes;
+    let out_truncated = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let out_truncated_flag = out_truncated.clone();
 
     let out_task = tokio::spawn(async move {
         if let Some(mut stream) = stdout {
@@ -131,9 +138,25 @@ pub async fn run(plan: ExecPlan, sender: mpsc::UnboundedSender<Event>) -> Result
                 match stream.read(&mut buffer).await {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
-                        let text = String::from_utf8_lossy(&buffer[..n]).into_owned();
+                        let used = out_bytes.load(std::sync::atomic::Ordering::Relaxed);
+                        if used >= out_limit {
+                            if !out_truncated_flag.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                                let _ = out_tx.send(Event::Stderr {
+                                    data: "\n[output truncated by bridge]\n".into(),
+                                });
+                            }
+                            continue;
+                        }
+                        let take = n.min(out_limit - used);
+                        out_bytes.fetch_add(take, std::sync::atomic::Ordering::Relaxed);
+                        let text = String::from_utf8_lossy(&buffer[..take]).into_owned();
                         if out_tx.send(Event::Stdout { data: text }).is_err() {
                             break;
+                        }
+                        if take < n && !out_truncated_flag.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                            let _ = out_tx.send(Event::Stderr {
+                                data: "\n[output truncated by bridge]\n".into(),
+                            });
                         }
                     }
                 }
@@ -141,6 +164,9 @@ pub async fn run(plan: ExecPlan, sender: mpsc::UnboundedSender<Event>) -> Result
         }
     });
 
+    let err_bytes = emitted.clone();
+    let err_limit = plan.max_output_bytes;
+    let err_truncated = out_truncated.clone();
     let err_task = tokio::spawn(async move {
         if let Some(mut stream) = stderr {
             let mut buffer = vec![0u8; 8192];
@@ -148,9 +174,25 @@ pub async fn run(plan: ExecPlan, sender: mpsc::UnboundedSender<Event>) -> Result
                 match stream.read(&mut buffer).await {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
-                        let text = String::from_utf8_lossy(&buffer[..n]).into_owned();
+                        let used = err_bytes.load(std::sync::atomic::Ordering::Relaxed);
+                        if used >= err_limit {
+                            if !err_truncated.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                                let _ = err_tx.send(Event::Stderr {
+                                    data: "\n[output truncated by bridge]\n".into(),
+                                });
+                            }
+                            continue;
+                        }
+                        let take = n.min(err_limit - used);
+                        err_bytes.fetch_add(take, std::sync::atomic::Ordering::Relaxed);
+                        let text = String::from_utf8_lossy(&buffer[..take]).into_owned();
                         if err_tx.send(Event::Stderr { data: text }).is_err() {
                             break;
+                        }
+                        if take < n && !err_truncated.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                            let _ = err_tx.send(Event::Stderr {
+                                data: "\n[output truncated by bridge]\n".into(),
+                            });
                         }
                     }
                 }

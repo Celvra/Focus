@@ -36,6 +36,8 @@ data class ToolResult(
     val ask: AskRequest? = null,
     val workingText: String? = null,
     val completesOnboarding: Boolean = false,
+    val todos: List<ConversationTodo>? = null,
+    val plan: ProposedPlan? = null,
 )
 
 data class StepOutcome(
@@ -63,16 +65,26 @@ class ToolExecutor(
     private val catalog: ModelCatalogRepository,
     private val bridge: BridgeRepository,
     private val gate: AutoPilotGate,
+    private val webSearch: WebSearchRepository,
+    private val mcp: McpManager,
+    private val indexer: WorkspaceIndexer,
+    private val backgroundWatch: BackgroundCommandMonitor,
 ) {
     val specs: List<ToolSpec> = ToolCatalog.chat()
 
-    suspend fun execute(call: CompletedToolCall, conversationId: String = ""): ToolResult =
-        dispatch(call.name, call.arguments, allowApproval = true, conversationId = conversationId)
+    fun specsFor(mode: AgentMode): List<ToolSpec> =
+        if (mode == AgentMode.Plan) specs.filter { it.kind == ToolKind.Read || it.kind == ToolKind.Ask || it.kind == ToolKind.Plan } else specs
+
+    suspend fun execute(
+        call: CompletedToolCall,
+        conversationId: String = "",
+        mode: AgentMode = AgentMode.Build,
+    ): ToolResult = dispatch(call.name, call.arguments, allowApproval = true, conversationId = conversationId, mode = mode)
 
     suspend fun executeDirect(name: String, arguments: String): ToolResult =
-        dispatch(name, arguments, allowApproval = false, conversationId = "")
+        dispatch(name, arguments, allowApproval = false, conversationId = "", mode = AgentMode.Build)
 
-    suspend fun runStep(step: ApprovalStep, conversationId: String = ""): StepOutcome {
+    suspend fun runStep(step: ApprovalStep, conversationId: String = "", mode: AgentMode = AgentMode.Build): StepOutcome {
         val spec = ToolCatalog.find(step.tool)
         val args = parseObject(step.arguments)
         return when {
@@ -91,9 +103,13 @@ class ToolExecutor(
         rawArguments: String,
         allowApproval: Boolean,
         conversationId: String,
+        mode: AgentMode = AgentMode.Build,
     ): ToolResult {
         val spec = ToolCatalog.find(name) ?: return fail("Unknown tool: $name")
         val args = parseObject(rawArguments) ?: return fail("Invalid arguments for $name")
+        if (mode == AgentMode.Plan && spec.kind !in setOf(ToolKind.Read, ToolKind.Ask, ToolKind.Plan)) {
+            return fail("Plan mode only allows read-only tools. $name would change something. Ask the user to approve the plan first.")
+        }
         when (spec.kind) {
             ToolKind.Read, ToolKind.Write -> return runTool(spec, args, conversationId)
             ToolKind.Gated -> {
@@ -137,11 +153,27 @@ class ToolExecutor(
                 val title = args.text("title")?.take(80) ?: "Plan"
                 val summary = args.text("summary").orEmpty()
                 val request = approvals.create(title, summary, steps)
+                val plan = ProposedPlan(
+                    title = title,
+                    summary = summary,
+                    steps = steps.map {
+                        PlanStep(
+                            title = it.label,
+                            detail = "",
+                            tool = it.tool,
+                            arguments = it.arguments,
+                        )
+                    },
+                    files = args.stringList("files"),
+                    risks = args.stringList("risks"),
+                    verification = args.stringList("verification"),
+                )
                 return ToolResult(
                     ok = true,
                     content = "Waiting for the user to approve the plan: $title",
                     summary = title,
                     approval = request,
+                    plan = plan,
                 )
             }
         }
@@ -521,6 +553,7 @@ class ToolExecutor(
                 val name = requestedName ?: existing?.name ?: providerName(baseUrl)
                 val id = existing?.id ?: UUID.randomUUID().toString()
                 val makeActive = args.flag("make_active") ?: true
+                val requiresKey = args.flag("requires_key") ?: existing?.requiresKey ?: true
                 settings.updateProvider(
                     ProviderConfig(
                         id = id,
@@ -528,6 +561,7 @@ class ToolExecutor(
                         baseUrl = baseUrl,
                         model = model,
                         protocol = protocol,
+                        requiresKey = requiresKey,
                     ),
                     makeActive = makeActive,
                 )
@@ -542,6 +576,7 @@ class ToolExecutor(
                         put("model", model)
                         put("protocol", protocol.name)
                         put("active", makeActive)
+                        put("requires_key", requiresKey)
                         put("key_saved", keySaved)
                     }.toString(),
                 )
@@ -836,14 +871,19 @@ class ToolExecutor(
                 val path = args.text("path") ?: return fail("path is required")
                 val result = bridge.read(endpoint, path, args.number("offset"), args.number("limit"))
                 ok(
-                    "Read $path (${result.totalLines} lines) on ${endpoint.name}",
+                    "Read $path (${result.totalLines} lines) on ${endpoint.name}" +
+                        if (result.truncated) " (truncated)" else "",
                     buildJsonObject {
                         put("device", endpoint.name)
                         put("device_id", endpoint.id)
                         put("path", path)
-                        put("lines", result.lines)
+                        put("content", result.content.ifBlank { result.lines })
                         put("total_lines", result.totalLines)
+                        put("start_line", result.startLine)
+                        put("end_line", result.endLine)
                         put("truncated", result.truncated)
+                        put("notice", result.notice)
+                        result.nextOffset?.let { put("next_offset", it) }
                     }.toString(),
                 )
             }
@@ -875,40 +915,57 @@ class ToolExecutor(
             "bridge_fs_glob" -> {
                 val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val pattern = args.text("pattern") ?: return fail("pattern is required")
-                val matches = bridge.glob(endpoint, pattern, args.text("root"))
+                val result = bridge.glob(endpoint, pattern, args.text("root"))
                 ok(
-                    "${matches.size} matches on ${endpoint.name}",
+                    "${result.matches.size} matches on ${endpoint.name}" +
+                        if (result.truncated) " (truncated)" else "",
                     buildJsonObject {
                         put("device", endpoint.name)
                         put("device_id", endpoint.id)
                         put("pattern", pattern)
-                        putJsonArray("matches") { matches.take(400).forEach { add(JsonPrimitive(it)) } }
+                        put("root", result.root)
+                        put("truncated", result.truncated)
+                        putJsonArray("matches") { result.matches.take(800).forEach { add(JsonPrimitive(it)) } }
                     }.toString(),
                 )
             }
             "bridge_fs_grep" -> {
                 val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val pattern = args.text("pattern") ?: return fail("pattern is required")
-                val matches = bridge.grep(
+                val result = bridge.grep(
                     endpoint,
                     pattern,
                     root = args.text("root"),
                     include = args.text("include"),
+                    exclude = args.text("exclude"),
                     literal = args.flag("literal") ?: false,
+                    caseSensitive = args.flag("case_sensitive") ?: false,
+                    context = args.number("context"),
+                    limit = args.number("limit"),
                 )
                 ok(
-                    "${matches.size} matches on ${endpoint.name}",
+                    "${result.matches.size} matches on ${endpoint.name}" +
+                        if (result.truncated) " (truncated)" else "",
                     buildJsonObject {
                         put("device", endpoint.name)
                         put("device_id", endpoint.id)
                         put("pattern", pattern)
+                        put("root", result.root)
+                        put("truncated", result.truncated)
                         putJsonArray("matches") {
-                            matches.take(200).forEach { match ->
+                            result.matches.take(300).forEach { match ->
                                 add(
                                     buildJsonObject {
                                         put("path", match.path)
                                         put("line", match.line)
+                                        put("column", match.column)
                                         put("text", match.text)
+                                        if (match.before.isNotEmpty()) {
+                                            putJsonArray("before") { match.before.forEach { add(JsonPrimitive(it)) } }
+                                        }
+                                        if (match.after.isNotEmpty()) {
+                                            putJsonArray("after") { match.after.forEach { add(JsonPrimitive(it)) } }
+                                        }
                                     },
                                 )
                             }
@@ -952,6 +1009,301 @@ class ToolExecutor(
                     "Workspace roots updated on ${endpoint.name}.",
                 )
             }
+            "todowrite" -> {
+                if (conversationId.isBlank()) return fail("No active conversation")
+                val array = args["todos"] as? JsonArray ?: return fail("todos must be an array")
+                val parsed = array.mapIndexedNotNull { index, element ->
+                    val obj = element as? JsonObject ?: return@mapIndexedNotNull null
+                    val content = obj.text("content")?.trim().orEmpty()
+                    if (content.isBlank()) return@mapIndexedNotNull null
+                    ConversationTodo(
+                        conversationId = conversationId,
+                        content = content.take(300),
+                        status = TodoStatus.fromWire(obj.text("status").orEmpty()),
+                        priority = TodoPriority.fromWire(obj.text("priority").orEmpty()),
+                        position = index,
+                    )
+                }
+                if (parsed.isEmpty()) return fail("todos needs at least one item with content")
+                if (parsed.count { it.status == TodoStatus.InProgress } > 1) {
+                    return fail("Only one todo may be in_progress at a time")
+                }
+                chats.replaceTodos(conversationId, parsed)
+                val stored = chats.todos(conversationId)
+                val done = stored.count { it.status == TodoStatus.Completed }
+                ok(
+                    "$done/${stored.size} todos done",
+                    buildJsonObject {
+                        putJsonArray("todos") {
+                            stored.forEach { todo ->
+                                add(
+                                    buildJsonObject {
+                                        put("id", todo.id)
+                                        put("content", todo.content)
+                                        put("status", todo.status.wire)
+                                        put("priority", todo.priority.wire)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                ).copy(todos = stored)
+            }
+            "todoread" -> {
+                if (conversationId.isBlank()) return fail("No active conversation")
+                val stored = chats.todos(conversationId)
+                ok(
+                    "${stored.size} todos",
+                    buildJsonObject {
+                        putJsonArray("todos") {
+                            stored.forEach { todo ->
+                                add(
+                                    buildJsonObject {
+                                        put("id", todo.id)
+                                        put("content", todo.content)
+                                        put("status", todo.status.wire)
+                                        put("priority", todo.priority.wire)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                ).copy(todos = stored)
+            }
+            "web_search" -> {
+                val query = args.text("query") ?: return fail("query is required")
+                val count = (args.number("count") ?: 5).coerceIn(1, 10)
+                val provider = args.text("provider")?.let {
+                    WebSearchProvider.fromId(it) ?: return fail("provider must be one of ${WebSearchProvider.entries.joinToString { p -> p.id }}")
+                }
+                val results = webSearch.search(
+                    query = query,
+                    count = count,
+                    provider = provider,
+                    language = args.text("language").orEmpty(),
+                    timeRange = args.text("time_range").orEmpty(),
+                )
+                ok(
+                    "${results.size} results",
+                    buildJsonObject {
+                        put("query", query)
+                        put("provider", (provider ?: webSearchProvider()).id)
+                        putJsonArray("results") {
+                            results.forEach { result ->
+                                add(
+                                    buildJsonObject {
+                                        put("title", result.title)
+                                        put("url", result.url)
+                                        put("snippet", result.snippet.take(1000))
+                                        put("source", result.source)
+                                        if (result.published.isNotBlank()) put("published", result.published)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                )
+            }
+            "mcp_list_tools" -> {
+                val server = mcpServer(args) ?: return fail("server is required")
+                val tools = mcp.listTools(server)
+                ok(
+                    "${tools.size} tools on ${server.name}",
+                    buildJsonObject {
+                        put("server", server.name)
+                        putJsonArray("tools") {
+                            tools.forEach { tool ->
+                                add(
+                                    buildJsonObject {
+                                        put("name", tool.name)
+                                        put("title", tool.title)
+                                        put("description", tool.description)
+                                        put("input_schema", tool.inputSchema.toString())
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                )
+            }
+            "mcp_call_tool" -> {
+                val server = mcpServer(args) ?: return fail("server is required")
+                val tool = args.text("tool") ?: return fail("tool is required")
+                val arguments = args.jsonObject("arguments") ?: JsonObject(emptyMap())
+                val result = mcp.callTool(server, tool, arguments)
+                if (result.isError) {
+                    fail("MCP ${server.name} $tool: ${result.readable()}")
+                } else {
+                    ok("${server.name}: $tool", result.readable())
+                }
+            }
+            "mcp_list_resources" -> {
+                val server = mcpServer(args) ?: return fail("server is required")
+                val resources = mcp.listResources(server)
+                ok(
+                    "${resources.size} resources on ${server.name}",
+                    buildJsonObject {
+                        put("server", server.name)
+                        putJsonArray("resources") {
+                            resources.forEach { resource ->
+                                add(
+                                    buildJsonObject {
+                                        put("uri", resource.uri)
+                                        put("name", resource.name)
+                                        put("description", resource.description)
+                                        put("mime_type", resource.mimeType)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                )
+            }
+            "mcp_read_resource" -> {
+                val server = mcpServer(args) ?: return fail("server is required")
+                val uri = args.text("uri") ?: return fail("uri is required")
+                val content = mcp.readResource(server, uri)
+                ok("Read $uri on ${server.name}", content.take(20_000))
+            }
+            "index_workspace" -> {
+                val result = indexer.index(force = args.flag("force") ?: false)
+                ok(
+                    "Indexed ${result.indexed} files under ${result.root}" +
+                        if (result.truncated) " (truncated)" else "",
+                    buildJsonObject {
+                        put("root", result.root)
+                        put("indexed", result.indexed)
+                        put("skipped", result.skipped)
+                        put("truncated", result.truncated)
+                    }.toString(),
+                )
+            }
+            "search_files" -> {
+                val query = args.text("query") ?: return fail("query is required")
+                val hits = indexer.search(
+                    query = query,
+                    regex = args.flag("regex") ?: false,
+                    glob = args.text("glob").orEmpty(),
+                    caseSensitive = args.flag("case_sensitive") ?: false,
+                    limit = (args.number("limit") ?: 80).coerceIn(1, 200),
+                )
+                ok(
+                    "${hits.size} matches",
+                    buildJsonObject {
+                        putJsonArray("matches") {
+                            hits.forEach { hit ->
+                                add(
+                                    buildJsonObject {
+                                        put("path", hit.path)
+                                        put("line", hit.line)
+                                        put("text", hit.text)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                )
+            }
+            "workspace_files" -> {
+                val files = indexer.files(
+                    glob = args.text("glob").orEmpty(),
+                    limit = (args.number("limit") ?: 200).coerceIn(1, 1000),
+                )
+                ok(
+                    "${files.size} files",
+                    buildJsonObject {
+                        putJsonArray("files") { files.forEach { add(JsonPrimitive(it)) } }
+                    }.toString(),
+                )
+            }
+            "bridge_bg_start" -> {
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
+                val command = args.text("command") ?: return fail("command is required")
+                val job = bridge.backgroundStart(
+                    endpoint = endpoint,
+                    command = command,
+                    cwd = args.text("cwd"),
+                    timeoutSec = (args.number("timeout_sec") ?: 600).toLong().coerceIn(1, 86_400),
+                )
+                backgroundWatch?.register(conversationId, endpoint, job.id)
+                ok(
+                    "Started ${job.id} on ${endpoint.name}",
+                    buildJsonObject {
+                        put("id", job.id)
+                        put("command", job.command)
+                        put("pid", job.pid)
+                        put("status", job.status)
+                        put("device", endpoint.name)
+                    }.toString(),
+                )
+            }
+            "bridge_bg_logs" -> {
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
+                val id = args.text("id") ?: return fail("id is required")
+                var lines = emptyList<fan.x0.focus.data.bridge.BridgeBgLogLine>()
+                var done = false
+                bridge.backgroundLogs(
+                    endpoint = endpoint,
+                    id = id,
+                    after = (args.number("after") ?: 0).toLong(),
+                    follow = false,
+                ) { frame ->
+                    lines = frame.lines
+                    done = frame.done
+                }
+                ok(
+                    "${lines.size} log lines${if (done) ", finished" else ""}",
+                    buildJsonObject {
+                        put("id", id)
+                        put("done", done)
+                        putJsonArray("lines") {
+                            lines.forEach { line ->
+                                add(
+                                    buildJsonObject {
+                                        put("seq", line.seq)
+                                        put("stream", line.stream)
+                                        put("data", line.data)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                )
+            }
+            "bridge_bg_kill" -> {
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
+                val id = args.text("id") ?: return fail("id is required")
+                val killed = bridge.backgroundKill(endpoint, id)
+                if (killed) ok("Stopped $id", "Background command $id stopped.") else fail("Command not found")
+            }
+            "bridge_bg_list" -> {
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
+                val jobs = bridge.backgroundList(endpoint)
+                ok(
+                    "${jobs.size} background commands on ${endpoint.name}",
+                    buildJsonObject {
+                        putJsonArray("jobs") {
+                            jobs.forEach { job ->
+                                add(
+                                    buildJsonObject {
+                                        put("id", job.id)
+                                        put("command", job.command)
+                                        put("status", job.status)
+                                        put("exit_code", job.exitCode)
+                                        put("timed_out", job.timedOut)
+                                    },
+                                )
+                            }
+                        }
+                    }.toString(),
+                )
+            }
+            "bridge_bg_clear" -> {
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
+                bridge.backgroundClear(endpoint, args.text("id"))
+                ok("Cleared background commands", "Background command logs cleared.")
+            }
+            "spawn_agent" -> fail("The subagent runner is only available from a chat turn")
             else -> fail("Unsupported tool: ${spec.name}")
         }
     } catch (e: CancellationException) {
@@ -1275,6 +1627,29 @@ class ToolExecutor(
         if (deviceId.isNullOrBlank()) return bridge.activeEndpoint()
         return bridge.endpointsOnce().firstOrNull { it.id == deviceId }
     }
+
+    private suspend fun webSearchProvider(): WebSearchProvider = webSearch.defaultProvider()
+
+    private suspend fun mcpServer(args: JsonObject): McpServerConfig? {
+        val requested = args.text("server")
+        val servers = mcp.enabledServers()
+        if (servers.isEmpty()) return null
+        if (requested.isNullOrBlank()) return servers.singleOrNull()
+        return servers.firstOrNull {
+            it.id == requested || it.name.equals(requested, ignoreCase = true)
+        }
+    }
+
+    private fun JsonObject.jsonObject(key: String): JsonObject? = when (val value = this[key]) {
+        is JsonObject -> value
+        is JsonPrimitive -> parseObject(value.content)
+        else -> null
+    }
+
+    private fun JsonObject.stringList(key: String): List<String> =
+        (this[key] as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.content?.takeIf { value -> value.isNotBlank() } }
+            .orEmpty()
 
     private fun bridgeTargetError(args: JsonObject): String {
         val deviceId = args.text("device_id")

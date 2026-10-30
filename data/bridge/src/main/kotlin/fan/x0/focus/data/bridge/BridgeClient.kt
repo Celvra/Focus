@@ -7,6 +7,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.request.request
 import io.ktor.client.request.url
 import io.ktor.client.request.setBody
@@ -19,6 +20,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.readAvailable
+import io.ktor.utils.io.readUTF8Line
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
@@ -201,31 +203,105 @@ class BridgeClient {
             method = HttpMethod.Post,
             body = json.encodeToString(BridgeExecRequest.serializer(), request),
         )
-        val channel = response.bodyAsChannel()
-        val buffer = ByteArray(8192)
-        val pending = StringBuilder()
-        while (true) {
-            val read = channel.readAvailable(buffer, 0, buffer.size)
-            if (read <= 0) break
-            pending.append(String(buffer, 0, read, Charsets.UTF_8))
-            while (true) {
-                val boundary = pending.indexOf("\n\n")
-                if (boundary < 0) break
-                val frame = pending.substring(0, boundary)
-                pending.delete(0, boundary + 2)
-                val payload = frame.lineSequence()
-                    .firstOrNull { it.startsWith("data:") }
-                    ?.removePrefix("data:")
-                    ?.trim()
-                    .orEmpty()
-                if (payload.isEmpty()) continue
-                val event = runCatching {
-                    json.decodeFromString(BridgeExecEvent.serializer(), payload)
-                }.getOrNull() ?: continue
-                onEvent(event)
-            }
+        readSse(response) { payload ->
+            val event = runCatching {
+                json.decodeFromString(BridgeExecEvent.serializer(), payload)
+            }.getOrNull() ?: return@readSse
+            onEvent(event)
         }
     }
+
+    suspend fun bgStart(
+        endpoint: BridgeEndpoint,
+        token: String,
+        request: BridgeBgStartRequest,
+    ): BridgeBgJob = endpointCall(
+        path = "/bg/start",
+        endpoint = endpoint,
+        token = token,
+        method = HttpMethod.Post,
+        body = json.encodeToString(BridgeBgStartRequest.serializer(), request),
+    )
+
+    suspend fun bgList(endpoint: BridgeEndpoint, token: String): List<BridgeBgJob> =
+        endpointCall<BridgeBgListResult>("/bg/list", endpoint, token, HttpMethod.Get).jobs
+
+    suspend fun bgLogs(
+        endpoint: BridgeEndpoint,
+        token: String,
+        id: String,
+        after: Long,
+    ): BridgeBgLogsResult = endpointCall(
+        path = "/bg/logs?id=${encode(id)}&after=$after&follow=false",
+        endpoint = endpoint,
+        token = token,
+        method = HttpMethod.Get,
+    )
+
+    suspend fun bgFollow(
+        endpoint: BridgeEndpoint,
+        token: String,
+        id: String,
+        after: Long,
+        onFrame: suspend (BridgeBgLogsResult) -> Unit,
+    ) {
+        val response = raw(
+            target = "${endpoint.baseUrl}/bg/logs?id=${encode(id)}&after=$after&follow=true",
+            token = token,
+            method = HttpMethod.Get,
+        )
+        readSse(response) { payload ->
+            val frame = runCatching {
+                json.decodeFromString(BridgeBgLogsResult.serializer(), payload)
+            }.getOrNull() ?: return@readSse
+            onFrame(frame)
+        }
+    }
+
+    suspend fun bgKill(endpoint: BridgeEndpoint, token: String, id: String): BridgeOkResult =
+        endpointCall(
+            path = "/bg/kill",
+            endpoint = endpoint,
+            token = token,
+            method = HttpMethod.Post,
+            body = json.encodeToString(BridgeBgIdRequest.serializer(), BridgeBgIdRequest(id)),
+        )
+
+    suspend fun bgClear(endpoint: BridgeEndpoint, token: String, id: String?): BridgeOkResult =
+        endpointCall(
+            path = "/bg/clear",
+            endpoint = endpoint,
+            token = token,
+            method = HttpMethod.Post,
+            body = id?.let {
+                json.encodeToString(BridgeBgIdRequest.serializer(), BridgeBgIdRequest(it))
+            } ?: "null",
+        )
+
+    private suspend fun readSse(response: HttpResponse, onData: suspend (String) -> Unit) {
+        val channel = response.bodyAsChannel()
+        val data = StringBuilder()
+        while (true) {
+            val line = channel.readUTF8Line() ?: break
+            when {
+                line.isEmpty() -> {
+                    if (data.isNotEmpty()) {
+                        onData(data.toString())
+                        data.clear()
+                    }
+                }
+                line.startsWith(":") -> Unit
+                line.startsWith("data:") -> {
+                    if (data.isNotEmpty()) data.append('\n')
+                    data.append(line.removePrefix("data:").removePrefix(" "))
+                }
+            }
+        }
+        if (data.isNotEmpty()) onData(data.toString())
+    }
+
+    private fun encode(value: String): String =
+        java.net.URLEncoder.encode(value, Charsets.UTF_8.name())
 
     private suspend inline fun <reified T> endpointCall(
         path: String,

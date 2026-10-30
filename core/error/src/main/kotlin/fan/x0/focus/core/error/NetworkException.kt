@@ -22,6 +22,7 @@ sealed class NetworkException(message: String, cause: Throwable? = null) : Excep
         val statusCode: Int,
         val error: DecodedHttpError?,
         val bodySnippet: String? = null,
+        val retryAfterSeconds: Long? = null,
         cause: Throwable? = null,
     ) : NetworkException("http $statusCode", cause)
 

@@ -17,6 +17,7 @@ import fan.x0.focus.data.assistant.ChatEngine
 import fan.x0.focus.data.assistant.ChatEvent
 import fan.x0.focus.data.assistant.ChatMode
 import fan.x0.focus.data.assistant.ChatStore
+import fan.x0.focus.data.assistant.OnboardingDefaults
 import fan.x0.focus.data.assistant.ProviderCatalog
 import fan.x0.focus.data.assistant.ProviderConfig
 import fan.x0.focus.data.assistant.SecretStore
@@ -62,7 +63,7 @@ class OnboardingViewModel(
                 val provider = config.activeProvider
                 val ready = provider != null &&
                     provider.model.isNotBlank() &&
-                    !secrets.apiKey(provider.id).isNullOrBlank()
+                    (!provider.requiresKey || !secrets.apiKey(provider.id).isNullOrBlank())
                 updateState { copy(providerReady = ready) }
             }
         }
@@ -119,6 +120,9 @@ class OnboardingViewModel(
             OnboardingAction.ToggleApiKeyVisibility -> updateState {
                 copy(apiKeyVisible = !apiKeyVisible)
             }
+            OnboardingAction.ToggleKeyOptional -> updateState {
+                copy(keyOptional = !keyOptional, providerFailure = null)
+            }
             OnboardingAction.TestProvider -> testProvider()
             OnboardingAction.SaveProvider -> saveProvider()
             OnboardingAction.FetchModels -> {
@@ -153,39 +157,73 @@ class OnboardingViewModel(
         val state = currentState
         val value = text.trim()
         if (state.loading || state.sending) return
-        if (value.isBlank() && state.messages.isNotEmpty()) return
+        if (value.isBlank() && state.entries.isNotEmpty()) return
         turnJob?.cancel()
-        val message = if (value.isBlank()) null else OnboardingMessage(nextId++, true, value)
-        updateState {
-            copy(
-                messages = if (message == null) messages else messages + message,
-                lastMessageId = message?.id ?: lastMessageId,
-                streamingText = "",
-                reasoning = "",
-                steps = emptyList(),
-                sending = true,
-                input = "",
-            )
-        }
         turnJob = viewModelScope.launch {
+            val config = settings.configOnce()
+            val active = config.activeProvider
+            val customWithoutKey = active != null &&
+                active.id != OnboardingDefaults.PROVIDER_ID &&
+                active.model.isNotBlank() &&
+                active.requiresKey &&
+                secrets.apiKey(active.id).isNullOrBlank()
+            if (customWithoutKey) {
+                updateState {
+                    copy(
+                        sending = false,
+                        providerSheetOpen = true,
+                        providerFailure = ProviderFailure.Validation(ProviderFailure.Field.ApiKey),
+                    )
+                }
+                return@launch
+            }
+            val user = if (value.isBlank()) null else OnboardingEntry.User("u-${nextId++}", value)
+            updateState {
+                copy(
+                    entries = if (user == null) entries else entries + user,
+                    lastMessageId = if (user == null) lastMessageId else nextId - 1,
+                    sending = true,
+                    input = "",
+                )
+            }
             try {
                 engine.send(ONBOARDING_CONVERSATION, value, ChatMode.Onboarding).collect { event ->
                     when (event) {
-                        is ChatEvent.Delta -> updateState { copy(streamingText = streamingText + event.text) }
-                        is ChatEvent.ReasoningDelta -> updateState { copy(reasoning = reasoning + event.text) }
-                        is ChatEvent.ToolStarted -> updateState { copy(steps = steps.upsert(event.label, FocusStepStatus.Running, null)) }
-                        is ChatEvent.ToolFinished -> updateState {
-                            copy(
-                                steps = steps.upsert(
-                                    event.label,
-                                    if (event.ok) FocusStepStatus.Done else FocusStepStatus.Failed,
-                                    event.summary.take(120).ifBlank { null },
-                                ),
-                            )
+                        is ChatEvent.Delta -> updateState {
+                            copy(entries = entries.appendAssistant(event.text, reasoning = false))
                         }
-                        is ChatEvent.Completed -> finishTurn()
+                        is ChatEvent.ReasoningDelta -> updateState {
+                            copy(entries = entries.appendAssistant(event.text, reasoning = true))
+                        }
+                        is ChatEvent.ToolStarted -> updateState {
+                            copy(entries = entries + OnboardingEntry.Trace(
+                                key = "t-${nextId++}",
+                                steps = listOf(
+                                    FocusTraceStep(
+                                        label = event.label,
+                                        status = FocusStepStatus.Running,
+                                        arguments = event.arguments,
+                                    ),
+                                ),
+                            ))
+                        }
+                        is ChatEvent.ToolFinished -> updateState {
+                            copy(entries = entries.finishTrace(event))
+                        }
+                        is ChatEvent.RetryScheduled -> updateState {
+                            copy(entries = entries.resetAssistant())
+                        }
+                        ChatEvent.Completed -> finishTurn()
                         is ChatEvent.Failed -> {
-                            finishTurn()
+                            updateState {
+                                copy(
+                                    entries = entries.finishAssistant() + OnboardingEntry.Notice(
+                                        key = "n-${nextId++}",
+                                        text = event.error.serverMessage ?: event.error.type.name,
+                                    ),
+                                    sending = false,
+                                )
+                            }
                             emitError(event.error)
                         }
                         else -> Unit
@@ -209,39 +247,52 @@ class OnboardingViewModel(
 
     private fun finishTurn() {
         updateState {
-            val answer = streamingText.trim()
             copy(
-                messages = if (answer.isBlank() && reasoning.isBlank() && steps.isEmpty()) {
-                    messages
-                } else {
-                    messages + OnboardingMessage(
-                        id = nextId++,
-                        fromUser = false,
-                        text = answer,
-                        reasoning = reasoning.trim(),
-                        steps = steps,
-                    )
-                },
-                lastMessageId = if (answer.isBlank() && reasoning.isBlank() && steps.isEmpty()) lastMessageId else nextId - 1,
-                streamingText = "",
-                reasoning = "",
-                steps = emptyList(),
+                entries = entries.finishAssistant(),
                 sending = false,
             )
         }
     }
 
-    private fun List<FocusTraceStep>.upsert(
-        label: String,
-        status: FocusStepStatus,
-        summary: String?,
-    ): List<FocusTraceStep> {
-        val index = indexOfLast { it.label == label }
-        val step = FocusTraceStep(label, status, summary)
-        return when {
-            index < 0 -> this + step
-            else -> toMutableList().also { it[index] = step }
+    private fun List<OnboardingEntry>.appendAssistant(text: String, reasoning: Boolean): List<OnboardingEntry> {
+        val last = lastOrNull()
+        if (last is OnboardingEntry.Assistant && last.live) {
+            val updated = if (reasoning) {
+                last.copy(reasoning = last.reasoning + text)
+            } else {
+                last.copy(text = last.text + text)
+            }
+            return dropLast(1) + updated
         }
+        return this + OnboardingEntry.Assistant(
+            key = "a-${nextId++}",
+            text = if (reasoning) "" else text,
+            reasoning = if (reasoning) text else "",
+            live = true,
+        )
+    }
+
+    private fun List<OnboardingEntry>.finishAssistant(): List<OnboardingEntry> = map { entry ->
+        if (entry is OnboardingEntry.Assistant && entry.live) entry.copy(live = false) else entry
+    }
+
+    private fun List<OnboardingEntry>.resetAssistant(): List<OnboardingEntry> = map { entry ->
+        if (entry is OnboardingEntry.Assistant && entry.live) entry.copy(text = "", reasoning = "") else entry
+    }
+
+    private fun List<OnboardingEntry>.finishTrace(event: ChatEvent.ToolFinished): List<OnboardingEntry> {
+        val index = indexOfLast { it is OnboardingEntry.Trace }
+        if (index < 0) return this
+        val trace = this[index] as OnboardingEntry.Trace
+        val status = if (event.ok) FocusStepStatus.Done else FocusStepStatus.Failed
+        val steps = trace.steps.map { step ->
+            if (step.label == event.label && step.status == FocusStepStatus.Running) {
+                step.copy(status = status, summary = event.summary.take(120).ifBlank { null })
+            } else {
+                step
+            }
+        }
+        return toMutableList().also { it[index] = trace.copy(steps = steps) }
     }
 
     private fun finishSetup() {
@@ -275,6 +326,7 @@ class OnboardingViewModel(
                         model = provider.model,
                         protocol = provider.protocol,
                         apiKey = key,
+                        keyOptional = !provider.requiresKey,
                     )
                 }
             }
@@ -302,6 +354,7 @@ class OnboardingViewModel(
                 providerName = preset.name,
                 baseUrl = preset.baseUrl,
                 protocol = preset.protocol,
+                keyOptional = false,
                 providerFailure = null,
                 connectionOk = false,
                 models = emptyList(),
@@ -324,7 +377,7 @@ class OnboardingViewModel(
             return
         }
         val key = state.apiKey.trim()
-        if (key.isBlank()) {
+        if (key.isBlank() && !state.keyOptional) {
             updateState { copy(providerFailure = ProviderFailure.Validation(ProviderFailure.Field.ApiKey)) }
             return
         }
@@ -366,7 +419,7 @@ class OnboardingViewModel(
             return
         }
         val key = state.apiKey.trim()
-        if (key.isBlank()) {
+        if (key.isBlank() && !state.keyOptional) {
             updateState { copy(providerFailure = ProviderFailure.Validation(ProviderFailure.Field.ApiKey)) }
             return
         }
@@ -418,7 +471,9 @@ class OnboardingViewModel(
         fetchJob?.cancel()
         val token = ++fetchToken
         val state = currentState
-        if (validBaseUrl(state.baseUrl) == null || state.apiKey.trim().isBlank()) {
+        if (validBaseUrl(state.baseUrl) == null ||
+            (state.apiKey.trim().isBlank() && !state.keyOptional)
+        ) {
             updateState { copy(fetchingModels = false) }
             return
         }
@@ -433,7 +488,7 @@ class OnboardingViewModel(
         val state = currentState
         val baseUrl = validBaseUrl(state.baseUrl) ?: return
         val key = state.apiKey.trim()
-        if (key.isBlank()) return
+        if (key.isBlank() && !state.keyOptional) return
         updateState { copy(fetchingModels = true) }
         try {
             val models = catalog.list(ModelEndpoint(baseUrl, state.model.trim()), key, state.protocol)

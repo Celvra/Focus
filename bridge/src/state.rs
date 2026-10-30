@@ -14,6 +14,7 @@ pub struct AppState {
     pub devices: Arc<RwLock<DeviceStore>>,
     pub pairing: Arc<RwLock<PairingState>>,
     pub sessions: Arc<SessionManager>,
+    pub background: Arc<crate::background::BgManager>,
 }
 
 impl AppState {
@@ -30,6 +31,7 @@ impl AppState {
             devices,
             pairing,
             sessions,
+            background: Arc::new(crate::background::BgManager::default()),
         }
     }
 

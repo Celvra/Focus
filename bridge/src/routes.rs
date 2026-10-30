@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use crate::auth::require_device;
+use crate::background::{BgIdRequest, BgManager, BgStartRequest};
 use crate::exec;
 use crate::fs;
 use crate::proto::*;
@@ -46,6 +47,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/fs/mkdir", post(fs_mkdir))
         .route("/fs/move", post(fs_move))
         .route("/fs/remove", post(fs_remove))
+        .route("/bg/start", post(bg_start))
+        .route("/bg/logs", get(bg_logs))
+        .route("/bg/kill", post(bg_kill))
+        .route("/bg/list", get(bg_list))
+        .route("/bg/clear", post(bg_clear))
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_device,
@@ -218,7 +224,7 @@ async fn run_exec(
             serde_json::to_string(&event).unwrap_or_else(|_| "{}".into()),
         ))
     });
-    Ok(Sse::new(stream))
+    Ok(Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default()))
 }
 
 async fn list_sessions(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
@@ -442,9 +448,9 @@ async fn fs_glob(
     Json(payload): Json<FsGlobRequest>,
 ) -> Result<Json<FsGlobResponse>, ApiError> {
     let workspace = device_workspace(&device);
-    let matches = fs::glob(&payload, &workspace)
+    let response = fs::glob(&payload, &workspace)
         .map_err(|err| fail(StatusCode::BAD_REQUEST, err.to_string()))?;
-    Ok(Json(FsGlobResponse { matches }))
+    Ok(Json(response))
 }
 
 async fn fs_grep(
@@ -452,9 +458,9 @@ async fn fs_grep(
     Json(payload): Json<FsGrepRequest>,
 ) -> Result<Json<FsGrepResponse>, ApiError> {
     let workspace = device_workspace(&device);
-    let matches = fs::grep(&payload, &workspace)
+    let response = fs::grep(&payload, &workspace)
         .map_err(|err| fail(StatusCode::BAD_REQUEST, err.to_string()))?;
-    Ok(Json(FsGrepResponse { matches }))
+    Ok(Json(response))
 }
 
 async fn fs_mkdir(
@@ -485,4 +491,110 @@ async fn fs_remove(
     fs::remove(&payload, &workspace)
         .map(|_| Json(json!({ "removed": true })))
         .map_err(|err| fail(StatusCode::BAD_REQUEST, err.to_string()))
+}
+
+#[derive(Debug, Deserialize)]
+struct BgLogsQuery {
+    id: String,
+    #[serde(default)]
+    after: u64,
+    #[serde(default = "default_true")]
+    follow: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+async fn bg_start(
+    State(state): State<Arc<AppState>>,
+    Extension(device): Extension<Device>,
+    Json(payload): Json<BgStartRequest>,
+) -> Result<Json<crate::background::BgJobInfo>, ApiError> {
+    let workspace = device_workspace(&device);
+    let info = state
+        .background
+        .start(&payload, &state.config, &workspace)
+        .await
+        .map_err(|err| fail(StatusCode::BAD_REQUEST, err.to_string()))?;
+    Ok(Json(info))
+}
+
+async fn bg_logs(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<BgLogsQuery>,
+) -> Result<Response, ApiError> {
+    if !query.follow {
+        let (lines, done, info) = state
+            .background
+            .logs(&query.id, query.after)
+            .await
+            .ok_or_else(|| fail(StatusCode::NOT_FOUND, "background command not found"))?;
+        return Ok(Json(json!({
+            "lines": lines,
+            "done": done,
+            "job": info,
+        }))
+        .into_response());
+    }
+    if state.background.get(&query.id).await.is_none() {
+        return Err(fail(StatusCode::NOT_FOUND, "background command not found"));
+    }
+    let manager = state.background.clone();
+    let initial = BgStreamState {
+        manager,
+        id: query.id.clone(),
+        after: query.after,
+    };
+    let stream = futures_util::stream::unfold(initial, |mut state| async move {
+        loop {
+            match state.manager.logs(&state.id, state.after).await {
+                Some((lines, done, info)) => {
+                    if !lines.is_empty() {
+                        state.after = lines.last().map(|line| line.seq).unwrap_or(state.after);
+                        let payload = json!({
+                            "lines": lines,
+                            "done": done,
+                            "job": info,
+                        });
+                        return Some((Ok::<_, std::convert::Infallible>(SseEvent::default().data(payload.to_string())), state));
+                    }
+                    if done {
+                        let payload = json!({ "lines": [], "done": true, "job": info });
+                        return Some((Ok(SseEvent::default().data(payload.to_string())), state));
+                    }
+                }
+                None => return None,
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        }
+    });
+    Ok(Sse::new(stream)
+        .keep_alive(axum::response::sse::KeepAlive::default())
+        .into_response())
+}
+
+struct BgStreamState {
+    manager: Arc<BgManager>,
+    id: String,
+    after: u64,
+}
+
+async fn bg_kill(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<BgIdRequest>,
+) -> Json<serde_json::Value> {
+    Json(json!({ "killed": state.background.kill(&payload.id).await }))
+}
+
+async fn bg_list(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    Json(json!({ "jobs": state.background.list().await }))
+}
+
+async fn bg_clear(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<Option<BgIdRequest>>,
+) -> Json<serde_json::Value> {
+    state.background.clear(payload.as_ref().map(|value| value.id.as_str())).await;
+    Json(json!({ "cleared": true }))
 }

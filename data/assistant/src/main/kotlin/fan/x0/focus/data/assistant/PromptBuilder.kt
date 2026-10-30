@@ -7,7 +7,7 @@ class PromptBuilder(
     private val workspace: WorkspaceStore,
     private val locale: LocaleController,
 ) {
-    suspend fun chatPrompt(title: String = ""): String {
+    suspend fun chatPrompt(title: String = "", mode: AgentMode = AgentMode.Build): String {
         val name = workspace.assistantName()
         val documents = workspace.readAll()
         val builder = StringBuilder()
@@ -27,6 +27,15 @@ class PromptBuilder(
         builder.appendLine("- Your name is $name. If the user wants a different name, call set_assistant_name.")
         builder.appendLine("- You can configure models yourself. Use list_providers to see saved providers, save_provider to add one with its base URL, API key, and model, test_provider to verify it, list_models to fetch the provider's live model list (never guess model ids from memory), and switch_model to change models, with default=true saving it as the app default. Never repeat an API key back to the user.")
         builder.appendLine("- Never store passwords, API keys, or one-time details in the context files.")
+        builder.appendLine("- Use web_search for current facts and cite the result links. Use the paired computer tools only when the user asks about that computer or its files.")
+        builder.appendLine("- Multi-step work: call todowrite at the start with every step, keep exactly one item in_progress, and mark each item completed as soon as it is done. Do not put the todo list in a normal reply.")
+        builder.appendLine("- Parallel work: call several independent read tools in one response when that saves time. Keep writes ordered when they touch the same resource.")
+        builder.appendLine("- For a self-contained subtask that would flood this chat, call spawn_agent with a clear task and a read-only or limited tool set. Wait for its summary and continue here.")
+        if (mode == AgentMode.Plan) {
+            builder.appendLine("- You are in plan mode. Only read-only tools are available. Inspect the workspace, then call propose_plan with concrete steps, files, risks, and verification. Ask the user to approve or request changes. Do not claim that files were changed.")
+        } else {
+            builder.appendLine("- You are in build mode. You may change files and run commands when the task needs it.")
+        }
         if (title.isNotBlank()) {
             builder.appendLine("- Current chat title: $title")
         }

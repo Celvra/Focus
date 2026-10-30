@@ -4,7 +4,23 @@ import fan.x0.focus.core.mvi.UiAction
 import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
 
-enum class BridgeTab { Devices, Terminal }
+enum class BridgeTab { Devices, Terminal, Background }
+
+data class BridgeBgJobUi(
+    val id: String,
+    val command: String,
+    val status: String,
+    val exitCode: Int,
+    val timedOut: Boolean,
+    val startedAt: Long,
+    val endedAt: Long,
+)
+
+data class BridgeBgLogUi(
+    val seq: Long,
+    val stream: String,
+    val data: String,
+)
 
 data class BridgeDeviceUi(
     val id: String,
@@ -56,6 +72,11 @@ data class BridgeUiState(
     val terminalInput: String = "",
     val connecting: Boolean = false,
     val deleteTarget: BridgeDeviceUi? = null,
+    val backgroundJobs: List<BridgeBgJobUi> = emptyList(),
+    val backgroundLogs: List<BridgeBgLogUi> = emptyList(),
+    val backgroundSelected: String? = null,
+    val backgroundLoading: Boolean = false,
+    val backgroundFollowing: Boolean = false,
 ) : UiState
 
 sealed interface BridgeAction : UiAction {
@@ -85,6 +106,12 @@ sealed interface BridgeAction : UiAction {
     data class TerminalInputChanged(val value: String) : BridgeAction
     data object SendTerminalInput : BridgeAction
     data class SendTerminalKey(val key: TerminalKey) : BridgeAction
+    data object LoadBackground : BridgeAction
+    data class OpenBackground(val id: String) : BridgeAction
+    data object CloseBackground : BridgeAction
+    data class KillBackground(val id: String) : BridgeAction
+    data object ClearBackgroundLogs : BridgeAction
+    data object ClearBackgroundJobs : BridgeAction
 }
 
 enum class TerminalKey { Escape, Tab, Enter, ControlC, ControlD }

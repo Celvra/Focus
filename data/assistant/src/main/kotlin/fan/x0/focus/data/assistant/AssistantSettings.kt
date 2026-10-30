@@ -31,6 +31,9 @@ interface SecretStore {
     suspend fun apiKey(providerId: String = LEGACY_PROVIDER_ID): String?
     suspend fun setApiKey(providerId: String, value: String)
     suspend fun clearApiKey(providerId: String = LEGACY_PROVIDER_ID)
+    suspend fun secret(key: String): String?
+    suspend fun setSecret(key: String, value: String)
+    suspend fun clearSecret(key: String)
 }
 
 private val Context.assistantDataStore by preferencesDataStore(name = "assistant_settings")

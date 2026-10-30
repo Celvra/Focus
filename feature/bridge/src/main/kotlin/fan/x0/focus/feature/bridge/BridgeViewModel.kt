@@ -4,6 +4,9 @@ import androidx.lifecycle.viewModelScope
 import fan.x0.focus.core.error.toAppError
 import fan.x0.focus.core.mvi.BaseViewModel
 import fan.x0.focus.data.bridge.BridgeEndpoint
+import fan.x0.focus.data.bridge.BridgeBgJob
+import fan.x0.focus.data.bridge.BridgeBgLogLine
+import fan.x0.focus.data.bridge.BridgeBgLogsResult
 import fan.x0.focus.data.bridge.BridgeRepository
 import fan.x0.focus.data.bridge.BridgeTerminal
 import fan.x0.focus.data.bridge.BridgeTerminalEvent
@@ -17,6 +20,7 @@ class BridgeViewModel(
 ) : BaseViewModel<BridgeAction, BridgeUiState, BridgeEffect>(BridgeUiState()) {
 
     private var refreshJob: Job? = null
+    private var backgroundJob: Job? = null
     private val connections = mutableMapOf<String, DeviceConnection>()
     private var endpoints: List<BridgeEndpoint> = emptyList()
 
@@ -36,7 +40,10 @@ class BridgeViewModel(
 
     override fun onAction(action: BridgeAction) {
         when (action) {
-            is BridgeAction.TabChanged -> updateState { copy(tab = action.tab) }
+            is BridgeAction.TabChanged -> {
+                updateState { copy(tab = action.tab) }
+                if (action.tab == BridgeTab.Background) loadBackground()
+            }
             BridgeAction.Refresh -> refresh()
             BridgeAction.Scan -> scan()
             is BridgeAction.UseDiscovered -> updateState {
@@ -74,8 +81,111 @@ class BridgeViewModel(
                 sendInput("$raw\r")
             }
             is BridgeAction.SendTerminalKey -> sendKey(action.key)
+            BridgeAction.LoadBackground -> loadBackground()
+            is BridgeAction.OpenBackground -> openBackground(action.id)
+            BridgeAction.CloseBackground -> {
+                backgroundJob?.cancel()
+                updateState {
+                    copy(backgroundSelected = null, backgroundLogs = emptyList(), backgroundFollowing = false)
+                }
+            }
+            is BridgeAction.KillBackground -> killBackground(action.id)
+            BridgeAction.ClearBackgroundLogs -> updateState { copy(backgroundLogs = emptyList()) }
+            BridgeAction.ClearBackgroundJobs -> clearBackgroundJobs()
         }
     }
+
+    private fun loadBackground() {
+        val endpoint = activeEndpoint() ?: return
+        if (currentState.backgroundLoading) return
+        updateState { copy(backgroundLoading = true) }
+        launchGuarded(
+            onError = {
+                updateState { copy(backgroundLoading = false) }
+                emitError(it)
+            },
+        ) {
+            val jobs = bridge.backgroundList(endpoint).map { it.toUi() }
+            updateState { copy(backgroundLoading = false, backgroundJobs = jobs) }
+        }
+    }
+
+    private fun openBackground(id: String) {
+        val endpoint = activeEndpoint() ?: return
+        backgroundJob?.cancel()
+        updateState {
+            copy(
+                backgroundSelected = id,
+                backgroundLogs = emptyList(),
+                backgroundFollowing = true,
+            )
+        }
+        backgroundJob = viewModelScope.launch {
+            while (currentState.backgroundSelected == id) {
+                val failed = runCatching {
+                    bridge.backgroundLogs(endpoint, id, after = 0, follow = true) { frame ->
+                        applyBackgroundFrame(frame)
+                    }
+                }.isFailure
+                if (!failed) break
+                updateState { copy(backgroundFollowing = false) }
+                kotlinx.coroutines.delay(1_200)
+                if (currentState.backgroundSelected != id) break
+                updateState { copy(backgroundFollowing = true) }
+            }
+            updateState { copy(backgroundFollowing = false) }
+            loadBackground()
+        }
+    }
+
+    private fun applyBackgroundFrame(frame: BridgeBgLogsResult) {
+        if (frame.lines.isEmpty()) {
+            if (frame.done) updateState { copy(backgroundFollowing = false) }
+            return
+        }
+        updateState {
+            val existing = backgroundLogs.map { it.seq }.toSet()
+            val added = frame.lines
+                .filterNot { it.seq in existing }
+                .map { it.toUi() }
+            copy(
+                backgroundLogs = (backgroundLogs + added).takeLast(MAX_BACKGROUND_LINES),
+                backgroundFollowing = !frame.done,
+            )
+        }
+    }
+
+    private fun killBackground(id: String) {
+        val endpoint = activeEndpoint() ?: return
+        launchGuarded(onError = ::emitError) {
+            bridge.backgroundKill(endpoint, id)
+            loadBackground()
+        }
+    }
+
+    private fun clearBackgroundJobs() {
+        val endpoint = activeEndpoint() ?: return
+        launchGuarded(onError = ::emitError) {
+            bridge.backgroundClear(endpoint, id = null)
+            updateState { copy(backgroundJobs = emptyList(), backgroundLogs = emptyList(), backgroundSelected = null) }
+        }
+    }
+
+    private fun BridgeBgJob.toUi(): BridgeBgJobUi = BridgeBgJobUi(
+        id = id,
+        command = command,
+        status = status,
+        exitCode = exitCode,
+        timedOut = timedOut,
+        startedAt = startedAt,
+        endedAt = endedAt,
+    )
+
+    private fun BridgeBgLogLine.toUi(): BridgeBgLogUi = BridgeBgLogUi(
+        seq = seq,
+        stream = stream,
+        data = data,
+    )
 
     private fun refresh() {
         if (refreshJob?.isActive == true) return
@@ -465,6 +575,7 @@ class BridgeViewModel(
 
     private companion object {
         const val MAX_TERMINAL_CHARS = 120_000
+        const val MAX_BACKGROUND_LINES = 2_000
     }
 }
 

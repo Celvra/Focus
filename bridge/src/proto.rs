@@ -189,6 +189,10 @@ pub struct FsGlobRequest {
 #[derive(Debug, Serialize)]
 pub struct FsGlobResponse {
     pub matches: Vec<String>,
+    #[serde(default)]
+    pub truncated: bool,
+    #[serde(default)]
+    pub root: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -199,19 +203,36 @@ pub struct FsGrepRequest {
     #[serde(default)]
     pub include: Option<String>,
     #[serde(default)]
+    pub exclude: Option<String>,
+    #[serde(default)]
     pub literal: bool,
+    #[serde(default)]
+    pub case_sensitive: bool,
+    #[serde(default)]
+    pub context: Option<u32>,
+    #[serde(default)]
+    pub limit: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct FsGrepMatch {
     pub path: String,
     pub line: u32,
+    pub column: u32,
     pub text: String,
+    #[serde(default)]
+    pub before: Vec<String>,
+    #[serde(default)]
+    pub after: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct FsGrepResponse {
     pub matches: Vec<FsGrepMatch>,
+    #[serde(default)]
+    pub truncated: bool,
+    #[serde(default)]
+    pub root: String,
 }
 
 #[derive(Debug, Deserialize)]

@@ -38,6 +38,18 @@ class KeystoreSecretStore(@Provided private val context: Context) : SecretStore 
         }.apply()
     }
 
+    override suspend fun secret(name: String): String? = withContext(Dispatchers.IO) {
+        prefs.getString(key(name), null)?.let { runCatching { decrypt(it) }.getOrNull() }
+    }
+
+    override suspend fun setSecret(name: String, value: String) = withContext(Dispatchers.IO) {
+        prefs.edit().putString(key(name), encrypt(value)).apply()
+    }
+
+    override suspend fun clearSecret(name: String) = withContext(Dispatchers.IO) {
+        prefs.edit().remove(key(name)).apply()
+    }
+
     private fun key(providerId: String): String = "api_key_$providerId"
 
     private fun encrypt(value: String): String {

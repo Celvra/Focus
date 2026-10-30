@@ -193,6 +193,13 @@ data class UsageDto(
     @SerialName("prompt_tokens") val promptTokens: Int = 0,
     @SerialName("completion_tokens") val completionTokens: Int = 0,
     @SerialName("total_tokens") val totalTokens: Int = 0,
+    @SerialName("prompt_tokens_details") val promptDetails: PromptTokensDetailsDto? = null,
+    @SerialName("cache_read_input_tokens") val cacheReadInputTokens: Int = 0,
+)
+
+@Serializable
+data class PromptTokensDetailsDto(
+    @SerialName("cached_tokens") val cachedTokens: Int = 0,
 )
 
 @Serializable
@@ -265,7 +272,12 @@ sealed interface ChatStreamEvent {
         val arguments: String?,
     ) : ChatStreamEvent
     data class Finished(val reason: String?) : ChatStreamEvent
-    data class Usage(val prompt: Int, val completion: Int, val total: Int) : ChatStreamEvent
+    data class Usage(
+        val prompt: Int,
+        val completion: Int,
+        val total: Int,
+        val cached: Int = 0,
+    ) : ChatStreamEvent
     data class ProtocolError(val message: String) : ChatStreamEvent
 }
 

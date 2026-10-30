@@ -125,3 +125,24 @@ pub fn real_path(path: &Path) -> Result<PathBuf> {
     }
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn restricted_workspace_rejects_outside_paths() {
+        let base = std::env::temp_dir().join(format!("focus-ws-{}", rand::random::<u64>()));
+        std::fs::create_dir_all(&base).unwrap();
+        let workspace = Workspace::new(vec![base.display().to_string()]).unwrap();
+        assert!(workspace.check(&base.join("file.txt").display().to_string()).is_ok());
+        assert!(workspace.check("/etc/passwd").is_err());
+        assert!(workspace.check("../outside").is_err());
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn normalize_removes_parent_segments() {
+        assert_eq!(normalize(Path::new("/a/b/../c/./d")), PathBuf::from("/a/c/d"));
+    }
+}

@@ -57,7 +57,7 @@ class OpenAiModelCatalog(
             header("x-api-key", apiKey)
             header("anthropic-version", "2023-06-01")
         } else {
-            header(HttpHeaders.Authorization, "Bearer $apiKey")
+            if (apiKey.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $apiKey")
         }
     }
 }

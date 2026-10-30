@@ -38,4 +38,6 @@
     <string name="onboarding_err_base_url">Enter a valid base URL.</string>
     <string name="onboarding_err_model">Enter a model.</string>
     <string name="onboarding_err_key">Enter an API key.</string>
+    <string name="onboarding_key_optional">No key needed</string>
+    <string name="onboarding_key_optional_body">Use this only when the provider serves models without an API key.</string>
 </resources>

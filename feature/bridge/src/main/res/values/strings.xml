@@ -43,4 +43,23 @@
     <string name="bridge_discovered_title">Found on network</string>
     <string name="bridge_refresh">Refresh</string>
     <string name="bridge_select">Select</string>
+
+    <string name="bridge_tab_background">Background</string>
+    <string name="bridge_bg_title">Background commands</string>
+    <string name="bridge_bg_clear">Clear finished</string>
+    <string name="bridge_bg_empty_title">No background commands</string>
+    <string name="bridge_bg_empty_body">Commands started by the assistant appear here with live logs.</string>
+    <string name="bridge_bg_exit">Exit %1$d</string>
+    <string name="bridge_bg_running">Running</string>
+    <string name="bridge_bg_completed">Completed</string>
+    <string name="bridge_bg_failed">Failed</string>
+    <string name="bridge_bg_timed_out">Timed out</string>
+    <string name="bridge_bg_killed">Stopped</string>
+    <string name="bridge_bg_back">Back</string>
+    <string name="bridge_bg_following">Live logs</string>
+    <string name="bridge_bg_finished">Finished</string>
+    <string name="bridge_bg_copy">Copy logs</string>
+    <string name="bridge_bg_clear_logs">Clear logs</string>
+    <string name="bridge_bg_kill">Stop command</string>
+    <string name="bridge_bg_no_logs">No output yet.</string>
 </resources>

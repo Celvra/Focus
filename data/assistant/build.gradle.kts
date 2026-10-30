@@ -21,5 +21,6 @@ dependencies {
     implementation(libs.ktor.client.core)
     implementation(libs.datastore.preferences)
     implementation(libs.work.runtime)
+    implementation(libs.jsoup)
     testImplementation(libs.junit)
 }

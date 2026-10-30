@@ -33,8 +33,8 @@ object NetworkExceptionMapper {
         return null
     }
 
-    fun http(status: Int, body: String?): NetworkException.Http =
-        NetworkException.Http(status, decodeError(body), snippet(body))
+    fun http(status: Int, body: String?, retryAfterSeconds: Long? = null): NetworkException.Http =
+        NetworkException.Http(status, decodeError(body), snippet(body), retryAfterSeconds)
 
     fun decodeError(body: String?): DecodedHttpError? {
         if (body.isNullOrBlank()) return null

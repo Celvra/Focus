@@ -7,7 +7,11 @@ enum class ChatTurnStepStatus { Pending, Running, Done, Failed }
 data class ChatTurnStep(
     val label: String,
     val status: ChatTurnStepStatus,
+    val id: String = "",
+    val tool: String = "",
+    val arguments: String = "",
     val summary: String? = null,
+    val output: String? = null,
 )
 
 enum class ChatTurnApprovalPhase { Waiting, Running, Finished, Declined }
@@ -34,6 +38,7 @@ sealed interface ChatTurnEntry {
     data class Answer(val text: String, val reasoning: String) : ChatTurnEntry
     data class Trace(val steps: List<ChatTurnStep>) : ChatTurnEntry
     data class Approval(val card: ChatTurnApproval) : ChatTurnEntry
+    data class Plan(val plan: ProposedPlan, val card: ChatTurnApproval) : ChatTurnEntry
     data class Ask(val card: ChatTurnAsk) : ChatTurnEntry
 }
 
@@ -43,6 +48,17 @@ data class ChatTurnState(
     val running: Boolean = false,
     val workingText: String = "",
     val entries: List<ChatTurnEntry> = emptyList(),
+    val retry: RetryState? = null,
+    val stats: MessageStats = MessageStats(),
+    val todos: List<ConversationTodo> = emptyList(),
+    val plan: ProposedPlan? = null,
+    val planRequestId: String = "",
+)
+
+data class RetryState(
+    val attempt: Int,
+    val max: Int,
+    val reason: String,
 )
 
 data class ChatTurnResult(

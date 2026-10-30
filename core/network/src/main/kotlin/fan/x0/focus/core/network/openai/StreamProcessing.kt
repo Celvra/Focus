@@ -39,7 +39,12 @@ class StreamAccumulator {
                 if (event.arguments != null) call.arguments.append(event.arguments)
             }
             is ChatStreamEvent.Finished -> finishReason = event.reason
-            is ChatStreamEvent.Usage -> usage = UsageDto(event.prompt, event.completion, event.total)
+            is ChatStreamEvent.Usage -> usage = UsageDto(
+                promptTokens = event.prompt,
+                completionTokens = event.completion,
+                totalTokens = event.total,
+                promptDetails = PromptTokensDetailsDto(event.cached),
+            )
             is ChatStreamEvent.ProtocolError -> Unit
         }
     }

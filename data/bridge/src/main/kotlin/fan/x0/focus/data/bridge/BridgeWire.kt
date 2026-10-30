@@ -124,9 +124,13 @@ data class BridgeReadRequest(
 @Serializable
 data class BridgeReadResult(
     val lines: String = "",
+    val content: String = "",
     @SerialName("total_lines") val totalLines: Long = 0,
     @SerialName("start_line") val startLine: Int = 1,
+    @SerialName("end_line") val endLine: Int = 1,
+    @SerialName("next_offset") val nextOffset: Int? = null,
     val truncated: Boolean = false,
+    val notice: String = "",
     val size: Long = 0,
 )
 
@@ -172,6 +176,8 @@ data class BridgeGlobRequest(
 @Serializable
 data class BridgeGlobResult(
     val matches: List<String> = emptyList(),
+    val truncated: Boolean = false,
+    val root: String = "",
 )
 
 @Serializable
@@ -179,19 +185,28 @@ data class BridgeGrepRequest(
     val pattern: String,
     val root: String? = null,
     val include: String? = null,
+    val exclude: String? = null,
     val literal: Boolean = false,
+    @SerialName("case_sensitive") val caseSensitive: Boolean = false,
+    val context: Int? = null,
+    val limit: Int? = null,
 )
 
 @Serializable
 data class BridgeGrepMatch(
     val path: String = "",
     val line: Int = 0,
+    val column: Int = 0,
     val text: String = "",
+    val before: List<String> = emptyList(),
+    val after: List<String> = emptyList(),
 )
 
 @Serializable
 data class BridgeGrepResult(
     val matches: List<BridgeGrepMatch> = emptyList(),
+    val truncated: Boolean = false,
+    val root: String = "",
 )
 
 @Serializable
@@ -212,6 +227,8 @@ data class BridgeOkResult(
     val moved: Boolean = false,
     val removed: Boolean = false,
     val closed: Boolean = false,
+    val killed: Boolean = false,
+    val cleared: Boolean = false,
     val replacements: Int = 0,
     val bytes: Long = 0,
     val path: String = "",
@@ -220,4 +237,52 @@ data class BridgeOkResult(
 @Serializable
 data class BridgeTailResult(
     val output: String = "",
+)
+
+@Serializable
+data class BridgeBgStartRequest(
+    val command: String,
+    val cwd: String? = null,
+    val env: Map<String, String>? = null,
+    @SerialName("timeout_sec") val timeoutSec: Long? = null,
+)
+
+@Serializable
+data class BridgeBgJob(
+    val id: String = "",
+    val command: String = "",
+    val cwd: String = "",
+    val pid: Long = 0,
+    @SerialName("started_at") val startedAt: Long = 0,
+    @SerialName("ended_at") val endedAt: Long = 0,
+    val status: String = "",
+    @SerialName("exit_code") val exitCode: Int = 0,
+    @SerialName("timed_out") val timedOut: Boolean = false,
+    val lines: Int = 0,
+    val bytes: Int = 0,
+)
+
+@Serializable
+data class BridgeBgLogLine(
+    val seq: Long = 0,
+    val stream: String = "",
+    val data: String = "",
+    val at: Long = 0,
+)
+
+@Serializable
+data class BridgeBgLogsResult(
+    val lines: List<BridgeBgLogLine> = emptyList(),
+    val done: Boolean = false,
+    val job: BridgeBgJob? = null,
+)
+
+@Serializable
+data class BridgeBgListResult(
+    val jobs: List<BridgeBgJob> = emptyList(),
+)
+
+@Serializable
+data class BridgeBgIdRequest(
+    val id: String,
 )

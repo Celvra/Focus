@@ -38,4 +38,6 @@
     <string name="onboarding_err_base_url">请输入有效的接口地址。</string>
     <string name="onboarding_err_model">请输入模型。</string>
     <string name="onboarding_err_key">请输入 API 密钥。</string>
+    <string name="onboarding_key_optional">不需要密钥</string>
+    <string name="onboarding_key_optional_body">仅在提供方无需 API Key 就能提供模型时开启。</string>
 </resources>

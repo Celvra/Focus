@@ -27,6 +27,7 @@ data class SettingsUiState(
     val protocol: ChatProtocol = ChatProtocol.ChatCompletions,
     val apiKeyInput: String = "",
     val apiKeySaved: Boolean = false,
+    val requiresKey: Boolean = true,
     val apiKeyVisible: Boolean = false,
     val draftMakeActive: Boolean = true,
     val savingConnection: Boolean = false,
@@ -53,6 +54,7 @@ data class SettingsUiState(
     val judgeTimeoutSeconds: Int = 8,
     val maxRounds: Int = AgentDefaults.MAX_ROUNDS,
     val unlimitedRounds: Boolean = false,
+    val maxRetries: Int = 4,
     val modelPickerTarget: ModelPickerTarget = ModelPickerTarget.Provider,
 ) : UiState {
     val activeProvider: ProviderConfig? get() = providers.firstOrNull { it.id == activeProviderId }
@@ -77,6 +79,7 @@ sealed interface SettingsAction : UiAction {
     data class ModelChanged(val value: String) : SettingsAction
     data class ProtocolChanged(val value: ChatProtocol) : SettingsAction
     data class ApiKeyChanged(val value: String) : SettingsAction
+    data class RequiresKeyChanged(val value: Boolean) : SettingsAction
     data object ToggleApiKeyVisibility : SettingsAction
     data class MakeActiveChanged(val value: Boolean) : SettingsAction
     data object SaveProvider : SettingsAction
@@ -99,6 +102,7 @@ sealed interface SettingsAction : UiAction {
     data class JudgeMaxRiskChanged(val value: Int) : SettingsAction
     data class JudgeTimeoutChanged(val value: Int) : SettingsAction
     data class MaxRoundsChanged(val value: Int) : SettingsAction
+    data class MaxRetriesChanged(val value: Int) : SettingsAction
     data class UnlimitedRoundsChanged(val value: Boolean) : SettingsAction
 }
 

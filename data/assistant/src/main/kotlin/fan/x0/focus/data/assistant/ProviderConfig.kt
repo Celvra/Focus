@@ -12,6 +12,7 @@ data class ProviderConfig(
     val baseUrl: String,
     val model: String = "",
     val protocol: ChatProtocol = ChatProtocol.ChatCompletions,
+    val requiresKey: Boolean = true,
 )
 
 object ProviderCatalog {
