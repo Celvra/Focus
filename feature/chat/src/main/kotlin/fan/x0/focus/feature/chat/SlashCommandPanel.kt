@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 
 @Composable
@@ -136,7 +137,7 @@ private fun SlashCommandRow(
         shape = MaterialTheme.shapes.medium,
         color = container,
         contentColor = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
-        onClick = onClick,
+        onClick = hapticTap(onClick),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),

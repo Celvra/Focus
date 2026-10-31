@@ -1,5 +1,7 @@
 package fan.x0.focus.feature.goals
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,10 +23,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -35,6 +34,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,14 +52,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fan.x0.focus.core.designsystem.components.FocusEmptyState
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.FocusLargeTopBar
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusStatusPill
 import fan.x0.focus.core.designsystem.components.FocusTabContent
 import fan.x0.focus.core.designsystem.components.FocusTabSwitcher
 import fan.x0.focus.core.designsystem.components.FocusTextButton
-import fan.x0.focus.core.designsystem.components.FocusLargeTopBar
 import fan.x0.focus.core.designsystem.components.StatusTone
+import fan.x0.focus.core.designsystem.components.hapticSelect
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
@@ -92,7 +94,7 @@ fun GoalsScreen(
                 title = stringResource(R.string.goals_title),
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(onClick = { onAction(GoalsAction.Add) }) {
+                    IconButton(onClick = hapticTap { onAction(GoalsAction.Add) }) {
                         Icon(
                             FocusIcons.Add,
                             contentDescription = stringResource(R.string.goals_add),
@@ -175,12 +177,12 @@ fun GoalsScreen(
             title = { Text(stringResource(R.string.goals_delete_title)) },
             text = { Text(stringResource(R.string.goals_delete_body, goal.title)) },
             confirmButton = {
-                TextButton(onClick = { onAction(GoalsAction.ConfirmDelete) }) {
+                TextButton(onClick = hapticTap { onAction(GoalsAction.ConfirmDelete) }) {
                     Text(stringResource(R.string.goals_delete_confirm))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { onAction(GoalsAction.CancelDelete) }) {
+                TextButton(onClick = hapticTap { onAction(GoalsAction.CancelDelete) }) {
                     Text(stringResource(R.string.goals_cancel))
                 }
             },
@@ -265,7 +267,7 @@ private fun GoalCard(
                 Slider(
                     value = slider,
                     onValueChange = { slider = it },
-                    onValueChangeFinished = { onProgress((slider * 100).toInt()) },
+                    onValueChangeFinished = hapticSelect { onProgress((slider * 100).toInt()) },
                 )
             } else if (!goal.note.isNullOrBlank()) {
                 Text(
@@ -285,7 +287,7 @@ private fun GoalCard(
                 )
                 FocusTextButton(text = stringResource(R.string.goals_edit), onClick = onEdit)
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onDelete) {
+                IconButton(onClick = hapticTap(onDelete)) {
                     Icon(
                         FocusIcons.Delete,
                         contentDescription = stringResource(R.string.goals_delete),

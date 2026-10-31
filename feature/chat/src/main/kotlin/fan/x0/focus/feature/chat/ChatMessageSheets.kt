@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusTextButton
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -115,7 +116,7 @@ internal fun MessageDeleteDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = onConfirm,
+                onClick = hapticTap(onConfirm),
                 colors = ButtonDefaults.textButtonColors(
                     contentColor = MaterialTheme.colorScheme.error,
                 ),
@@ -124,7 +125,7 @@ internal fun MessageDeleteDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = hapticTap(onDismiss)) {
                 Text(stringResource(R.string.chat_delete_cancel))
             }
         },

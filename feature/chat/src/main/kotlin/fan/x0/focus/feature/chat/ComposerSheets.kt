@@ -51,12 +51,14 @@ import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.BrandIcon
 import fan.x0.focus.core.designsystem.components.BrandIcons
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.hapticSelect
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.components.rememberProviderImage
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.data.assistant.AgentMode
 import fan.x0.focus.data.assistant.ReasoningLevel
-import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 private const val MAX_HINT_DURATION_MS = 3000L
 
@@ -104,7 +106,7 @@ internal fun ProviderPickerSheet(
                     val brand = BrandIcons.forKey(provider.icon)
                         ?: BrandIcons.forProvider(provider.id, provider.name)
                     Surface(
-                        onClick = { onSelect(provider.id) },
+                        onClick = hapticTap { onSelect(provider.id) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.largeIncreased,
                         color = if (active) {
@@ -295,7 +297,7 @@ internal fun ReasoningPickerSheet(
             Slider(
                 state = sliderState,
                 onValueChange = { sliderState.value = it },
-                onValueChangeFinished = {
+                onValueChangeFinished = hapticSelect {
                     val index = sliderState.value.roundToInt().coerceIn(0, levels.lastIndex)
                     sliderState.value = index.toFloat()
                     onSelect(levels[index])
@@ -377,7 +379,7 @@ internal fun AttachmentSheet(
                 AgentMode.entries.forEachIndexed { index, option ->
                     SegmentedButton(
                         selected = option == mode,
-                        onClick = { onModeSelect(option) },
+                        onClick = hapticSelect { onModeSelect(option) },
                         shape = SegmentedButtonDefaults.itemShape(
                             index = index,
                             count = AgentMode.entries.size,
@@ -405,7 +407,7 @@ private fun AttachmentTile(
     modifier: Modifier = Modifier,
 ) {
     FilledTonalButton(
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         modifier = modifier.heightIn(min = 88.dp),
         shape = MaterialTheme.shapes.extraLarge,
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 16.dp),

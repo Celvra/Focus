@@ -38,6 +38,7 @@ import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
 import fan.x0.focus.core.designsystem.components.FocusStatusPill
 import fan.x0.focus.core.designsystem.components.FocusTextButton
 import fan.x0.focus.core.designsystem.components.StatusTone
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 
 @Composable
@@ -66,7 +67,7 @@ internal fun BackgroundPane(
                     onClick = { onAction(BridgeAction.ClearBackgroundJobs) },
                 )
             }
-            IconButton(onClick = { onAction(BridgeAction.LoadBackground) }) {
+            IconButton(onClick = hapticTap { onAction(BridgeAction.LoadBackground) }) {
                 Icon(
                     imageVector = FocusIcons.Refresh,
                     contentDescription = stringResource(R.string.bridge_refresh),
@@ -126,7 +127,7 @@ private fun BackgroundJobCard(
         modifier = modifier.fillMaxWidth(),
         shape = FocusShapeTokens.card,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        onClick = onClick,
+        onClick = hapticTap(onClick),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -209,7 +210,7 @@ private fun BackgroundDetailSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = { onAction(BridgeAction.CloseBackground) }) {
+                IconButton(onClick = hapticTap { onAction(BridgeAction.CloseBackground) }) {
                     Icon(
                         imageVector = FocusIcons.Close,
                         contentDescription = stringResource(R.string.bridge_bg_back),

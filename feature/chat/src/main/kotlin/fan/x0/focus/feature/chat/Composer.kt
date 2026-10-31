@@ -51,6 +51,7 @@ import fan.x0.focus.core.designsystem.components.FocusComposerPill
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusImageLightbox
 import fan.x0.focus.core.designsystem.components.FocusSearchPickerSheet
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.data.assistant.AttachmentKind
 
 @Composable
@@ -270,7 +271,7 @@ private fun ReplyPreview(
                 )
             }
             Surface(
-                onClick = onCancel,
+                onClick = hapticTap(onCancel),
                 modifier = Modifier.size(32.dp),
                 shape = CircleShape,
                 color = Color.Transparent,
@@ -350,7 +351,7 @@ internal fun AttachmentChip(
                 modifier = Modifier.widthIn(max = 140.dp),
             )
             Surface(
-                onClick = onRemove,
+                onClick = hapticTap(onRemove),
                 modifier = Modifier.size(26.dp),
                 shape = CircleShape,
                 color = Color.Transparent,
@@ -385,7 +386,7 @@ internal fun UserAttachmentStrip(attachments: List<AttachmentUi>) {
                     modifier = Modifier
                         .size(72.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .clickable(role = Role.Button) { preview = attachment },
+                        .clickable(role = Role.Button, onClick = hapticTap { preview = attachment }),
                 )
             } else {
                 Surface(

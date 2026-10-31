@@ -86,7 +86,7 @@ fun FocusImageLightbox(
                     )
                 }
                 Surface(
-                    onClick = onDismiss,
+                    onClick = hapticTap(onDismiss),
                     shape = CircleShape,
                     color = scheme.surfaceContainer.copy(alpha = 0.9f),
                     contentColor = scheme.onSurface,
@@ -112,6 +112,7 @@ private fun LightboxImage(image: ImageBitmap, title: String) {
     var container by remember { mutableStateOf(IntSize.Zero) }
     var scale by remember(image) { mutableFloatStateOf(MIN_SCALE) }
     var offset by remember(image) { mutableStateOf(Offset.Zero) }
+    val haptics = LocalFocusHaptics.current
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -130,6 +131,7 @@ private fun LightboxImage(image: ImageBitmap, title: String) {
             .pointerInput(image, container) {
                 detectTapGestures(
                     onDoubleTap = { tap ->
+                        haptics.select()
                         if (scale > MIN_SCALE + 0.01f) {
                             scale = MIN_SCALE
                             offset = Offset.Zero

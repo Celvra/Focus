@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.FocusChatBubble
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 
 @Composable
@@ -98,7 +99,7 @@ private fun MessageQuote(
         }
     }
     Surface(
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         enabled = !quote.deleted,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -171,7 +172,7 @@ internal fun SelectionModeBar(
                 modifier = Modifier.weight(1f),
             )
             TextButton(
-                onClick = onDone,
+                onClick = hapticTap(onDone),
                 colors = ButtonDefaults.textButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                 ),

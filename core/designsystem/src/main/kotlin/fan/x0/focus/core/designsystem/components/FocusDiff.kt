@@ -128,7 +128,8 @@ private fun FocusDiffCard(diff: FocusDiff) {
                         interactionSource = interaction,
                         indication = null,
                         role = Role.Button,
-                    ) { expanded = !expanded }
+                        onClick = hapticTap { expanded = !expanded },
+                    )
                     .heightIn(min = 40.dp)
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

@@ -32,6 +32,8 @@ import fan.x0.focus.core.designsystem.components.FocusCategoryIcons
 import fan.x0.focus.core.designsystem.components.FocusDivider
 import fan.x0.focus.core.designsystem.components.FocusIconBadge
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.hapticTap
+import fan.x0.focus.core.designsystem.components.hapticToggle
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 
 @Composable
@@ -92,7 +94,7 @@ fun GoalsPane(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onAction(TodayAction.NewGoal) }
+                    .clickable(onClick = hapticTap { onAction(TodayAction.NewGoal) })
                     .padding(vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -137,7 +139,7 @@ private fun GoalRow(
     ) {
         Checkbox(
             checked = goal.done,
-            onCheckedChange = { onAction(TodayAction.ToggleGoal(goal.id)) },
+            onCheckedChange = hapticToggle { onAction(TodayAction.ToggleGoal(goal.id)) },
             modifier = Modifier.padding(top = 2.dp),
         )
         Column(
@@ -170,7 +172,7 @@ private fun GoalRow(
             }
         }
         Box {
-            IconButton(onClick = { onAction(TodayAction.GoalMenu(goal.id)) }) {
+            IconButton(onClick = hapticTap { onAction(TodayAction.GoalMenu(goal.id)) }) {
                 Icon(
                     imageVector = FocusIcons.More,
                     contentDescription = stringResource(R.string.today_goal_more),
@@ -183,11 +185,11 @@ private fun GoalRow(
             ) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.today_goal_edit)) },
-                    onClick = { onAction(TodayAction.EditGoal(goal.id)) },
+                    onClick = hapticTap { onAction(TodayAction.EditGoal(goal.id)) },
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.today_goal_delete)) },
-                    onClick = { onAction(TodayAction.AskDeleteGoal(goal.id)) },
+                    onClick = hapticTap { onAction(TodayAction.AskDeleteGoal(goal.id)) },
                 )
             }
         }
@@ -199,7 +201,7 @@ private fun CategoryRow(category: CategoryOptionUi, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = hapticTap(onClick))
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),

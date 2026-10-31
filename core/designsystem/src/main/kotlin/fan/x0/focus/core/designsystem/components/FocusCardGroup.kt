@@ -185,7 +185,7 @@ fun FocusCardGroupScope.switchItem(
     trailingContent = {
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = hapticToggle(onCheckedChange),
             thumbContent = if (checked && checkedIcon != null) {
                 {
                     Icon(
@@ -403,12 +403,12 @@ private fun GroupListItem(item: GroupItem, index: Int, count: Int) {
                         interactionSource = interaction,
                         indication = LocalIndication.current,
                         role = item.role,
-                        onClick = item.onClick,
+                        onClick = hapticSelect(item.onClick),
                     )
                     else -> Modifier.clickable(
                         interactionSource = interaction,
                         indication = LocalIndication.current,
-                        onClick = item.onClick,
+                        onClick = hapticTap(item.onClick),
                     )
                 },
             ),

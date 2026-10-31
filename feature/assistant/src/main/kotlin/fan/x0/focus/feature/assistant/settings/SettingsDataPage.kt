@@ -49,16 +49,17 @@ import fan.x0.focus.core.designsystem.components.FocusCardGroupIcon
 import fan.x0.focus.core.designsystem.components.FocusCardGroupValue
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusReveal
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.data.assistant.Contributor
 import fan.x0.focus.data.assistant.DataUsage
 import fan.x0.focus.feature.assistant.DataClearTarget
 import fan.x0.focus.feature.assistant.R
 import fan.x0.focus.feature.assistant.SettingsAction
 import fan.x0.focus.feature.assistant.SettingsUiState
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun SettingsDataPage(
@@ -84,7 +85,7 @@ internal fun SettingsDataPage(
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 }
             } else {
-                IconButton(onClick = { onAction(SettingsAction.RefreshData) }) {
+                IconButton(onClick = hapticTap { onAction(SettingsAction.RefreshData) }) {
                     Icon(
                         imageVector = FocusIcons.Refresh,
                         contentDescription = stringResource(R.string.settings_data_refresh),
@@ -133,12 +134,12 @@ internal fun SettingsDataPage(
             title = { Text(stringResource(R.string.settings_reset_title)) },
             text = { Text(stringResource(R.string.settings_reset_body)) },
             confirmButton = {
-                TextButton(onClick = { onAction(SettingsAction.ConfirmReset) }) {
+                TextButton(onClick = hapticTap { onAction(SettingsAction.ConfirmReset) }) {
                     Text(stringResource(R.string.settings_reset_confirm))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { onAction(SettingsAction.CancelReset) }) {
+                TextButton(onClick = hapticTap { onAction(SettingsAction.CancelReset) }) {
                     Text(stringResource(R.string.assistant_cancel))
                 }
             },
@@ -470,7 +471,7 @@ private fun ContributorRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .clickable { onOpen(contributor.url) }
+            .clickable(onClick = hapticTap { onOpen(contributor.url) })
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -562,7 +563,7 @@ private fun ErrorRow(onRetry: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = onRetry) {
+        TextButton(onClick = hapticTap(onRetry)) {
             Text(stringResource(R.string.settings_about_contributors_retry))
         }
     }
@@ -587,12 +588,12 @@ private fun ClearConfirmDialog(
         title = { Text(stringResource(title)) },
         text = { Text(stringResource(body)) },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(onClick = hapticTap(onConfirm)) {
                 Text(stringResource(R.string.settings_data_clear_confirm))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = hapticTap(onDismiss)) {
                 Text(stringResource(R.string.assistant_cancel))
             }
         },

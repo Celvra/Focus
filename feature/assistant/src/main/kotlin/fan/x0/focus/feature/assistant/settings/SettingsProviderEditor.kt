@@ -1,13 +1,13 @@
 package fan.x0.focus.feature.assistant.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,6 +65,8 @@ import fan.x0.focus.core.designsystem.components.FocusTabContent
 import fan.x0.focus.core.designsystem.components.FocusTabSwitcher
 import fan.x0.focus.core.designsystem.components.FocusTextButton
 import fan.x0.focus.core.designsystem.components.StatusTone
+import fan.x0.focus.core.designsystem.components.hapticTap
+import fan.x0.focus.core.designsystem.components.hapticToggle
 import fan.x0.focus.core.designsystem.components.rememberProviderImage
 import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.feature.assistant.R
@@ -134,7 +136,7 @@ private fun ProviderEditorHeader(state: SettingsUiState, onAction: (SettingsActi
             modifier = Modifier.weight(1f),
         )
         if (state.canDelete) {
-            IconButton(onClick = { onAction(SettingsAction.AskDeleteProvider) }) {
+            IconButton(onClick = hapticTap { onAction(SettingsAction.AskDeleteProvider) }) {
                 Icon(
                     imageVector = FocusIcons.Delete,
                     contentDescription = stringResource(R.string.settings_provider_delete),
@@ -142,7 +144,7 @@ private fun ProviderEditorHeader(state: SettingsUiState, onAction: (SettingsActi
                 )
             }
         }
-        IconButton(onClick = { onAction(SettingsAction.CloseEditor) }) {
+        IconButton(onClick = hapticTap { onAction(SettingsAction.CloseEditor) }) {
             Icon(
                 imageVector = FocusIcons.Close,
                 contentDescription = stringResource(R.string.settings_provider_close),
@@ -187,7 +189,7 @@ private fun ProviderConnectionTab(state: SettingsUiState, onAction: (SettingsAct
                 PasswordVisualTransformation()
             },
             trailingIcon = {
-                IconButton(onClick = { onAction(SettingsAction.ToggleApiKeyVisibility) }) {
+                IconButton(onClick = hapticTap { onAction(SettingsAction.ToggleApiKeyVisibility) }) {
                     Icon(
                         imageVector = if (state.apiKeyVisible) {
                             FocusIcons.VisibilityOff
@@ -218,7 +220,7 @@ private fun ProviderConnectionTab(state: SettingsUiState, onAction: (SettingsAct
                         FocusLoadingBlob(size = 18.dp)
                     }
                 } else {
-                    IconButton(onClick = { onAction(SettingsAction.OpenModelPicker) }) {
+                    IconButton(onClick = hapticTap { onAction(SettingsAction.OpenModelPicker) }) {
                         Icon(
                             imageVector = FocusIcons.Search,
                             contentDescription = stringResource(R.string.settings_model_picker_title),
@@ -232,7 +234,11 @@ private fun ProviderConnectionTab(state: SettingsUiState, onAction: (SettingsAct
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onAction(SettingsAction.MakeActiveChanged(!state.draftMakeActive)) },
+                .clickable(
+                    onClick = hapticToggle(!state.draftMakeActive) {
+                        onAction(SettingsAction.MakeActiveChanged(!state.draftMakeActive))
+                    },
+                ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -248,7 +254,7 @@ private fun ProviderConnectionTab(state: SettingsUiState, onAction: (SettingsAct
             }
             Switch(
                 checked = state.draftMakeActive,
-                onCheckedChange = { onAction(SettingsAction.MakeActiveChanged(it)) },
+                onCheckedChange = hapticToggle { onAction(SettingsAction.MakeActiveChanged(it)) },
             )
         }
     }
@@ -383,7 +389,7 @@ private fun ProviderIconPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = hapticTap(onDismiss)) {
                 Text(stringResource(R.string.settings_provider_icon_done))
             }
         },
@@ -398,7 +404,7 @@ private fun ProviderIconTile(
     onClick: () -> Unit,
 ) {
     Surface(
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         shape = MaterialTheme.shapes.large,
         color = if (selected) {
             MaterialTheme.colorScheme.primaryContainer

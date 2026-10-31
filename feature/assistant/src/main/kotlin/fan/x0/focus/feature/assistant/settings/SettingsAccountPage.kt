@@ -32,6 +32,7 @@ import fan.x0.focus.core.designsystem.components.FocusCardGroup
 import fan.x0.focus.core.designsystem.components.FocusCardGroupIcon
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusReveal
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.components.rememberProviderImage
 import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ProviderBalance
@@ -50,7 +51,7 @@ internal fun SettingsAccountPage(
         title = stringResource(R.string.settings_page_account),
         onBack = onBack,
         actions = {
-            IconButton(onClick = { onAction(SettingsAction.AddProvider) }) {
+            IconButton(onClick = hapticTap { onAction(SettingsAction.AddProvider) }) {
                 Icon(
                     imageVector = FocusIcons.Add,
                     contentDescription = stringResource(R.string.settings_provider_add),
@@ -81,12 +82,12 @@ internal fun SettingsAccountPage(
             title = { Text(stringResource(R.string.settings_provider_delete_title)) },
             text = { Text(stringResource(R.string.settings_provider_delete_body, state.draftName)) },
             confirmButton = {
-                TextButton(onClick = { onAction(SettingsAction.DeleteProvider) }) {
+                TextButton(onClick = hapticTap { onAction(SettingsAction.DeleteProvider) }) {
                     Text(stringResource(R.string.assistant_delete))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { onAction(SettingsAction.CancelDeleteProvider) }) {
+                TextButton(onClick = hapticTap { onAction(SettingsAction.CancelDeleteProvider) }) {
                     Text(stringResource(R.string.assistant_cancel))
                 }
             },
@@ -146,7 +147,7 @@ private fun ProvidersGroup(state: SettingsUiState, onAction: (SettingsAction) ->
                 trailingContent = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         ProviderCheck(active = active)
-                        IconButton(onClick = { onAction(SettingsAction.OpenProvider(provider.id)) }) {
+                        IconButton(onClick = hapticTap { onAction(SettingsAction.OpenProvider(provider.id)) }) {
                             Icon(
                                 imageVector = FocusIcons.Edit,
                                 contentDescription = stringResource(R.string.settings_provider_edit),

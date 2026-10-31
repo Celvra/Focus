@@ -24,6 +24,7 @@ import fan.x0.focus.core.designsystem.components.FocusDivider
 import fan.x0.focus.core.designsystem.components.FocusEmptyState
 import fan.x0.focus.core.designsystem.components.FocusIconBadge
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 
 @Composable
@@ -87,7 +88,7 @@ private fun IdeaRow(idea: IdeaUi, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = hapticTap(onClick))
             .padding(vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {

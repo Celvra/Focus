@@ -21,6 +21,7 @@ import fan.x0.focus.core.designsystem.components.FocusCardGroupIcon
 import fan.x0.focus.core.designsystem.components.FocusCardGroupValue
 import fan.x0.focus.core.designsystem.components.FocusChip
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.hapticSelect
 import fan.x0.focus.core.designsystem.components.switchItem
 import fan.x0.focus.data.assistant.AgentDefaults
 import kotlin.math.roundToInt
@@ -72,7 +73,7 @@ internal fun AgentCard(state: SettingsUiState, onAction: (SettingsAction) -> Uni
                 Slider(
                     state = slider,
                     onValueChange = { slider.value = it },
-                    onValueChangeFinished = {
+                    onValueChangeFinished = hapticSelect {
                         val value = presets[slider.value.roundToInt().coerceIn(0, presets.lastIndex)]
                         slider.value = presets.indexOf(value).toFloat()
                         onAction(SettingsAction.MaxRoundsChanged(value))

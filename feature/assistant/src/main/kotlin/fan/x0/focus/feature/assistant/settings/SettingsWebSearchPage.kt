@@ -41,6 +41,8 @@ import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusReveal
 import fan.x0.focus.core.designsystem.components.FocusStatusPill
 import fan.x0.focus.core.designsystem.components.StatusTone
+import fan.x0.focus.core.designsystem.components.hapticTap
+import fan.x0.focus.core.designsystem.components.hapticToggle
 import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.core.mvi.CollectEffect
 import fan.x0.focus.data.assistant.WebSearchProvider
@@ -183,7 +185,7 @@ private fun FocusCardGroupScope.ProviderRow(
         trailingContent = {
             Switch(
                 checked = status.enabled,
-                onCheckedChange = onEnabled,
+                onCheckedChange = hapticToggle(onEnabled),
             )
         },
         onClick = onOpen,
@@ -224,7 +226,7 @@ private fun ProviderEditorSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = { onAction(WebSearchAction.Close) }) {
+                IconButton(onClick = hapticTap { onAction(WebSearchAction.Close) }) {
                     Icon(
                         imageVector = FocusIcons.Close,
                         contentDescription = stringResource(R.string.settings_provider_close),

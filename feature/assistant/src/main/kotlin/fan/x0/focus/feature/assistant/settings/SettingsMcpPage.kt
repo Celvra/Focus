@@ -42,6 +42,8 @@ import fan.x0.focus.core.designsystem.components.FocusReveal
 import fan.x0.focus.core.designsystem.components.FocusStatusPill
 import fan.x0.focus.core.designsystem.components.FocusTextButton
 import fan.x0.focus.core.designsystem.components.StatusTone
+import fan.x0.focus.core.designsystem.components.hapticTap
+import fan.x0.focus.core.designsystem.components.hapticToggle
 import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.core.mvi.CollectEffect
 import fan.x0.focus.data.assistant.McpServerConfig
@@ -174,7 +176,7 @@ private fun FocusCardGroupScope.ServerRow(
         trailingContent = {
             Switch(
                 checked = server.enabled,
-                onCheckedChange = onEnabled,
+                onCheckedChange = hapticToggle(onEnabled),
             )
         },
         onClick = onOpen,
@@ -212,7 +214,7 @@ private fun McpEditorSheet(
                     style = MaterialTheme.typography.titleLargeEmphasized,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = { onAction(McpAction.Close) }) {
+                IconButton(onClick = hapticTap { onAction(McpAction.Close) }) {
                     Icon(
                         imageVector = FocusIcons.Close,
                         contentDescription = stringResource(R.string.settings_provider_close),
@@ -327,9 +329,9 @@ private fun McpEditorSheet(
                             )
                             Switch(
                                 checked = header.secret,
-                                onCheckedChange = { onAction(McpAction.HeaderSecretChanged(index, it)) },
+                                onCheckedChange = hapticToggle { onAction(McpAction.HeaderSecretChanged(index, it)) },
                             )
-                            IconButton(onClick = { onAction(McpAction.RemoveHeader(index)) }) {
+                            IconButton(onClick = hapticTap { onAction(McpAction.RemoveHeader(index)) }) {
                                 Icon(
                                     imageVector = FocusIcons.Delete,
                                     contentDescription = stringResource(R.string.settings_mcp_remove_header),
@@ -352,7 +354,7 @@ private fun McpEditorSheet(
                 )
                 Switch(
                     checked = draft.enabled,
-                    onCheckedChange = { onAction(McpAction.EnabledChanged(it)) },
+                    onCheckedChange = hapticToggle { onAction(McpAction.EnabledChanged(it)) },
                 )
             }
             state.error?.let { error ->

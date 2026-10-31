@@ -93,7 +93,7 @@ fun FocusSearchPickerSheet(
                     modifier = Modifier.weight(1f),
                 )
                 if (onRefresh != null) {
-                    IconButton(onClick = onRefresh) {
+                    IconButton(onClick = hapticTap(onRefresh)) {
                         Icon(
                             imageVector = FocusIcons.Refresh,
                             contentDescription = null,
@@ -138,7 +138,7 @@ fun FocusSearchPickerSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(MaterialTheme.shapes.medium)
-                                .clickable { onSelect(item) },
+                                .clickable(onClick = hapticSelect { onSelect(item) }),
                             leadingContent = if (itemBrand != null) {
                                 {
                                     BrandIcon(

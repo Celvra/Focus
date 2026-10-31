@@ -98,6 +98,7 @@ import fan.x0.focus.core.designsystem.components.FocusBubbleEnter
 import fan.x0.focus.core.designsystem.components.FocusReasoningCard
 import fan.x0.focus.core.designsystem.components.FocusTraceCard
 import fan.x0.focus.core.designsystem.components.FocusTraceStep
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
 import fan.x0.focus.core.designsystem.components.FocusIconBadge
 import fan.x0.focus.core.designsystem.components.FocusIcons
@@ -285,7 +286,7 @@ fun ChatScreen(
                                     .onGloballyPositioned { mascotTop = it.positionInRoot() },
                             )
                         }
-                        IconButton(onClick = { onAction(ChatAction.NewConversation) }) {
+                        IconButton(onClick = hapticTap { onAction(ChatAction.NewConversation) }) {
                             Icon(
                                 FocusIcons.Add,
                                 contentDescription = stringResource(R.string.chat_new),
@@ -546,7 +547,7 @@ private fun suggestionIcon(key: String): ImageVector = when (key) {
 private fun SuggestionCard(suggestion: Suggestion, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Card(
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         modifier = Modifier
             .fillMaxWidth()
             .pressScale(interaction),
@@ -905,7 +906,7 @@ private fun JumpToLatest(
             scaleOut(motion.spatialFast(), targetScale = 0.7f),
     ) {
         SmallFloatingActionButton(
-            onClick = onClick,
+            onClick = hapticTap(onClick),
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ) {

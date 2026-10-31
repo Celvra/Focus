@@ -27,6 +27,8 @@ import fan.x0.focus.core.designsystem.components.FocusCardGroupScope
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusReveal
 import fan.x0.focus.core.designsystem.components.FocusTextButton
+import fan.x0.focus.core.designsystem.components.hapticTap
+import fan.x0.focus.core.designsystem.components.hapticToggle
 import fan.x0.focus.core.mvi.CollectEffect
 import fan.x0.focus.data.assistant.ChatDetailConfig
 import fan.x0.focus.data.assistant.ChatStatField
@@ -146,7 +148,7 @@ private fun FocusCardGroupScope.FieldRow(
         },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onUp, enabled = !first) {
+                IconButton(onClick = hapticTap(onUp), enabled = !first) {
                     Icon(
                         imageVector = FocusIcons.ArrowDown,
                         contentDescription = stringResource(R.string.settings_chat_detail_move_up),
@@ -156,7 +158,7 @@ private fun FocusCardGroupScope.FieldRow(
                             .rotate(180f),
                     )
                 }
-                IconButton(onClick = onDown, enabled = !last) {
+                IconButton(onClick = hapticTap(onDown), enabled = !last) {
                     Icon(
                         imageVector = FocusIcons.ArrowDown,
                         contentDescription = stringResource(R.string.settings_chat_detail_move_down),
@@ -166,7 +168,7 @@ private fun FocusCardGroupScope.FieldRow(
                 }
                 Switch(
                     checked = enabled,
-                    onCheckedChange = onToggle,
+                    onCheckedChange = hapticToggle(onToggle),
                 )
             }
         },

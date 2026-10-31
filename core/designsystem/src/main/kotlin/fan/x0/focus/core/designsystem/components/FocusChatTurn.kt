@@ -97,9 +97,12 @@ fun FocusReasoningCard(
                     .fillMaxWidth()
                     .clip(shape)
                     .stateLayer(interaction, shape)
-                    .clickable(interactionSource = interaction, indication = null, role = Role.Button) {
-                        expanded = !expanded
-                    }
+                    .clickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        role = Role.Button,
+                        onClick = hapticTap { expanded = !expanded },
+                    )
                     .heightIn(min = 40.dp)
                     .padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -227,7 +230,8 @@ fun FocusTraceCard(steps: List<FocusTraceStep>, onOpen: ((String) -> Unit)? = nu
                         interactionSource = headerInteraction,
                         indication = null,
                         role = Role.Button,
-                    ) { expanded = !expanded }
+                        onClick = hapticTap { expanded = !expanded },
+                    )
                     .heightIn(min = 40.dp)
                     .padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,

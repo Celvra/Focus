@@ -40,10 +40,10 @@ fun FocusLargeTopBar(
         modifier = modifier,
         navigationIcon = {
             when {
-                onBack != null -> IconButton(onClick = onBack) {
+                onBack != null -> IconButton(onClick = hapticTap(onBack)) {
                     Icon(FocusIcons.Back, contentDescription = stringResource(R.string.common_back))
                 }
-                onMenu != null -> IconButton(onClick = onMenu) {
+                onMenu != null -> IconButton(onClick = hapticTap(onMenu)) {
                     Icon(FocusIcons.Menu, contentDescription = null)
                 }
             }
@@ -90,10 +90,10 @@ fun FocusCompactTopBar(
         },
         navigationIcon = {
             when {
-                onBack != null -> IconButton(onClick = onBack) {
+                onBack != null -> IconButton(onClick = hapticTap(onBack)) {
                     Icon(FocusIcons.Back, contentDescription = stringResource(R.string.common_back))
                 }
-                onMenu != null -> IconButton(onClick = onMenu) {
+                onMenu != null -> IconButton(onClick = hapticTap(onMenu)) {
                     Icon(FocusIcons.Menu, contentDescription = null)
                 }
             }

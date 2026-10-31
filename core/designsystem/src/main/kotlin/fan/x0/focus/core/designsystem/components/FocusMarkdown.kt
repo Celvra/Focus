@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,6 +90,10 @@ fun FocusMarkdown(
 ) {
     val blocks = remember(text, preserveLineBreaks) { parseBlocks(text, preserveLineBreaks) }
     val linkColor = MaterialTheme.colorScheme.primary
+    val haptics = LocalFocusHaptics.current
+    LaunchedEffect(text, streaming) {
+        if (streaming) haptics.streamTick()
+    }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         blocks.forEach { block ->
             StreamBlock(animate = streaming) {
@@ -258,7 +263,7 @@ private fun CodeBlock(block: MdBlock.Code) {
                     modifier = Modifier.weight(1f),
                 )
                 Surface(
-                    onClick = {
+                    onClick = hapticTap {
                         clipboard.setText(AnnotatedString(block.text))
                         copied = true
                         scope.launch {

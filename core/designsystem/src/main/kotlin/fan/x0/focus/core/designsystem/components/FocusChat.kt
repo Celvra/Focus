@@ -355,7 +355,7 @@ private fun Modifier.bubbleGestures(
             indication = ripple(color = contentColor),
             role = Role.Button,
             onClick = {},
-            onLongClick = onLongPress,
+            onLongClick = hapticLongPress(onLongPress),
         )
 }
 

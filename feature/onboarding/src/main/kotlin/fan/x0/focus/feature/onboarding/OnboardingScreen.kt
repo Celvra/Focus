@@ -54,8 +54,6 @@ import fan.x0.focus.core.designsystem.components.FocusAmbientBackground
 import fan.x0.focus.core.designsystem.components.FocusAmbientWorking
 import fan.x0.focus.core.designsystem.components.FocusBubbleEnter
 import fan.x0.focus.core.designsystem.components.FocusChatBubble
-import fan.x0.focus.core.designsystem.components.FocusReasoningCard
-import fan.x0.focus.core.designsystem.components.FocusTraceCard
 import fan.x0.focus.core.designsystem.components.FocusChip
 import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
 import fan.x0.focus.core.designsystem.components.FocusComposer
@@ -65,8 +63,11 @@ import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
+import fan.x0.focus.core.designsystem.components.FocusReasoningCard
 import fan.x0.focus.core.designsystem.components.FocusSearchPickerSheet
 import fan.x0.focus.core.designsystem.components.FocusTextButton
+import fan.x0.focus.core.designsystem.components.FocusTraceCard
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.core.mvi.CollectEffect
@@ -381,7 +382,7 @@ private fun ProviderSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = { onAction(OnboardingAction.CloseProviderSheet) }) {
+                IconButton(onClick = hapticTap { onAction(OnboardingAction.CloseProviderSheet) }) {
                     Icon(
                         imageVector = FocusIcons.Close,
                         contentDescription = stringResource(R.string.onboarding_close),
@@ -545,7 +546,7 @@ private fun ApiKeyField(state: OnboardingUiState, onAction: (OnboardingAction) -
             PasswordVisualTransformation()
         },
         trailingIcon = {
-            IconButton(onClick = { onAction(OnboardingAction.ToggleApiKeyVisibility) }) {
+            IconButton(onClick = hapticTap { onAction(OnboardingAction.ToggleApiKeyVisibility) }) {
                 Icon(
                     imageVector = if (state.apiKeyVisible) {
                         FocusIcons.VisibilityOff
@@ -580,7 +581,7 @@ private fun ModelField(state: OnboardingUiState, onAction: (OnboardingAction) ->
                     FocusLoadingBlob(size = 18.dp)
                 }
             } else {
-                IconButton(onClick = { onAction(OnboardingAction.OpenModelPicker) }) {
+                IconButton(onClick = hapticTap { onAction(OnboardingAction.OpenModelPicker) }) {
                     Icon(
                         imageVector = FocusIcons.Search,
                         contentDescription = stringResource(R.string.onboarding_model_picker_title),

@@ -35,6 +35,8 @@ import fan.x0.focus.core.designsystem.components.FocusEmptyState
 import fan.x0.focus.core.designsystem.components.FocusIconBadge
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusReveal
+import fan.x0.focus.core.designsystem.components.hapticTap
+import fan.x0.focus.core.designsystem.components.hapticToggle
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 
@@ -84,7 +86,7 @@ fun UpdatesPane(
 @Composable
 private fun UpdatesPrompt(onClick: () -> Unit) {
     Surface(
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp),
@@ -156,7 +158,7 @@ private fun UpdateCard(
                 )
             }
             Box {
-                IconButton(onClick = { onAction(TodayAction.UpdateMenu(update.id)) }) {
+                IconButton(onClick = hapticTap { onAction(TodayAction.UpdateMenu(update.id)) }) {
                     Icon(
                         imageVector = FocusIcons.More,
                         contentDescription = stringResource(R.string.today_update_more),
@@ -169,7 +171,7 @@ private fun UpdateCard(
                 ) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.today_update_delete)) },
-                        onClick = { onAction(TodayAction.AskDeleteUpdate(update.id)) },
+                        onClick = hapticTap { onAction(TodayAction.AskDeleteUpdate(update.id)) },
                     )
                 }
             }
@@ -177,7 +179,7 @@ private fun UpdateCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconToggleButton(
                 checked = update.feedback == 1,
-                onCheckedChange = { onAction(TodayAction.Feedback(update.id, 1)) },
+                onCheckedChange = hapticToggle { onAction(TodayAction.Feedback(update.id, 1)) },
             ) {
                 Icon(
                     imageVector = FocusIcons.ThumbUp,
@@ -192,7 +194,7 @@ private fun UpdateCard(
             }
             IconToggleButton(
                 checked = update.feedback == -1,
-                onCheckedChange = { onAction(TodayAction.Feedback(update.id, -1)) },
+                onCheckedChange = hapticToggle { onAction(TodayAction.Feedback(update.id, -1)) },
             ) {
                 Icon(
                     imageVector = FocusIcons.ThumbDown,
@@ -206,7 +208,7 @@ private fun UpdateCard(
                 )
             }
             TextButton(
-                onClick = { onAction(TodayAction.Discuss(update.id)) },
+                onClick = hapticTap { onAction(TodayAction.Discuss(update.id)) },
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
             ) {
                 Icon(
@@ -227,7 +229,7 @@ private fun UpdateCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
-            IconButton(onClick = { onAction(TodayAction.OpenReason(update.id)) }) {
+            IconButton(onClick = hapticTap { onAction(TodayAction.OpenReason(update.id)) }) {
                 Icon(
                     imageVector = FocusIcons.Info,
                     contentDescription = stringResource(R.string.today_update_info),

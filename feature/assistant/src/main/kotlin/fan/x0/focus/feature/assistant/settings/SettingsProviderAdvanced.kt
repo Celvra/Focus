@@ -27,6 +27,8 @@ import fan.x0.focus.core.designsystem.components.FocusChip
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusTextButton
+import fan.x0.focus.core.designsystem.components.hapticTap
+import fan.x0.focus.core.designsystem.components.hapticToggle
 import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.core.network.ProviderAuthType
 import fan.x0.focus.core.network.ProviderHeader
@@ -90,7 +92,11 @@ private fun RequiresKeyRow(state: SettingsUiState, onAction: (SettingsAction) ->
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onAction(SettingsAction.RequiresKeyChanged(!state.requiresKey)) },
+            .clickable(
+                onClick = hapticToggle(!state.requiresKey) {
+                    onAction(SettingsAction.RequiresKeyChanged(!state.requiresKey))
+                },
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -106,7 +112,7 @@ private fun RequiresKeyRow(state: SettingsUiState, onAction: (SettingsAction) ->
         }
         Switch(
             checked = state.requiresKey,
-            onCheckedChange = { onAction(SettingsAction.RequiresKeyChanged(it)) },
+            onCheckedChange = hapticToggle { onAction(SettingsAction.RequiresKeyChanged(it)) },
         )
     }
 }
@@ -221,7 +227,7 @@ private fun ProviderHeaderEditor(
                 singleLine = true,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = onRemove) {
+            IconButton(onClick = hapticTap(onRemove)) {
                 Icon(
                     imageVector = FocusIcons.Delete,
                     contentDescription = stringResource(R.string.settings_provider_header_remove),
@@ -256,7 +262,7 @@ private fun BalanceSection(state: SettingsUiState, onAction: (SettingsAction) ->
             if (state.fetchingBalance) {
                 FocusLoadingBlob(size = 16.dp)
             }
-            IconButton(onClick = { onAction(SettingsAction.FetchBalance) }) {
+            IconButton(onClick = hapticTap { onAction(SettingsAction.FetchBalance) }) {
                 Icon(
                     imageVector = FocusIcons.Refresh,
                     contentDescription = stringResource(R.string.settings_provider_balance_refresh),

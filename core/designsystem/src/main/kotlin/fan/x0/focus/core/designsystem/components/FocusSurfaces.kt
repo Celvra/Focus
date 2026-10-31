@@ -58,7 +58,7 @@ fun FocusCard(
     val base = modifier.fillMaxWidth()
     if (onClick != null) {
         Card(
-            onClick = onClick,
+            onClick = hapticTap(onClick),
             modifier = base,
             shape = shape,
             colors = CardDefaults.cardColors(containerColor = containerColor),
@@ -122,7 +122,7 @@ fun FocusPrimaryButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     Button(
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         modifier = modifier
             .heightIn(min = ButtonMinHeight)
             .pressScale(interaction),
@@ -157,7 +157,7 @@ fun FocusTonalButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     FilledTonalButton(
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         modifier = modifier
             .heightIn(min = ButtonMinHeight)
             .pressScale(interaction),
@@ -188,7 +188,7 @@ fun FocusOutlinedButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     OutlinedButton(
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         modifier = modifier
             .heightIn(min = ButtonMinHeight)
             .pressScale(interaction),
@@ -217,7 +217,7 @@ fun FocusTextButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     TextButton(
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         modifier = modifier
             .heightIn(min = 48.dp)
             .pressScale(interaction, pressedScale = 0.97f),
@@ -239,7 +239,7 @@ fun FocusChip(
     val interaction = remember { MutableInteractionSource() }
     FilterChip(
         selected = selected,
-        onClick = onClick,
+        onClick = hapticSelect(onClick),
         label = {
             Text(
                 text = label,
@@ -375,7 +375,7 @@ fun FocusTopBar(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .clickable(onClick = onBack),
+                    .clickable(onClick = hapticTap(onBack)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(FocusIcons.Back, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)

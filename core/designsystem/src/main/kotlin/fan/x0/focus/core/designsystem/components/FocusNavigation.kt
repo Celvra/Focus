@@ -131,7 +131,7 @@ private fun NavigationBarCell(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.Tab,
-                onClick = onClick,
+                onClick = hapticSelect(onClick),
             )
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -182,7 +182,7 @@ private fun NavigationRailCell(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 role = Role.Tab,
-                onClick = onClick,
+                onClick = hapticSelect(onClick),
             )
             .background(indicatorColor.value)
             .padding(horizontal = 14.dp, vertical = 12.dp)

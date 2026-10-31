@@ -36,6 +36,7 @@ import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusStatusPill
 import fan.x0.focus.core.designsystem.components.StatusTone
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 
@@ -79,7 +80,7 @@ fun ArticleList(state: LibraryUiState, onAction: (LibraryAction) -> Unit) {
                             .animateItem(),
                         shape = FocusShapeTokens.card,
                         color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        onClick = { onAction(LibraryAction.OpenArticle(article.id)) },
+                        onClick = hapticTap { onAction(LibraryAction.OpenArticle(article.id)) },
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -184,7 +185,7 @@ fun FeedList(state: LibraryUiState, onAction: (LibraryAction) -> Unit) {
                             )
                         }
                     }
-                    IconButton(onClick = { onAction(LibraryAction.AskRemoveFeed(feed.id)) }) {
+                    IconButton(onClick = hapticTap { onAction(LibraryAction.AskRemoveFeed(feed.id)) }) {
                         Icon(
                             FocusIcons.Delete,
                             contentDescription = stringResource(R.string.library_delete),
@@ -255,7 +256,7 @@ fun FileList(
                     .animateItem(),
                 shape = FocusShapeTokens.card,
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
-                onClick = { if (!file.isDirectory) onAction(LibraryAction.OpenFile(file.uri)) },
+                onClick = hapticTap { if (!file.isDirectory) onAction(LibraryAction.OpenFile(file.uri)) },
             ) {
                 Row(
                     modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
@@ -282,7 +283,7 @@ fun FileList(
                             )
                         }
                     }
-                    IconButton(onClick = { onAction(LibraryAction.AskDeleteFile(file.uri)) }) {
+                    IconButton(onClick = hapticTap { onAction(LibraryAction.AskDeleteFile(file.uri)) }) {
                         Icon(
                             FocusIcons.Delete,
                             contentDescription = stringResource(R.string.library_delete),

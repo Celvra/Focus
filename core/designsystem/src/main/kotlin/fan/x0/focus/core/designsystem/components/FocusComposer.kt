@@ -72,6 +72,7 @@ fun FocusComposer(
     pills: @Composable RowScope.() -> Unit = {},
 ) {
     val motion = LocalFocusMotion.current
+    val haptics = LocalFocusHaptics.current
     val scheme = MaterialTheme.colorScheme
     val shape = MaterialTheme.shapes.extraLarge
     val buttonInteraction = remember { MutableInteractionSource() }
@@ -148,7 +149,14 @@ fun FocusComposer(
                     disabledIndicatorColor = Color.Transparent,
                 ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
+                keyboardActions = KeyboardActions(
+                    onSend = {
+                        if (canSend) {
+                            haptics.tap()
+                            onSend()
+                        }
+                    },
+                ),
             )
             Row(
                 modifier = Modifier
@@ -181,7 +189,7 @@ fun FocusComposer(
                     color = buttonContainer,
                     contentColor = buttonContent,
                     enabled = active,
-                    onClick = {
+                    onClick = hapticTap {
                         if (sending) onStop() else onSend()
                     },
                     interactionSource = buttonInteraction,
@@ -229,7 +237,7 @@ fun FocusComposerPill(
         shape = CircleShape,
         color = if (selected) scheme.secondaryContainer else scheme.surfaceContainerHigh,
         contentColor = if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         interactionSource = interaction,
     ) {
         if (label == null) {

@@ -30,6 +30,7 @@ import fan.x0.focus.core.designsystem.components.FocusIconBadge
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusMarkdown
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 
@@ -78,7 +79,7 @@ internal fun BtwSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = onClose) {
+                IconButton(onClick = hapticTap(onClose)) {
                     Icon(
                         imageVector = FocusIcons.Close,
                         contentDescription = stringResource(R.string.chat_btw_close),

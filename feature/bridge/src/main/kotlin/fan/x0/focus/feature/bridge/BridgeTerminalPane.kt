@@ -42,6 +42,7 @@ import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
 import fan.x0.focus.core.designsystem.components.FocusTonalButton
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 
 @Composable
@@ -70,14 +71,14 @@ private fun SessionList(state: BridgeUiState, onAction: (BridgeAction) -> Unit) 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = { onAction(BridgeAction.LoadSessions) }) {
+            IconButton(onClick = hapticTap { onAction(BridgeAction.LoadSessions) }) {
                 Icon(
                     FocusIcons.Refresh,
                     contentDescription = stringResource(R.string.bridge_refresh),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = { onAction(BridgeAction.NewSession) }) {
+            IconButton(onClick = hapticTap { onAction(BridgeAction.NewSession) }) {
                 Icon(
                     FocusIcons.Add,
                     contentDescription = stringResource(R.string.bridge_new_session),
@@ -109,7 +110,7 @@ private fun SessionList(state: BridgeUiState, onAction: (BridgeAction) -> Unit) 
                         modifier = Modifier.fillMaxWidth(),
                         shape = FocusShapeTokens.card,
                         color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        onClick = { onAction(BridgeAction.OpenSession(session.id)) },
+                        onClick = hapticTap { onAction(BridgeAction.OpenSession(session.id)) },
                     ) {
                         Row(
                             modifier = Modifier.padding(16.dp),
@@ -135,7 +136,7 @@ private fun SessionList(state: BridgeUiState, onAction: (BridgeAction) -> Unit) 
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            IconButton(onClick = { onAction(BridgeAction.CloseSession(session.id)) }) {
+                            IconButton(onClick = hapticTap { onAction(BridgeAction.CloseSession(session.id)) }) {
                                 Icon(
                                     FocusIcons.Close,
                                     contentDescription = stringResource(R.string.bridge_session_close),
@@ -251,7 +252,7 @@ private fun TerminalView(
                 ),
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = { onAction(BridgeAction.SendTerminalInput) }) {
+            IconButton(onClick = hapticTap { onAction(BridgeAction.SendTerminalInput) }) {
                 Icon(
                     FocusIcons.Send,
                     contentDescription = stringResource(R.string.bridge_terminal_send),

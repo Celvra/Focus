@@ -141,9 +141,10 @@ fun FocusTimelineStep(
                     indication = null,
                     enabled = hasSummary || onOpen != null,
                     role = Role.Button,
-                ) {
-                    if (onOpen != null) onOpen() else expanded = !expanded
-                }
+                    onClick = hapticTap {
+                        if (onOpen != null) onOpen() else expanded = !expanded
+                    },
+                )
                 .heightIn(min = 40.dp)
                 .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -290,7 +291,7 @@ private fun FocusTraceMedia(media: List<FocusTraceImage>) {
         media.forEach { image ->
             val bitmap = rememberTraceImage(image, TRACE_THUMB_EDGE)
             Surface(
-                onClick = { preview = image },
+                onClick = hapticTap { preview = image },
                 enabled = bitmap != null,
                 modifier = Modifier.size(64.dp),
                 shape = RoundedCornerShape(12.dp),

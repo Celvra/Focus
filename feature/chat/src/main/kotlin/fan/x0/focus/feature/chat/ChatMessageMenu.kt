@@ -44,6 +44,8 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.hapticSelect
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.components.stateLayer
 import fan.x0.focus.core.designsystem.theme.FocusRadii
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
@@ -167,7 +169,7 @@ private fun MenuAction(
                 interactionSource = interaction,
                 indication = null,
                 role = Role.Button,
-                onClick = onClick,
+                onClick = hapticTap(onClick),
             )
             .heightIn(min = 48.dp)
             .padding(horizontal = 10.dp),
@@ -196,7 +198,7 @@ internal fun MessageReactionChip(
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 32.dp) {
         FilterChip(
             selected = true,
-            onClick = {},
+            onClick = hapticSelect {},
             label = {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),

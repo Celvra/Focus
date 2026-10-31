@@ -49,6 +49,7 @@ import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLargeTopBar
 import fan.x0.focus.core.designsystem.components.FocusReveal
 import fan.x0.focus.core.designsystem.components.LocalFocusSettingsOpener
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 import fan.x0.focus.data.assistant.WorkspaceFile
@@ -80,7 +81,7 @@ fun AssistantScreen(
                 title = stringResource(R.string.assistant_title),
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(onClick = openSettings) {
+                    IconButton(onClick = hapticTap(openSettings)) {
                         Icon(
                             FocusIcons.Settings,
                             contentDescription = stringResource(R.string.assistant_settings_row),
@@ -211,7 +212,7 @@ private fun DocumentSheet(document: WorkspaceDocumentUi, onClose: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = onClose) {
+                IconButton(onClick = hapticTap(onClose)) {
                     Icon(
                         imageVector = FocusIcons.Close,
                         contentDescription = stringResource(R.string.assistant_workspace_close),

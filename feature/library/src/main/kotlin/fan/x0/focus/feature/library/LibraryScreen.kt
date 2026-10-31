@@ -46,6 +46,7 @@ import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusTabContent
 import fan.x0.focus.core.designsystem.components.FocusTabSwitcher
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -109,7 +110,7 @@ fun LibraryScreen(
                         onBack = close,
                         actions = {
                             IconButton(
-                                onClick = {
+                                onClick = hapticTap {
                                     state.reader?.id?.let { onAction(LibraryAction.AskDeleteArticle(it)) }
                                 },
                             ) {
@@ -164,12 +165,12 @@ fun LibraryScreen(
             title = { Text(stringResource(R.string.library_delete_title)) },
             text = { Text(stringResource(R.string.library_delete_body, name)) },
             confirmButton = {
-                TextButton(onClick = { onAction(LibraryAction.ConfirmDelete) }) {
+                TextButton(onClick = hapticTap { onAction(LibraryAction.ConfirmDelete) }) {
                     Text(stringResource(R.string.library_delete_confirm))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { onAction(LibraryAction.CancelDelete) }) {
+                TextButton(onClick = hapticTap { onAction(LibraryAction.CancelDelete) }) {
                     Text(stringResource(R.string.library_cancel))
                 }
             },
@@ -219,7 +220,7 @@ private fun MainActions(
     onPickFolder: () -> Unit,
 ) {
     if (state.section == LibrarySection.Feeds) {
-        IconButton(onClick = { onAction(LibraryAction.OpenAddFeed) }) {
+        IconButton(onClick = hapticTap { onAction(LibraryAction.OpenAddFeed) }) {
             Icon(
                 FocusIcons.Add,
                 contentDescription = stringResource(R.string.library_add_feed),
@@ -228,7 +229,7 @@ private fun MainActions(
         }
     }
     if (state.section == LibrarySection.Files) {
-        IconButton(onClick = onPickFolder) {
+        IconButton(onClick = hapticTap(onPickFolder)) {
             Icon(
                 FocusIcons.Folder,
                 contentDescription = stringResource(R.string.library_pick_folder),
@@ -243,7 +244,7 @@ private fun MainActions(
         animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing)),
         label = "libraryRefreshRotation",
     )
-    IconButton(onClick = { onAction(LibraryAction.Refresh) }, enabled = !state.refreshing) {
+    IconButton(onClick = hapticTap { onAction(LibraryAction.Refresh) }, enabled = !state.refreshing) {
         Icon(
             FocusIcons.Refresh,
             contentDescription = stringResource(R.string.library_refresh),
@@ -278,14 +279,14 @@ private fun AddFeedDialog(state: LibraryUiState, onAction: (LibraryAction) -> Un
         },
         confirmButton = {
             TextButton(
-                onClick = { onAction(LibraryAction.SubmitFeed) },
+                onClick = hapticTap { onAction(LibraryAction.SubmitFeed) },
                 enabled = state.feedUrl.isNotBlank() && !state.addingFeed,
             ) {
                 Text(stringResource(R.string.library_add))
             }
         },
         dismissButton = {
-            TextButton(onClick = { onAction(LibraryAction.DismissAddFeed) }) {
+            TextButton(onClick = hapticTap { onAction(LibraryAction.DismissAddFeed) }) {
                 Text(stringResource(R.string.library_cancel))
             }
         },
@@ -318,14 +319,14 @@ private fun NoteDialog(state: LibraryUiState, onAction: (LibraryAction) -> Unit)
         },
         confirmButton = {
             TextButton(
-                onClick = { onAction(LibraryAction.SaveNote) },
+                onClick = hapticTap { onAction(LibraryAction.SaveNote) },
                 enabled = state.noteName.isNotBlank() && !state.savingNote,
             ) {
                 Text(stringResource(R.string.library_note_save))
             }
         },
         dismissButton = {
-            TextButton(onClick = { onAction(LibraryAction.DismissNote) }) {
+            TextButton(onClick = hapticTap { onAction(LibraryAction.DismissNote) }) {
                 Text(stringResource(R.string.library_cancel))
             }
         },

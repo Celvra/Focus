@@ -40,6 +40,7 @@ import fan.x0.focus.core.designsystem.components.FocusEmptyState
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusTabContent
 import fan.x0.focus.core.designsystem.components.FocusTabSwitcher
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.data.assistant.Conversation
 
 @Composable
@@ -110,7 +111,7 @@ fun HistoryRoute(
             text = { Text(stringResource(R.string.history_delete_body, title)) },
             confirmButton = {
                 TextButton(
-                    onClick = {
+                    onClick = hapticTap {
                         onDelete(target.id)
                         deleteTarget = null
                     },
@@ -122,7 +123,7 @@ fun HistoryRoute(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) {
+                TextButton(onClick = hapticTap { deleteTarget = null }) {
                     Text(stringResource(R.string.history_cancel))
                 }
             },
@@ -184,7 +185,7 @@ private fun ConversationCard(
     modifier: Modifier = Modifier,
 ) {
     Card(
-        onClick = onOpen,
+        onClick = hapticTap(onOpen),
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.largeIncreased,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -213,7 +214,7 @@ private fun ConversationCard(
             },
             trailingContent = {
                 if (archived) {
-                    IconButton(onClick = onDelete) {
+                    IconButton(onClick = hapticTap(onDelete)) {
                         Icon(
                             imageVector = FocusIcons.Delete,
                             contentDescription = stringResource(R.string.history_delete),
@@ -222,7 +223,7 @@ private fun ConversationCard(
                         )
                     }
                 } else {
-                    IconButton(onClick = onArchive) {
+                    IconButton(onClick = hapticTap(onArchive)) {
                         Icon(
                             imageVector = FocusIcons.Archive,
                             contentDescription = stringResource(R.string.history_archive),

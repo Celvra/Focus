@@ -43,6 +43,7 @@ import fan.x0.focus.core.designsystem.components.FocusTabSwitcher
 import fan.x0.focus.core.designsystem.components.FocusTextButton
 import fan.x0.focus.core.designsystem.components.FocusTonalButton
 import fan.x0.focus.core.designsystem.components.StatusTone
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import org.koin.compose.viewmodel.koinViewModel
@@ -104,12 +105,12 @@ fun BridgeScreen(
             title = { Text(stringResource(R.string.bridge_forget_title)) },
             text = { Text(stringResource(R.string.bridge_forget_body, target.name)) },
             confirmButton = {
-                TextButton(onClick = { onAction(BridgeAction.ConfirmForget) }) {
+                TextButton(onClick = hapticTap { onAction(BridgeAction.ConfirmForget) }) {
                     Text(stringResource(R.string.bridge_forget))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { onAction(BridgeAction.CancelForget) }) {
+                TextButton(onClick = hapticTap { onAction(BridgeAction.CancelForget) }) {
                     Text(stringResource(R.string.bridge_cancel))
                 }
             },
@@ -122,14 +123,14 @@ private fun BridgeTopBar(state: BridgeUiState, onAction: (BridgeAction) -> Unit)
     FocusCompactTopBar(
         title = stringResource(R.string.bridge_title),
         actions = {
-            IconButton(onClick = { onAction(BridgeAction.Scan) }, enabled = !state.scanning) {
+            IconButton(onClick = hapticTap { onAction(BridgeAction.Scan) }, enabled = !state.scanning) {
                 Icon(
                     FocusIcons.Search,
                     contentDescription = stringResource(R.string.bridge_scan),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = { onAction(BridgeAction.OpenAdd) }) {
+            IconButton(onClick = hapticTap { onAction(BridgeAction.OpenAdd) }) {
                 Icon(
                     FocusIcons.Add,
                     contentDescription = stringResource(R.string.bridge_add_device),
@@ -330,7 +331,7 @@ private fun WorkspaceEditor(state: BridgeUiState, onAction: (BridgeAction) -> Un
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    IconButton(onClick = { onAction(BridgeAction.RemoveRoot(root)) }) {
+                    IconButton(onClick = hapticTap { onAction(BridgeAction.RemoveRoot(root)) }) {
                         Icon(
                             FocusIcons.Close,
                             contentDescription = stringResource(R.string.bridge_forget),
@@ -353,7 +354,7 @@ private fun WorkspaceEditor(state: BridgeUiState, onAction: (BridgeAction) -> Un
                 modifier = Modifier.weight(1f),
             )
             IconButton(
-                onClick = { onAction(BridgeAction.AddRoot) },
+                onClick = hapticTap { onAction(BridgeAction.AddRoot) },
                 enabled = state.rootDraft.isNotBlank(),
             ) {
                 Icon(

@@ -52,7 +52,7 @@ fun FocusTabSwitcher(
                 val selected = index == selectedIndex
                 ToggleButton(
                     checked = selected,
-                    onCheckedChange = { if (!selected) onSelect(index) },
+                    onCheckedChange = hapticToggle { if (!selected) onSelect(index) },
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp)

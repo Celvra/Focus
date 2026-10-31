@@ -1,5 +1,6 @@
 package fan.x0.focus.feature.today
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BasicAlertDialog
@@ -40,6 +40,7 @@ import fan.x0.focus.core.designsystem.components.FocusCategoryIcons
 import fan.x0.focus.core.designsystem.components.FocusIconBadge
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 
@@ -180,7 +181,7 @@ fun IdeaSheet(idea: IdeaUi, onAction: (TodayAction) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 FilledTonalIconButton(
-                    onClick = { onAction(TodayAction.IdeaMenu(idea.id)) },
+                    onClick = hapticTap { onAction(TodayAction.IdeaMenu(idea.id)) },
                     modifier = Modifier
                         .fillMaxHeight()
                         .aspectRatio(1f),
@@ -255,7 +256,7 @@ private fun DialogOption(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = hapticTap(onClick))
             .padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -346,12 +347,12 @@ fun DeleteGoalDialog(goal: GoalUi, onAction: (TodayAction) -> Unit) {
         title = { Text(stringResource(R.string.today_goal_delete_title)) },
         text = { Text(stringResource(R.string.today_goal_delete_body, goal.title)) },
         confirmButton = {
-            TextButton(onClick = { onAction(TodayAction.ConfirmDeleteGoal) }) {
+            TextButton(onClick = hapticTap { onAction(TodayAction.ConfirmDeleteGoal) }) {
                 Text(stringResource(R.string.today_goal_delete_confirm))
             }
         },
         dismissButton = {
-            TextButton(onClick = { onAction(TodayAction.CancelDeleteGoal) }) {
+            TextButton(onClick = hapticTap { onAction(TodayAction.CancelDeleteGoal) }) {
                 Text(stringResource(R.string.today_cancel))
             }
         },
@@ -390,12 +391,12 @@ private fun DeleteCardDialog(
         title = { Text(title) },
         text = { Text(body) },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(onClick = hapticTap(onConfirm)) {
                 Text(stringResource(R.string.today_delete_confirm))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = hapticTap(onDismiss)) {
                 Text(stringResource(R.string.today_cancel))
             }
         },

@@ -34,6 +34,8 @@ import fan.x0.focus.app.ShellState
 import fan.x0.focus.core.designsystem.components.AvatarStyle
 import fan.x0.focus.core.designsystem.components.FocusAvatar
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.hapticSelect
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.data.assistant.Conversation
 
 @Composable
@@ -125,7 +127,7 @@ private fun DrawerHeader(state: ShellState, onOpenSettings: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = onOpenSettings) {
+        IconButton(onClick = hapticTap(onOpenSettings)) {
             Icon(
                 imageVector = FocusIcons.Settings,
                 contentDescription = stringResource(R.string.settings_title),
@@ -138,7 +140,7 @@ private fun DrawerHeader(state: ShellState, onOpenSettings: () -> Unit) {
 @Composable
 private fun NewChatButton(onClick: () -> Unit) {
     Button(
-        onClick = onClick,
+        onClick = hapticTap(onClick),
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp),
@@ -197,7 +199,7 @@ private fun ConversationRow(conversation: Conversation, onClick: () -> Unit) {
             }
         },
         selected = false,
-        onClick = onClick,
+        onClick = hapticSelect(onClick),
         shape = MaterialTheme.shapes.medium,
         colors = NavigationDrawerItemDefaults.colors(
             unselectedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -224,7 +226,7 @@ private fun DrawerEntry(
             )
         },
         selected = selected,
-        onClick = onClick,
+        onClick = hapticSelect(onClick),
         icon = {
             Icon(
                 imageVector = icon,

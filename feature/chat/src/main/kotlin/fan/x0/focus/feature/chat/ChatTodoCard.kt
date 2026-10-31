@@ -53,6 +53,7 @@ import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusStatusPill
 import fan.x0.focus.core.designsystem.components.StatusTone
+import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.components.stateLayer
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
@@ -115,7 +116,8 @@ internal fun ChatTodoCard(
                         interactionSource = interaction,
                         indication = null,
                         role = Role.Button,
-                    ) { expanded = !expanded }
+                        onClick = hapticTap { expanded = !expanded },
+                    )
                     .semantics(mergeDescendants = true) { stateDescription = stateLabel }
                     .heightIn(min = 44.dp)
                     .padding(vertical = 4.dp),
