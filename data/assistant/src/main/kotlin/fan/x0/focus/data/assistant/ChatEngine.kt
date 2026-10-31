@@ -260,6 +260,8 @@ class ChatEngine(
                     step = stepCount,
                     totalStats = totalStats,
                     startedAt = startedAt,
+                    emitDelta = { text -> emit(ChatEvent.Delta(text)) },
+                    emitReasoningDelta = { text -> emit(ChatEvent.ReasoningDelta(text)) },
                     emitStats = { stats -> emit(ChatEvent.StatsUpdated(stats)) },
                     emitRetry = { attempt, max, reason -> emit(ChatEvent.RetryScheduled(attempt, max, reason)) },
                     emitReset = { emit(ChatEvent.RetryReset) },
@@ -604,6 +606,8 @@ class ChatEngine(
         step: Int,
         totalStats: MessageStats,
         startedAt: Long,
+        emitDelta: suspend (String) -> Unit,
+        emitReasoningDelta: suspend (String) -> Unit,
         emitStats: suspend (MessageStats) -> Unit,
         emitRetry: suspend (Int, Int, String) -> Unit,
         emitReset: suspend () -> Unit,
@@ -631,11 +635,13 @@ class ChatEngine(
                             if (reasoningStartedAt > 0 && reasoningEndedAt == 0L) {
                                 reasoningEndedAt = System.currentTimeMillis()
                             }
+                            emitDelta(event.delta)
                         }
                         is ChatStreamEvent.Reasoning -> {
                             if (reasoningStartedAt == 0L) {
                                 reasoningStartedAt = System.currentTimeMillis()
                             }
+                            emitReasoningDelta(event.delta)
                         }
                         is ChatStreamEvent.Usage -> {
                             roundStats = roundStats.copy(
