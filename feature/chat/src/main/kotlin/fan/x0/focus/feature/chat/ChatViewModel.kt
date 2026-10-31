@@ -52,7 +52,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.annotation.KoinViewModel
+
+private const val REVEAL_FRAME_MS = 33L
+private const val REVEAL_CATCHUP_FRAMES = 18
+private const val REVEAL_MIN_GROUP = 3
+private const val REVEAL_HANDOFF_MS = 280L
+private const val REVEAL_JOIN_TIMEOUT_MS = 4_000L
 
 @KoinViewModel
 class ChatViewModel(
@@ -76,6 +83,12 @@ class ChatViewModel(
     private var suggestionJob: Job? = null
     private var btwJob: Job? = null
     private var statsJob: Job? = null
+    private var displayJob: Job? = null
+    private var displayConversationId = ""
+    private var displayTurnId = 0L
+    private var displayTarget = ""
+    private var displayText = ""
+    private var awaitingUserTurn = false
     private var lastSend: PendingSend? = null
     private var redoEntry: PendingSend? = null
 
@@ -351,6 +364,8 @@ class ChatViewModel(
         val state = currentState
         val conversationId = state.conversationId
         if (conversationId.isBlank() || turns.isRunning(conversationId)) return
+        resetDisplay(conversationId)
+        awaitingUserTurn = true
         val options = TurnOptions(
             providerId = state.providerId,
             model = state.model,
@@ -932,6 +947,7 @@ class ChatViewModel(
 
     private suspend fun reload() {
         val id = currentState.conversationId
+        resetDisplay(id)
         val messages = chats.messages(id)
         val conversation = chats.conversation(id)
         val compaction = chats.compaction(id)
@@ -965,6 +981,8 @@ class ChatViewModel(
     }
 
     private suspend fun load(conversationId: String) {
+        resetDisplay(conversationId)
+        awaitingUserTurn = false
         suggestionJob?.cancel()
         btwJob?.cancel()
         btwJob = null
@@ -1086,6 +1104,7 @@ class ChatViewModel(
         if (turn.conversationId != currentState.conversationId) return
         if (!turn.running) {
             statsJob?.cancel()
+            resetDisplay(turn.conversationId)
             updateState {
                 copy(
                     sending = false,
@@ -1099,12 +1118,17 @@ class ChatViewModel(
             }
             return
         }
+        val answer = turn.entries.filterIsInstance<ChatTurnEntry.Answer>().lastOrNull()?.text.orEmpty()
+        updateDisplayTarget(turn.conversationId, turn.turnId, answer)
+        val shown = displayTarget.take(displayText.length)
         updateState {
             copy(
                 sending = true,
                 compacting = turn.compacting,
                 workingText = turn.workingText,
-                live = turn.entries.mapIndexed { index, entry -> entry.toUi("live-${turn.turnId}", index) },
+                live = turn.entries
+                    .mapIndexed { index, entry -> entry.toUi("live-${turn.turnId}", index) }
+                    .withDisplayText(shown),
                 retry = turn.retry?.let { RetryUi(it.attempt, it.max, it.reason) },
                 liveStats = when {
                     turn.stats.hasUsage || turn.stats.round > 0 -> turn.stats.copy(
@@ -1128,6 +1152,10 @@ class ChatViewModel(
         if (result.conversationId != currentState.conversationId) return
         if (!turns.consumeResult(result.conversationId, result.turnId)) return
         statsJob?.cancel()
+        completeDisplay(result)
+        awaitingUserTurn = false
+        val reveal = displayJob
+        withTimeoutOrNull(REVEAL_JOIN_TIMEOUT_MS) { reveal?.join() }
         result.error?.let { error ->
             val message = error.serverMessage ?: error.serverTitle ?: error.type.name
             chats.append(
@@ -1137,10 +1165,110 @@ class ChatViewModel(
                 label = "failure",
             )
         }
+        if (currentState.conversationId != result.conversationId) return
+        if (displayTurnId > result.turnId) return
+        if (turns.isRunning(result.conversationId)) return
+        if (displayTarget.isNotEmpty() && result.error == null) delay(REVEAL_HANDOFF_MS)
+        if (currentState.conversationId != result.conversationId) return
+        if (displayTurnId > result.turnId) return
+        if (turns.isRunning(result.conversationId)) return
+        if (displayJob === reveal) {
+            displayJob?.cancel()
+            displayJob = null
+        }
         reload()
         result.error?.let { emitError(it) }
         if (result.compactionFailed) showMessage(R.string.chat_compact_empty)
         refreshTitle()
+    }
+
+    private suspend fun completeDisplay(result: ChatTurnResult) {
+        if (currentState.conversationId != result.conversationId) return
+        val last = chats.messages(result.conversationId).lastOrNull()
+        if (currentState.conversationId != result.conversationId) return
+        val observed = displayConversationId == result.conversationId && displayTurnId == result.turnId
+        if (!observed && !awaitingUserTurn) return
+        val finalText = if (last?.role == ChatRole.Assistant) last.content else ""
+        if (finalText.isBlank()) return
+        if (!observed) {
+            resetDisplay(result.conversationId, result.turnId)
+        }
+        if (displayTarget != finalText) {
+            if (!finalText.startsWith(displayTarget)) displayText = ""
+            displayTarget = finalText
+        }
+        if (displayText.length >= displayTarget.length) return
+        ensureDisplayJob()
+    }
+
+    private fun updateDisplayTarget(conversationId: String, turnId: Long, target: String) {
+        if (displayConversationId != conversationId || displayTurnId != turnId) {
+            resetDisplay(conversationId, turnId)
+        }
+        if (target.length < displayTarget.length || !target.startsWith(displayTarget)) {
+            displayText = ""
+        }
+        displayTarget = target
+        if (displayText.length > displayTarget.length) {
+            displayText = displayText.take(displayTarget.length)
+        }
+        if (displayText.length < displayTarget.length) ensureDisplayJob()
+    }
+
+    private fun resetDisplay(conversationId: String, turnId: Long = 0L) {
+        displayJob?.cancel()
+        displayJob = null
+        displayConversationId = conversationId
+        displayTurnId = turnId
+        displayTarget = ""
+        displayText = ""
+    }
+
+    private fun ensureDisplayJob() {
+        if (displayJob?.isActive == true) return
+        displayJob = viewModelScope.launch {
+            while (displayText.length < displayTarget.length) {
+                val backlog = displayTarget.length - displayText.length
+                val step = ((backlog + REVEAL_CATCHUP_FRAMES - 1) / REVEAL_CATCHUP_FRAMES)
+                    .coerceAtLeast(REVEAL_MIN_GROUP)
+                delay(REVEAL_FRAME_MS)
+                if (displayText.length >= displayTarget.length) break
+                displayText = displayTarget.take((displayText.length + step).coerceAtMost(displayTarget.length))
+                showDisplayText()
+            }
+        }
+    }
+
+    private fun showDisplayText() {
+        if (displayConversationId != currentState.conversationId) return
+        val shown = displayTarget.take(displayText.length)
+        updateState {
+            val index = live.indexOfLast { it is ChatEntry.Assistant }
+            if (index >= 0) {
+                val entry = live[index] as ChatEntry.Assistant
+                if (entry.text == shown) {
+                    this
+                } else {
+                    copy(live = live.toMutableList().also { it[index] = entry.copy(text = shown) })
+                }
+            } else {
+                copy(
+                    live = live + ChatEntry.Assistant(
+                        key = "live-answer-final-$displayTurnId",
+                        text = shown,
+                        live = true,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun List<ChatEntry>.withDisplayText(shown: String): List<ChatEntry> {
+        val index = indexOfLast { it is ChatEntry.Assistant }
+        if (index < 0) return this
+        val entry = this[index] as ChatEntry.Assistant
+        if (shown == entry.text) return this
+        return toMutableList().also { it[index] = entry.copy(text = shown) }
     }
 
     private suspend fun refreshTitle() {

@@ -869,9 +869,7 @@ private enum class ChatBody { Loading, Home, Thread }
 private fun ChatEntry.isFresh(): Boolean = when (this) {
     is ChatEntry.Approval -> true
     is ChatEntry.Ask -> true
-    else -> key.startsWith("local-") ||
-        key.startsWith("live-answer-") ||
-        key.startsWith("live-trace-")
+    else -> key.startsWith("local-") || key.startsWith("live-")
 }
 
 // New bubbles pop in from their own corner; history entries render without motion.

@@ -1,9 +1,5 @@
 package fan.x0.focus.core.designsystem.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -29,10 +25,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,7 +53,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.R
-import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -90,33 +87,114 @@ fun FocusMarkdown(
 ) {
     val blocks = remember(text, preserveLineBreaks) { parseBlocks(text, preserveLineBreaks) }
     val linkColor = MaterialTheme.colorScheme.primary
+    val fade = rememberStreamFade(text, streaming)
     val haptics = LocalFocusHaptics.current
     LaunchedEffect(text, streaming) {
         if (streaming) haptics.streamTick()
     }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        blocks.forEach { block ->
-            StreamBlock(animate = streaming) {
-                BlockContent(block = block, color = color, linkColor = linkColor, bodyStyle = bodyStyle)
+        blocks.forEachIndexed { index, block ->
+            BlockContent(
+                block = block,
+                color = color,
+                linkColor = linkColor,
+                bodyStyle = bodyStyle,
+                fade = if (index == blocks.lastIndex) fade else null,
+            )
+        }
+    }
+}
+
+private const val FADE_CHARS = 512
+private const val FADE_NANOS = 260_000_000L
+
+private class StreamFadeState {
+    private var length = 0
+    private var lastArrival = 0L
+    private val arrivals = ArrayDeque<Long>()
+    val now = mutableLongStateOf(System.nanoTime())
+
+    fun track(text: String) {
+        if (text.length == length) return
+        val at = System.nanoTime()
+        val added = text.length - length
+        if (added < 0) {
+            arrivals.clear()
+            repeat(minOf(text.length, FADE_CHARS)) { arrivals.addLast(at) }
+        } else {
+            repeat(added) { arrivals.addLast(at) }
+            while (arrivals.size > FADE_CHARS) arrivals.removeFirst()
+        }
+        length = text.length
+        lastArrival = if (arrivals.isEmpty()) 0L else at
+    }
+
+    fun alpha(distanceFromEnd: Int, at: Long): Float {
+        val arrived = arrivals.elementAtOrNull(arrivals.lastIndex - distanceFromEnd) ?: return 1f
+        return ((at - arrived).toFloat() / FADE_NANOS).coerceIn(0f, 1f)
+    }
+
+    fun fading(at: Long): Boolean = lastArrival > 0 && at - lastArrival < FADE_NANOS
+
+    fun apply(text: AnnotatedString, color: Color, at: Long): AnnotatedString {
+        if (text.isEmpty() || alpha(0, at) >= 1f) return text
+        val limit = minOf(text.length, FADE_CHARS)
+        var count = 0
+        while (count < limit && alpha(count, at) < 1f) count++
+        if (count == 0) return text
+        return buildAnnotatedString {
+            append(text)
+            for (distance in 0 until count) {
+                val value = alpha(distance, at)
+                val start = text.length - 1 - distance
+                val base = text.colorAt(start, color)
+                addStyle(
+                    SpanStyle(color = base.copy(alpha = base.alpha * value)),
+                    start,
+                    start + 1,
+                )
             }
         }
     }
 }
 
-@Composable
-private fun StreamBlock(animate: Boolean, content: @Composable () -> Unit) {
-    if (!animate) {
-        content()
-        return
+private fun AnnotatedString.colorAt(index: Int, fallback: Color): Color {
+    for (span in spanStyles.asReversed()) {
+        if (index >= span.start && index < span.end && span.item.color != Color.Unspecified) {
+            return span.item.color
+        }
     }
-    val motion = LocalFocusMotion.current
-    val state = remember { MutableTransitionState(false).apply { targetState = true } }
-    AnimatedVisibility(
-        visibleState = state,
-        enter = fadeIn(motion.effectsDefault()) +
-            slideInVertically(motion.spatialFast()) { height -> height / 4 },
-        content = { content() },
-    )
+    return fallback
+}
+
+@Composable
+private fun rememberStreamFade(text: String, streaming: Boolean): StreamFadeState? {
+    val fade = remember { StreamFadeState() }
+    if (!streaming && !fade.fading(System.nanoTime())) return null
+    remember(text) { fade.track(text) }
+    LaunchedEffect(streaming, text) {
+        var frame = 0
+        while (true) {
+            withFrameNanos { }
+            val at = System.nanoTime()
+            if (frame == 0 || frame % 2 == 0) fade.now.longValue = at
+            frame++
+            if (!fade.fading(at)) break
+        }
+    }
+    return fade
+}
+
+@Composable
+private fun fadedInline(
+    text: String,
+    color: Color,
+    linkColor: Color,
+    fade: StreamFadeState?,
+): MarkdownInline {
+    val base = remember(text, color, linkColor) { inline(text, color, linkColor) }
+    if (fade == null) return base
+    return base.copy(text = fade.apply(base.text, color, fade.now.longValue))
 }
 
 @Composable
@@ -125,10 +203,11 @@ private fun BlockContent(
     color: Color,
     linkColor: Color,
     bodyStyle: TextStyle,
+    fade: StreamFadeState?,
 ) {
     when (block) {
-        is MdBlock.Heading -> Text(
-            text = inline(block.text, color, linkColor),
+        is MdBlock.Heading -> MarkdownInlineText(
+            content = fadedInline(block.text, color, linkColor, fade),
             style = when (block.level) {
                 1 -> LocalFocusTypography.current.headlineSmall
                 2 -> LocalFocusTypography.current.titleLarge
@@ -139,8 +218,8 @@ private fun BlockContent(
             },
             color = color,
         )
-        is MdBlock.Paragraph -> Text(
-            text = inline(block.text, color, linkColor),
+        is MdBlock.Paragraph -> MarkdownInlineText(
+            content = fadedInline(block.text, color, linkColor, fade),
             style = bodyStyle,
             color = color,
         )
@@ -149,6 +228,7 @@ private fun BlockContent(
             color = color,
             linkColor = linkColor,
             bodyStyle = bodyStyle,
+            fade = fade,
         )
         is MdBlock.Quote -> Row(
             modifier = Modifier
@@ -161,15 +241,16 @@ private fun BlockContent(
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)),
             )
-            Text(
-                text = inline(block.text, color, linkColor),
+            val quoteColor = MaterialTheme.colorScheme.onSurfaceVariant
+            MarkdownInlineText(
+                content = fadedInline(block.text, quoteColor, linkColor, fade),
                 style = bodyStyle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = quoteColor,
                 modifier = Modifier.padding(start = 10.dp),
             )
         }
-        is MdBlock.Code -> CodeBlock(block = block)
-        is MdBlock.Table -> TableBlock(block = block, color = color, linkColor = linkColor)
+        is MdBlock.Code -> CodeBlock(block = block, fade = fade)
+        is MdBlock.Table -> TableBlock(block = block, color = color, linkColor = linkColor, fade = fade)
         MdBlock.Divider -> HorizontalDivider(
             modifier = Modifier.padding(vertical = 2.dp),
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
@@ -183,6 +264,7 @@ private fun ListRow(
     color: Color,
     linkColor: Color,
     bodyStyle: TextStyle,
+    fade: StreamFadeState?,
 ) {
     Row(
         modifier = Modifier
@@ -229,8 +311,8 @@ private fun ListRow(
                 )
             }
         }
-        Text(
-            text = inline(item.text, color, linkColor),
+        MarkdownInlineText(
+            content = fadedInline(item.text, color, linkColor, fade),
             style = bodyStyle,
             color = color,
             modifier = Modifier.weight(1f),
@@ -239,7 +321,7 @@ private fun ListRow(
 }
 
 @Composable
-private fun CodeBlock(block: MdBlock.Code) {
+private fun CodeBlock(block: MdBlock.Code, fade: StreamFadeState?) {
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var copied by remember(block.text) { mutableStateOf(false) }
@@ -295,10 +377,12 @@ private fun CodeBlock(block: MdBlock.Code) {
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            val codeColor = MaterialTheme.colorScheme.onSurface
+            val code = remember(block.text) { AnnotatedString(block.text) }
             Text(
-                text = block.text,
+                text = if (fade == null) code else fade.apply(code, codeColor, fade.now.longValue),
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                color = MaterialTheme.colorScheme.onSurface,
+                color = codeColor,
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
@@ -313,6 +397,7 @@ private fun TableBlock(
     block: MdBlock.Table,
     color: Color,
     linkColor: Color,
+    fade: StreamFadeState?,
 ) {
     val widths = remember(block.headers, block.rows) {
         block.headers.indices.map { index ->
@@ -336,6 +421,7 @@ private fun TableBlock(
                         header = true,
                         color = color,
                         linkColor = linkColor,
+                        fade = fade,
                     )
                 }
             }
@@ -362,6 +448,7 @@ private fun TableBlock(
                             header = false,
                             color = color,
                             linkColor = linkColor,
+                            fade = fade,
                         )
                     }
                 }
@@ -378,9 +465,10 @@ private fun TableCell(
     header: Boolean,
     color: Color,
     linkColor: Color,
+    fade: StreamFadeState?,
 ) {
-    Text(
-        text = inline(text, color, linkColor),
+    MarkdownInlineText(
+        content = fadedInline(text, color, linkColor, fade),
         style = if (header) {
             MaterialTheme.typography.labelMedium
         } else {
@@ -544,10 +632,18 @@ private fun splitTableRow(line: String): List<String> {
     return cells
 }
 
-private fun inline(text: String, color: Color, linkColor: Color): AnnotatedString =
-    buildAnnotatedString { appendInline(text, color, linkColor) }
+private fun inline(text: String, color: Color, linkColor: Color): MarkdownInline {
+    val codeSpans = mutableListOf<IntRange>()
+    val annotated = buildAnnotatedString { appendInline(text, color, linkColor, codeSpans) }
+    return MarkdownInline(annotated, codeSpans)
+}
 
-private fun AnnotatedString.Builder.appendInline(text: String, color: Color, linkColor: Color) {
+private fun AnnotatedString.Builder.appendInline(
+    text: String,
+    color: Color,
+    linkColor: Color,
+    codeSpans: MutableList<IntRange>,
+) {
     var index = 0
     while (index < text.length) {
         when {
@@ -558,9 +654,7 @@ private fun AnnotatedString.Builder.appendInline(text: String, color: Color, lin
             text.startsWith("```", index) -> {
                 val end = text.indexOf("```", index + 3)
                 if (end > index) {
-                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = color.copy(alpha = 0.08f))) {
-                        append(text.substring(index + 3, end))
-                    }
+                    appendCode(text.substring(index + 3, end), codeSpans)
                     index = end + 3
                 } else {
                     append(text[index])
@@ -570,9 +664,7 @@ private fun AnnotatedString.Builder.appendInline(text: String, color: Color, lin
             text[index] == '`' -> {
                 val end = text.indexOf('`', index + 1)
                 if (end > index) {
-                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = color.copy(alpha = 0.08f))) {
-                        append(text.substring(index + 1, end))
-                    }
+                    appendCode(text.substring(index + 1, end), codeSpans)
                     index = end + 1
                 } else {
                     append(text[index])
@@ -584,7 +676,7 @@ private fun AnnotatedString.Builder.appendInline(text: String, color: Color, lin
                 val end = text.indexOf(marker, index + 3)
                 if (end > index) {
                     withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
-                        appendInline(text.substring(index + 3, end), color, linkColor)
+                        appendInline(text.substring(index + 3, end), color, linkColor, codeSpans)
                     }
                     index = end + 3
                 } else {
@@ -597,7 +689,7 @@ private fun AnnotatedString.Builder.appendInline(text: String, color: Color, lin
                 val end = text.indexOf(marker, index + 2)
                 if (end > index) {
                     withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                        appendInline(text.substring(index + 2, end), color, linkColor)
+                        appendInline(text.substring(index + 2, end), color, linkColor, codeSpans)
                     }
                     index = end + 2
                 } else {
@@ -609,7 +701,7 @@ private fun AnnotatedString.Builder.appendInline(text: String, color: Color, lin
                 val end = text.indexOf("~~", index + 2)
                 if (end > index) {
                     withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
-                        appendInline(text.substring(index + 2, end), color, linkColor)
+                        appendInline(text.substring(index + 2, end), color, linkColor, codeSpans)
                     }
                     index = end + 2
                 } else {
@@ -628,7 +720,7 @@ private fun AnnotatedString.Builder.appendInline(text: String, color: Color, lin
                 val end = text.indexOf(text[index], index + 1)
                 if (end > index) {
                     withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                        appendInline(text.substring(index + 1, end), color, linkColor)
+                        appendInline(text.substring(index + 1, end), color, linkColor, codeSpans)
                     }
                     index = end + 1
                 } else {
@@ -642,7 +734,13 @@ private fun AnnotatedString.Builder.appendInline(text: String, color: Color, lin
                 if (labelEnd > index && urlEnd > labelEnd) {
                     val label = text.substring(index + 1, labelEnd)
                     val url = text.substring(labelEnd + 2, urlEnd)
-                    appendLink(label = label, url = url, color = color, linkColor = linkColor)
+                    appendLink(
+                        label = label,
+                        url = url,
+                        color = color,
+                        linkColor = linkColor,
+                        codeSpans = codeSpans,
+                    )
                     index = urlEnd + 1
                 } else {
                     append(text[index])
@@ -653,7 +751,13 @@ private fun AnnotatedString.Builder.appendInline(text: String, color: Color, lin
                 val end = text.indexOf('>', index + 1)
                 val url = if (end > index) text.substring(index + 1, end) else ""
                 if (end > index && (url.startsWith("http://") || url.startsWith("https://"))) {
-                    appendLink(label = url, url = url, color = color, linkColor = linkColor)
+                    appendLink(
+                        label = url,
+                        url = url,
+                        color = color,
+                        linkColor = linkColor,
+                        codeSpans = codeSpans,
+                    )
                     index = end + 1
                 } else {
                     append(text[index])
@@ -673,6 +777,7 @@ private fun AnnotatedString.Builder.appendLink(
     url: String,
     color: Color,
     linkColor: Color,
+    codeSpans: MutableList<IntRange>,
 ) {
     withLink(
         LinkAnnotation.Url(
@@ -682,8 +787,16 @@ private fun AnnotatedString.Builder.appendLink(
             ),
         ),
     ) {
-        appendInline(label, color, linkColor)
+        appendInline(label, color, linkColor, codeSpans)
     }
+}
+
+private fun AnnotatedString.Builder.appendCode(code: String, codeSpans: MutableList<IntRange>) {
+    val start = length
+    withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) {
+        append(code)
+    }
+    codeSpans += start until length
 }
 
 private val headingRegex = Regex("""^(#{1,6})\s+(.+?)\s*#*$""")
