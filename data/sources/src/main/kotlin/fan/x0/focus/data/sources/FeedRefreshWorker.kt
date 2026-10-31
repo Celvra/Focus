@@ -8,6 +8,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import fan.x0.focus.core.notify.MessageNotifier
 import kotlinx.coroutines.CancellationException
 import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
@@ -16,7 +17,12 @@ import java.util.concurrent.TimeUnit
 
 class FeedRefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
-        KoinPlatform.getKoin().get<FeedRepository>().refreshAll()
+        val report = KoinPlatform.getKoin().get<FeedRepository>().refreshAll()
+        if (report.added > 0) {
+            runCatching {
+                KoinPlatform.getKoin().get<MessageNotifier>().notifyFeeds(report.added)
+            }
+        }
         Result.success()
     } catch (e: CancellationException) {
         throw e

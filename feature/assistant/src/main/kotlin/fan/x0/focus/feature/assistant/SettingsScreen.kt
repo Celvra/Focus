@@ -29,6 +29,7 @@ import fan.x0.focus.feature.assistant.settings.SettingsDataPage
 import fan.x0.focus.feature.assistant.settings.SettingsDestination
 import fan.x0.focus.feature.assistant.settings.SettingsHomePage
 import fan.x0.focus.feature.assistant.settings.SettingsMcpRoute
+import fan.x0.focus.feature.assistant.settings.SettingsNotificationsPage
 import fan.x0.focus.feature.assistant.settings.SettingsToolsPage
 import fan.x0.focus.feature.assistant.settings.ProviderEditorSheet
 import fan.x0.focus.feature.assistant.settings.SettingsWebSearchRoute
@@ -159,6 +160,11 @@ internal fun SettingsScreen(
                         snackbar = snackbar,
                     )
                     SettingsDestination.Appearance -> SettingsAppearancePage(
+                        state = latestState.value,
+                        onAction = onAction,
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                    SettingsDestination.Notifications -> SettingsNotificationsPage(
                         state = latestState.value,
                         onAction = onAction,
                         onBack = { backStack.removeLastOrNull() },

@@ -17,6 +17,8 @@ import fan.x0.focus.core.network.openai.ModelConnectionTester
 import fan.x0.focus.core.network.openai.ModelEndpoint
 import fan.x0.focus.core.network.openai.OpenAiModelCatalog
 import fan.x0.focus.core.network.openai.ProviderBalanceClient
+import fan.x0.focus.core.notify.MessageNotifier
+import fan.x0.focus.core.notify.NotificationSettings
 import fan.x0.focus.data.assistant.AgentSettings
 import fan.x0.focus.data.assistant.AssistantSettings
 import fan.x0.focus.data.assistant.CommandPolicy
@@ -55,6 +57,8 @@ class SettingsViewModel(
     private val icons: ProviderIconStore,
     private val dataUsage: DataUsageStore,
     private val contributors: ContributorsRepository,
+    private val notificationSettings: NotificationSettings,
+    private val notifier: MessageNotifier,
 ) : BaseViewModel<SettingsAction, SettingsUiState, SettingsEffect>(SettingsUiState()) {
 
     private var fetchJob: Job? = null
@@ -68,12 +72,14 @@ class SettingsViewModel(
             val source = sources.settings.first()
             val policyConfig = policy.configOnce()
             val agentConfig = agent.configOnce()
+            val notificationsEnabled = notificationSettings.enabledOnce()
             updateState {
                 copy(
                     loading = false,
                     providers = config.providers,
                     activeProviderId = config.activeProviderId,
                     refreshHours = source.refreshIntervalHours,
+                    notificationsEnabled = notificationsEnabled,
                     language = locale.current(),
                     policy = policyConfig.policy,
                     judgeKind = policyConfig.judgeKind,
@@ -121,6 +127,7 @@ class SettingsViewModel(
     override fun onAction(action: SettingsAction) {
         when (action) {
             is SettingsAction.RefreshHoursChanged -> setRefreshHours(action.hours)
+            is SettingsAction.NotificationsEnabledChanged -> setNotificationsEnabled(action.value)
             is SettingsAction.LanguageChanged -> {
                 locale.setLanguage(action.tag)
                 updateState { copy(language = action.tag) }
@@ -957,6 +964,20 @@ class SettingsViewModel(
                 throw e
             } catch (e: Throwable) {
                 updateState { copy(pendingClear = null) }
+                emitError(e.toAppError())
+            }
+        }
+    }
+
+    private fun setNotificationsEnabled(value: Boolean) {
+        updateState { copy(notificationsEnabled = value) }
+        viewModelScope.launch {
+            try {
+                notificationSettings.setEnabled(value)
+                if (!value) notifier.cancelAll()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
                 emitError(e.toAppError())
             }
         }

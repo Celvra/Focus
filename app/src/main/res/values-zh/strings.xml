@@ -3,7 +3,20 @@
     <string name="app_name">Focus</string>
     <string name="notification_channel_reminders">提醒</string>
     <string name="notification_channel_chat_turns">回复</string>
+    <string name="notification_channel_messages">消息</string>
     <string name="chat_turn_running">正在回复</string>
+    <string name="notification_reply_title">回复完成</string>
+    <string name="notification_reply_failed_title">回复失败</string>
+    <string name="notification_reply_body">回复已完成</string>
+    <string name="notification_reply_failed_body">回复因错误中止。</string>
+    <string name="notification_action_title">需要你的确认</string>
+    <string name="notification_action_approval">助手正在等待你的确认。</string>
+    <string name="notification_action_plan">助手提出了一个计划。</string>
+    <string name="notification_action_question">助手有问题想问你。</string>
+    <string name="notification_feed_title">新文章</string>
+    <plurals name="notification_feed_body">
+        <item quantity="other">%1$d 篇新文章</item>
+    </plurals>
     <string name="settings_title">设置</string>
     <string name="drawer_recent">最近</string>
     <string name="drawer_new_chat">新对话</string>

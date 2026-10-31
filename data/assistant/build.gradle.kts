@@ -11,6 +11,7 @@ android {
 dependencies {
     implementation(projects.core.error)
     implementation(projects.core.network)
+    implementation(projects.core.notify)
     implementation(projects.data.sources)
     implementation(projects.data.bridge)
     implementation(libs.androidx.exifinterface)

@@ -176,6 +176,11 @@
     <string name="settings_page_chat_detail_body">选择最后一条回复下方显示哪些统计，以及它们的顺序。</string>
     <string name="settings_page_appearance">外观与语言</string>
     <string name="settings_page_appearance_body">语言和界面偏好。</string>
+    <string name="settings_page_notifications">消息推送</string>
+    <string name="settings_page_notifications_body">回复、确认请求和订阅更新。</string>
+    <string name="settings_notifications_title">消息推送</string>
+    <string name="settings_notifications_item">推送通知</string>
+    <string name="settings_notifications_body">回复完成、助手需要你确认或有新文章时通知。</string>
     <string name="settings_page_data">数据与隐私</string>
     <string name="settings_page_data_body">本地统计、数据管理和关于信息。</string>
     <string name="settings_chat_detail_body">统计显示在最后一条助手回复下方。可以逐项开关，也可以调整顺序。</string>

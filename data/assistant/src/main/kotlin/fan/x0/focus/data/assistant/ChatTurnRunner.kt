@@ -2,6 +2,8 @@ package fan.x0.focus.data.assistant
 
 import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.toAppError
+import fan.x0.focus.core.notify.MessageNotifier
+import fan.x0.focus.core.notify.NotifyActionKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -32,6 +34,7 @@ class ChatTurnRunner(
     private val titles: ChatTitleGenerator,
     private val keepAlive: ChatTurnKeepAlive,
     private val background: BackgroundCommandMonitor,
+    private val notifier: MessageNotifier,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, Job>()
@@ -145,18 +148,24 @@ class ChatTurnRunner(
                             }
                             if (event.tool == RENAME_TOOL) _titleUpdates.tryEmit(conversationId)
                         }
-                        is ChatEvent.ApprovalRequested -> updateEntries(conversationId, turnId) { entries ->
-                            entries + ChatTurnEntry.Approval(event.request.toTurnApproval())
+                        is ChatEvent.ApprovalRequested -> {
+                            updateEntries(conversationId, turnId) { entries ->
+                                entries + ChatTurnEntry.Approval(event.request.toTurnApproval())
+                            }
+                            pushAction(conversationId, NotifyActionKind.Approval)
                         }
-                        is ChatEvent.ApprovalResolved -> updateEntries(conversationId, turnId) { entries ->
-                            entries.resolveApproval(
-                                id = event.request.id,
-                                phase = if (event.approved) {
-                                    ChatTurnApprovalPhase.Running
-                                } else {
-                                    ChatTurnApprovalPhase.Declined
-                                },
-                            )
+                        is ChatEvent.ApprovalResolved -> {
+                            updateEntries(conversationId, turnId) { entries ->
+                                entries.resolveApproval(
+                                    id = event.request.id,
+                                    phase = if (event.approved) {
+                                        ChatTurnApprovalPhase.Running
+                                    } else {
+                                        ChatTurnApprovalPhase.Declined
+                                    },
+                                )
+                            }
+                            notifier.cancel(conversationId)
                         }
                         is ChatEvent.PlanProposed -> {
                             updateState(conversationId, turnId) { state ->
@@ -165,6 +174,7 @@ class ChatTurnRunner(
                             updateEntries(conversationId, turnId) { entries ->
                                 entries + ChatTurnEntry.Plan(event.plan, event.request.toTurnApproval())
                             }
+                            pushAction(conversationId, NotifyActionKind.Plan)
                         }
                         is ChatEvent.PlanResolved -> {
                             val requestId = _states.value[conversationId]?.planRequestId.orEmpty()
@@ -174,12 +184,19 @@ class ChatTurnRunner(
                                     phase = if (event.approved) ChatTurnApprovalPhase.Finished else ChatTurnApprovalPhase.Declined,
                                 )
                             }
+                            notifier.cancel(conversationId)
                         }
-                        is ChatEvent.AskRequested -> updateEntries(conversationId, turnId) { entries ->
-                            entries + ChatTurnEntry.Ask(event.request.toTurnAsk())
+                        is ChatEvent.AskRequested -> {
+                            updateEntries(conversationId, turnId) { entries ->
+                                entries + ChatTurnEntry.Ask(event.request.toTurnAsk())
+                            }
+                            pushAction(conversationId, NotifyActionKind.Question)
                         }
-                        is ChatEvent.AskResolved -> updateEntries(conversationId, turnId) { entries ->
-                            entries.resolveAsk(event.request.id, event.reply)
+                        is ChatEvent.AskResolved -> {
+                            updateEntries(conversationId, turnId) { entries ->
+                                entries.resolveAsk(event.request.id, event.reply)
+                            }
+                            notifier.cancel(conversationId)
                         }
                         is ChatEvent.TodoUpdated -> updateState(conversationId, turnId) { state ->
                             state.copy(todos = event.todos)
@@ -227,11 +244,19 @@ class ChatTurnRunner(
                         }
                         ChatEvent.Completed -> {
                             updateState(conversationId, turnId) { state -> state.copy(retry = null) }
+                            val finished = _states.value[conversationId]
                             finish(conversationId, turnId, null, compactionFailed)
+                            if (finished != null && !manualCompact) {
+                                pushReply(finished, null, failed = false)
+                            }
                         }
                         is ChatEvent.Failed -> {
                             persistPartial(conversationId, turnId)
+                            val finished = _states.value[conversationId]
                             finish(conversationId, turnId, event.error, compactionFailed)
+                            if (finished != null && !manualCompact) {
+                                pushReply(finished, event.error, failed = true)
+                            }
                         }
                     }
                 }
@@ -302,6 +327,38 @@ class ChatTurnRunner(
         _results.update {
             it + (conversationId to ChatTurnResult(conversationId, turnId, error, compactionFailed))
         }
+    }
+
+    private fun pushReply(state: ChatTurnState, error: AppError?, failed: Boolean) {
+        scope.launch {
+            val errorText = error?.let { it.serverMessage ?: it.serverTitle ?: it.type.name }.orEmpty()
+            val answer = state.entries
+                .filterIsInstance<ChatTurnEntry.Answer>()
+                .lastOrNull()
+                ?.text
+                ?.trim()
+                .orEmpty()
+            notifier.notifyReply(
+                conversationId = state.conversationId,
+                title = titleOf(state.conversationId),
+                preview = errorText.ifBlank { answer },
+                failed = failed,
+            )
+        }
+    }
+
+    private fun pushAction(conversationId: String, kind: NotifyActionKind) {
+        scope.launch {
+            notifier.notifyAction(conversationId, titleOf(conversationId), kind)
+        }
+    }
+
+    private suspend fun titleOf(conversationId: String): String = try {
+        chats.conversation(conversationId)?.title.orEmpty()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Throwable) {
+        ""
     }
 
     private suspend fun scheduleTitle(conversationId: String, turns: Int, options: TurnOptions) {

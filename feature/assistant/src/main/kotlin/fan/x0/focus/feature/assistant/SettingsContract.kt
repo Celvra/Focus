@@ -21,6 +21,7 @@ data class SettingsUiState(
     val providers: List<ProviderConfig> = emptyList(),
     val activeProviderId: String = "",
     val refreshHours: Int = 6,
+    val notificationsEnabled: Boolean = true,
     val language: String? = null,
     val resetConfirm: Boolean = false,
     val dataUsage: DataUsage = DataUsage(),
@@ -93,6 +94,7 @@ enum class DataClearTarget { Conversations, FileIndex }
 
 sealed interface SettingsAction : UiAction {
     data class RefreshHoursChanged(val hours: Int) : SettingsAction
+    data class NotificationsEnabledChanged(val value: Boolean) : SettingsAction
     data class LanguageChanged(val tag: String?) : SettingsAction
     data object RefreshData : SettingsAction
     data object ToggleContributors : SettingsAction

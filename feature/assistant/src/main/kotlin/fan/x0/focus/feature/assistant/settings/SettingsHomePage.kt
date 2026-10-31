@@ -50,6 +50,8 @@ internal fun SettingsHomePage(onOpen: (SettingsDestination) -> Unit) {
                 val detailBody = stringResource(R.string.settings_page_chat_detail_body)
                 val appearanceTitle = stringResource(R.string.settings_page_appearance)
                 val appearanceBody = stringResource(R.string.settings_page_appearance_body)
+                val notificationsTitle = stringResource(R.string.settings_page_notifications)
+                val notificationsBody = stringResource(R.string.settings_page_notifications_body)
                 val dataTitle = stringResource(R.string.settings_page_data)
                 val dataBody = stringResource(R.string.settings_page_data_body)
                 FocusCardGroup {
@@ -82,6 +84,12 @@ internal fun SettingsHomePage(onOpen: (SettingsDestination) -> Unit) {
                         body = appearanceBody,
                         icon = FocusIcons.Language,
                         onClick = { onOpen(SettingsDestination.Appearance) },
+                    )
+                    pageItem(
+                        title = notificationsTitle,
+                        body = notificationsBody,
+                        icon = FocusIcons.Notification,
+                        onClick = { onOpen(SettingsDestination.Notifications) },
                     )
                     pageItem(
                         title = dataTitle,

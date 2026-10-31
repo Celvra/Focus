@@ -52,6 +52,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -115,10 +116,13 @@ import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 import fan.x0.focus.core.mvi.CollectEffect
+import fan.x0.focus.core.notify.AppPresence
+import fan.x0.focus.core.notify.MessageNotifier
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import java.io.File
 import java.time.LocalTime
@@ -129,6 +133,8 @@ fun ChatRoute(viewModel: ChatViewModel = koinViewModel()) {
     val snackbar = remember { SnackbarHostState() }
     HandleAppErrors(viewModel.errors, snackbar)
     val context = LocalContext.current
+    val presence = koinInject<AppPresence>()
+    val notifier = koinInject<MessageNotifier>()
     val openSettings = LocalFocusSettingsOpener.current
     val openDrawer = LocalFocusDrawerOpener.current
     val copied = stringResource(R.string.chat_copied)
@@ -142,6 +148,19 @@ fun ChatRoute(viewModel: ChatViewModel = koinViewModel()) {
             ChatEffect.ReplySent -> Unit
             ChatEffect.OpenSettings -> openSettings()
             ChatEffect.OpenSessions -> openDrawer()
+        }
+    }
+    LaunchedEffect(state.conversationId) {
+        val id = state.conversationId
+        if (id.isNotBlank()) notifier.cancel(id)
+    }
+    DisposableEffect(state.conversationId) {
+        val id = state.conversationId
+        if (id.isNotBlank()) presence.setVisibleConversation(id)
+        onDispose {
+            if (id.isNotBlank() && presence.visibleConversationId.value == id) {
+                presence.setVisibleConversation(null)
+            }
         }
     }
     val filePicker = rememberLauncherForActivityResult(

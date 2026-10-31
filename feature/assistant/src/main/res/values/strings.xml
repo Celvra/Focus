@@ -176,6 +176,11 @@
     <string name="settings_page_chat_detail_body">Choose which stats appear under the last reply and in what order.</string>
     <string name="settings_page_appearance">Appearance and language</string>
     <string name="settings_page_appearance_body">Language and interface preferences.</string>
+    <string name="settings_page_notifications">Notifications</string>
+    <string name="settings_page_notifications_body">Replies, confirmations, and feed updates.</string>
+    <string name="settings_notifications_title">Message push</string>
+    <string name="settings_notifications_item">Push notifications</string>
+    <string name="settings_notifications_body">Notify when a reply is ready, the assistant needs you, or feeds have new articles.</string>
     <string name="settings_page_data">Data and privacy</string>
     <string name="settings_page_data_body">Local stats, data management, and about.</string>
     <string name="settings_chat_detail_body">Stats appear under the last assistant reply. Turn fields on or off and move them into the order you want.</string>

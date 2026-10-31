@@ -20,9 +20,17 @@ class ChatSwitcher {
     private val _current = MutableStateFlow<String?>(null)
     val current: StateFlow<String?> = _current.asStateFlow()
 
+    private val _openRequest = MutableStateFlow<String?>(null)
+    val openRequest: StateFlow<String?> = _openRequest.asStateFlow()
+
     fun open(conversationId: String) {
         _current.value = conversationId
         _command.value = ChatCommand.Open(conversationId)
+        _openRequest.value = conversationId
+    }
+
+    fun consumeOpenRequest() {
+        _openRequest.value = null
     }
 
     fun newChat() {

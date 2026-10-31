@@ -11,6 +11,7 @@ android {
 dependencies {
     implementation(projects.core.error)
     implementation(projects.core.network)
+    implementation(projects.core.notify)
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)
     implementation(libs.kotlinx.coroutines.core)

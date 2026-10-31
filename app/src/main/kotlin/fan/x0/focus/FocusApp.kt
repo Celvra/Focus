@@ -51,6 +51,7 @@ import fan.x0.focus.core.designsystem.components.LocalFocusDrawerOpener
 import fan.x0.focus.core.designsystem.components.LocalFocusSettingsOpener
 import fan.x0.focus.core.designsystem.theme.FocusMotionDefaults
 import fan.x0.focus.data.assistant.AssistantSettings
+import fan.x0.focus.data.assistant.ChatSwitcher
 import fan.x0.focus.data.assistant.ChatTurnRunner
 import fan.x0.focus.feature.assistant.AssistantRoute
 import fan.x0.focus.feature.assistant.SettingsRoute
@@ -117,9 +118,11 @@ private fun MainShell() {
     val shell: ShellViewModel = koinViewModel()
     val shellState = shell.state.collectAsStateWithLifecycle()
     val turns = koinInject<ChatTurnRunner>()
+    val switcher = koinInject<ChatSwitcher>()
     val working by remember(turns) {
         turns.states.map { it.isNotEmpty() }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
+    val openRequest by switcher.openRequest.collectAsStateWithLifecycle()
 
     val navigate: (FocusRoute) -> Unit = { route ->
         backStack.open(route)
@@ -129,6 +132,12 @@ private fun MainShell() {
 
     LaunchedEffect(backStack.current) {
         shell.refresh()
+    }
+    LaunchedEffect(openRequest) {
+        if (openRequest != null) {
+            backStack.open(FocusRoute.Chat)
+            switcher.consumeOpenRequest()
+        }
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {

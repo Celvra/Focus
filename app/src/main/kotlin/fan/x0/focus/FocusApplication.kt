@@ -3,9 +3,13 @@ package fan.x0.focus
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import fan.x0.focus.app.AndroidMessageNotifier
 import fan.x0.focus.app.AppModule
+import fan.x0.focus.app.AppPresenceCallbacks
 import fan.x0.focus.app.ChatTurnService
 import fan.x0.focus.core.network.NetworkModule
+import fan.x0.focus.core.notify.AppPresence
+import fan.x0.focus.core.notify.NotifyModule
 import fan.x0.focus.data.assistant.ApprovalStatus
 import fan.x0.focus.data.assistant.ApprovalStore
 import fan.x0.focus.data.assistant.AssistantModule
@@ -35,6 +39,7 @@ import org.koin.plugin.module.dsl.startKoin
 @KoinApplication(
     modules = [
         NetworkModule::class,
+        NotifyModule::class,
         SourcesModule::class,
         AssistantModule::class,
         AppModule::class,
@@ -58,6 +63,9 @@ class FocusApplication : Application() {
             androidLogger()
             androidContext(this@FocusApplication)
         }
+        registerActivityLifecycleCallbacks(
+            AppPresenceCallbacks(KoinPlatform.getKoin().get<AppPresence>()),
+        )
         createChannels()
         scope.launch { bootstrap() }
     }
@@ -76,6 +84,13 @@ class FocusApplication : Application() {
                 ChatTurnService.CHANNEL_ID,
                 getString(R.string.notification_channel_chat_turns),
                 NotificationManager.IMPORTANCE_LOW,
+            ),
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                AndroidMessageNotifier.CHANNEL_ID,
+                getString(R.string.notification_channel_messages),
+                NotificationManager.IMPORTANCE_DEFAULT,
             ),
         )
     }

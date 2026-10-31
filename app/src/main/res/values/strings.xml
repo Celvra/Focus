@@ -3,7 +3,21 @@
     <string name="app_name">Focus</string>
     <string name="notification_channel_reminders">Reminders</string>
     <string name="notification_channel_chat_turns">Chat replies</string>
+    <string name="notification_channel_messages">Messages</string>
     <string name="chat_turn_running">Reply in progress</string>
+    <string name="notification_reply_title">Reply ready</string>
+    <string name="notification_reply_failed_title">Reply failed</string>
+    <string name="notification_reply_body">Reply finished</string>
+    <string name="notification_reply_failed_body">The reply stopped with an error.</string>
+    <string name="notification_action_title">Needs your input</string>
+    <string name="notification_action_approval">The assistant is waiting for your approval.</string>
+    <string name="notification_action_plan">The assistant proposed a plan.</string>
+    <string name="notification_action_question">The assistant has a question for you.</string>
+    <string name="notification_feed_title">New articles</string>
+    <plurals name="notification_feed_body">
+        <item quantity="one">%1$d new article</item>
+        <item quantity="other">%1$d new articles</item>
+    </plurals>
     <string name="settings_title">Settings</string>
     <string name="drawer_recent">Recent</string>
     <string name="drawer_new_chat">New chat</string>
