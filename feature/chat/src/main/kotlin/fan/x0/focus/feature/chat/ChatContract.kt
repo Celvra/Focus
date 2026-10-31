@@ -1,5 +1,6 @@
 package fan.x0.focus.feature.chat
 
+import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.mvi.UiAction
 import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
@@ -8,7 +9,9 @@ import fan.x0.focus.data.assistant.AgentMode
 import fan.x0.focus.data.assistant.AskKind
 import fan.x0.focus.data.assistant.AttachmentKind
 import fan.x0.focus.data.assistant.ChatDetailConfig
+import fan.x0.focus.data.assistant.CommandPolicy
 import fan.x0.focus.data.assistant.ConversationTodo
+import fan.x0.focus.data.assistant.FileDiff
 import fan.x0.focus.data.assistant.MessageStats
 import fan.x0.focus.data.assistant.PlanStatus
 import fan.x0.focus.data.assistant.ProposedPlan
@@ -24,6 +27,9 @@ data class TraceStep(
     val tool: String = "",
     val arguments: String = "",
     val output: String? = null,
+    val durationMs: Long = 0,
+    val startedAt: Long = 0,
+    val diffs: List<FileDiff> = emptyList(),
 )
 
 enum class ApprovalPhase { Waiting, Running, Finished, Declined }
@@ -110,7 +116,6 @@ data class ChatMenuUi(
     val author: String,
     val text: String,
     val fromUser: Boolean,
-    val reaction: String?,
     val canEdit: Boolean,
     val canDelete: Boolean,
 )
@@ -150,6 +155,26 @@ data class SlashUi(
     val visible: Boolean get() = open && commandIds.isNotEmpty()
 }
 
+data class BtwUi(
+    val open: Boolean = false,
+    val question: String = "",
+    val answer: String = "",
+    val loading: Boolean = false,
+    val error: AppError? = null,
+)
+
+data class SubAgentRunUi(
+    val id: String,
+    val task: String,
+    val providerName: String,
+    val model: String,
+    val running: Boolean,
+    val failed: Boolean,
+    val summary: String,
+    val error: String?,
+    val entries: List<ChatEntry>,
+)
+
 sealed interface ChatEntry {
     val key: String
     val messageId: Long? get() = null
@@ -160,7 +185,7 @@ sealed interface ChatEntry {
         val attachments: List<AttachmentUi> = emptyList(),
         override val messageId: Long? = null,
         val replyTo: QuotedMessageUi? = null,
-        val reaction: String? = null,
+        val reactions: List<String> = emptyList(),
     ) : ChatEntry
 
     data class Assistant(
@@ -168,9 +193,11 @@ sealed interface ChatEntry {
         val text: String,
         val live: Boolean,
         val reasoning: String = "",
+        val reasoningMs: Long = 0,
+        val reasoningStartedAt: Long = 0,
         override val messageId: Long? = null,
         val replyTo: QuotedMessageUi? = null,
-        val reaction: String? = null,
+        val reactions: List<String> = emptyList(),
         val stats: MessageStats? = null,
     ) : ChatEntry
 
@@ -191,6 +218,7 @@ data class ProviderOption(
     val id: String,
     val name: String,
     val model: String,
+    val icon: String = "",
 )
 
 data class ModelOption(
@@ -220,7 +248,6 @@ data class ChatUiState(
     val providers: List<ProviderOption> = emptyList(),
     val providerId: String = "",
     val model: String = "",
-    val variant: String = "",
     val reasoningLevel: ReasoningLevel = ReasoningLevel.Auto,
     val mode: AgentMode = AgentMode.Build,
     val attachments: List<AttachmentUi> = emptyList(),
@@ -230,6 +257,7 @@ data class ChatUiState(
     val modelQuery: String = "",
     val askDrafts: Map<String, AskDraft> = emptyMap(),
     val retry: RetryUi? = null,
+    val policy: CommandPolicy = CommandPolicy.Manual,
     val liveStats: MessageStats = MessageStats(),
     val statsConfig: ChatDetailConfig = ChatDetailConfig(),
     val todos: List<ConversationTodo> = emptyList(),
@@ -238,6 +266,9 @@ data class ChatUiState(
     val reply: ReplyUi? = null,
     val pendingDelete: ChatMenuUi? = null,
     val slash: SlashUi = SlashUi(),
+    val btw: BtwUi = BtwUi(),
+    val subAgentRuns: Map<String, SubAgentRunUi> = emptyMap(),
+    val subAgentOpenId: String? = null,
     val highlightKey: String? = null,
     val selectionKey: String? = null,
     val plan: ProposedPlan? = null,
@@ -249,12 +280,11 @@ data class ChatUiState(
 
     val stats: MessageStats?
         get() {
-            if (liveStats.hasUsage || liveStats.round > 0) return liveStats
+            if (liveStats.providerId.isNotBlank() || liveStats.hasUsage || liveStats.round > 0) {
+                return liveStats
+            }
             return history.filterIsInstance<ChatEntry.Assistant>().lastOrNull()?.stats
         }
-
-    val lastAssistantKey: String?
-        get() = entries.filterIsInstance<ChatEntry.Assistant>().lastOrNull()?.key
 
     val streaming: String
         get() = live.filterIsInstance<ChatEntry.Assistant>().lastOrNull()?.text.orEmpty()
@@ -271,11 +301,11 @@ data class ChatUiState(
     val ask: AskCardUi?
         get() = live.filterIsInstance<ChatEntry.Ask>().lastOrNull()?.card
 
+    val subAgent: SubAgentRunUi?
+        get() = subAgentOpenId?.let { subAgentRuns[it] }
+
     val providerName: String
         get() = providers.firstOrNull { it.id == providerId }?.name ?: providerId
-
-    val displayModel: String
-        get() = if (variant.isBlank()) model else "${model.substringBefore(':')}:$variant"
 
     val canSend: Boolean get() = (input.isNotBlank() || attachments.isNotEmpty()) && !sending
     val isEmpty: Boolean get() = history.isEmpty() && !sending && streaming.isBlank() && reasoning.isBlank()
@@ -301,13 +331,14 @@ sealed interface ChatAction : UiAction {
     data class AskSubmit(val askId: String) : ChatAction
     data class AskSkip(val askId: String) : ChatAction
     data object NewConversation : ChatAction
+    data object CloseBtw : ChatAction
+    data object RetryBtw : ChatAction
     data class OpenPicker(val picker: ComposerPicker?) : ChatAction
     data class SelectProvider(val providerId: String) : ChatAction
     data class SelectModel(val model: String) : ChatAction
     data class ModelQueryChanged(val value: String) : ChatAction
     data object RefreshModels : ChatAction
     data class SelectReasoning(val level: ReasoningLevel) : ChatAction
-    data class SetVariant(val variant: String) : ChatAction
     data class AttachPicked(val uris: List<String>) : ChatAction
     data class RemoveAttachment(val id: String) : ChatAction
     data class SetMode(val mode: AgentMode) : ChatAction
@@ -315,7 +346,6 @@ sealed interface ChatAction : UiAction {
     data object CloseMessageMenu : ChatAction
     data class ReplyTo(val key: String) : ChatAction
     data object CancelReply : ChatAction
-    data class ToggleReaction(val key: String, val reaction: String) : ChatAction
     data class StartEdit(val key: String) : ChatAction
     data class EditDraftChanged(val value: String) : ChatAction
     data object SaveEdit : ChatAction
@@ -335,6 +365,8 @@ sealed interface ChatAction : UiAction {
     data object RetryLast : ChatAction
     data object OpenSessions : ChatAction
     data object OpenSettings : ChatAction
+    data class OpenSubAgent(val id: String) : ChatAction
+    data object CloseSubAgent : ChatAction
     data object ConsumeMessage : ChatAction
 }
 

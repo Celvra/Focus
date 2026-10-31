@@ -2,6 +2,7 @@ package fan.x0.focus.feature.assistant
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.FocusCardGroup
 import fan.x0.focus.core.designsystem.components.FocusCardGroupIcon
 import fan.x0.focus.core.designsystem.components.FocusCardGroupValue
+import fan.x0.focus.core.designsystem.components.FocusChip
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.switchItem
 import fan.x0.focus.data.assistant.AgentDefaults
@@ -107,5 +109,33 @@ internal fun AgentCard(state: SettingsUiState, onAction: (SettingsAction) -> Uni
             },
             checkedIcon = FocusIcons.Check,
         )
+        formItem(
+            headlineContent = { Text(stringResource(R.string.settings_agent_retry_item)) },
+            supportingContent = { Text(stringResource(R.string.settings_agent_retry_body)) },
+            leadingContent = {
+                FocusCardGroupIcon(
+                    icon = FocusIcons.Refresh,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            },
+        ) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AgentDefaults.RETRY_PRESETS.forEach { retries ->
+                    FocusChip(
+                        label = if (retries == 0) {
+                            stringResource(R.string.settings_agent_retry_off)
+                        } else {
+                            stringResource(R.string.settings_agent_retry_value, retries)
+                        },
+                        selected = state.maxRetries == retries,
+                        onClick = { onAction(SettingsAction.MaxRetriesChanged(retries)) },
+                    )
+                }
+            }
+        }
     }
 }

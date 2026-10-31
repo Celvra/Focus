@@ -43,7 +43,6 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -68,6 +67,10 @@ fun FocusTimelineStep(
     summary: String? = null,
     isFirst: Boolean = false,
     isLast: Boolean = false,
+    onOpen: (() -> Unit)? = null,
+    durationMs: Long = 0,
+    startedAt: Long = 0,
+    diffs: List<FocusDiff> = emptyList(),
 ) {
     val motion = LocalFocusMotion.current
     val scheme = MaterialTheme.colorScheme
@@ -122,9 +125,11 @@ fun FocusTimelineStep(
                 .clickable(
                     interactionSource = interaction,
                     indication = null,
-                    enabled = hasSummary,
+                    enabled = hasSummary || onOpen != null,
                     role = Role.Button,
-                ) { expanded = !expanded }
+                ) {
+                    if (onOpen != null) onOpen() else expanded = !expanded
+                }
                 .heightIn(min = 40.dp)
                 .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -165,14 +170,26 @@ fun FocusTimelineStep(
                     .weight(1f)
                     .shimmer(running, highlight = labelColor),
             )
-            if (hasSummary) {
+            FocusDurationText(
+                durationMs = durationMs,
+                startedAt = startedAt,
+                running = running,
+            )
+            if (onOpen != null) {
+                Icon(
+                    imageVector = FocusIcons.Chevron,
+                    contentDescription = null,
+                    tint = contentColor.copy(alpha = 0.6f),
+                    modifier = Modifier.size(16.dp),
+                )
+            } else if (hasSummary) {
                 Icon(
                     imageVector = FocusIcons.ArrowDown,
                     contentDescription = null,
                     tint = contentColor.copy(alpha = 0.6f),
                     modifier = Modifier
                         .size(16.dp)
-                        .rotate(chevron),
+                        .graphicsLayer { rotationZ = chevron },
                 )
             }
         }
@@ -202,6 +219,26 @@ fun FocusTimelineStep(
                     style = MaterialTheme.typography.bodySmall,
                     color = contentColor.copy(alpha = 0.75f),
                 )
+            }
+        }
+        if (diffs.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawBehind {
+                        if (!isLast) {
+                            val x = NodeColumnWidth.toPx() / 2f
+                            drawLine(
+                                lineColor,
+                                Offset(x, 0f),
+                                Offset(x, size.height),
+                                1.dp.toPx(),
+                            )
+                        }
+                    }
+                    .padding(start = NodeColumnWidth + 8.dp, top = 2.dp, bottom = 8.dp, end = 4.dp),
+            ) {
+                FocusDiffList(diffs = diffs)
             }
         }
     }

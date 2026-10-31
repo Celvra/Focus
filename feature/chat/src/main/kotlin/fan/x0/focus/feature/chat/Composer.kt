@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -32,7 +33,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,51 +62,94 @@ internal fun Composer(
     modifier: Modifier = Modifier,
 ) {
     var attachSheet by remember { mutableStateOf(false) }
-    FocusComposer(
-        input = state.input,
-        onInputChange = { onAction(ChatAction.InputChanged(it)) },
-        placeholder = state.inputPlaceholder(),
-        canSend = state.canSend,
-        sending = state.sending,
-        onSend = { onAction(ChatAction.Send) },
-        onStop = { onAction(ChatAction.Stop) },
-        hazeState = hazeState,
-        modifier = modifier,
-        onHeightChange = onHeightChange,
-        onAdd = { attachSheet = true },
-        addContentDescription = stringResource(R.string.chat_attach),
-        attachments = {
-            if (state.attachments.isNotEmpty()) {
-                AttachmentRow(
-                    attachments = state.attachments,
-                    onRemove = { onAction(ChatAction.RemoveAttachment(it)) },
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .onSizeChanged { onHeightChange(it.height) },
+    ) {
+        FocusComposer(
+            input = state.input,
+            onInputChange = { onAction(ChatAction.InputChanged(it)) },
+            placeholder = state.inputPlaceholder(),
+            canSend = state.canSend,
+            sending = state.sending,
+            onSend = { onAction(ChatAction.Send) },
+            onStop = { onAction(ChatAction.Stop) },
+            hazeState = hazeState,
+            modifier = Modifier.fillMaxWidth(),
+            onHeightChange = {},
+            onAdd = { attachSheet = true },
+            addContentDescription = stringResource(R.string.chat_attach),
+            onKeyEvent = { event ->
+                if (!state.slash.visible || event.type != KeyEventType.KeyDown) {
+                    false
+                } else {
+                    when (event.key) {
+                        Key.DirectionUp -> {
+                            onAction(ChatAction.SlashMove(-1))
+                            true
+                        }
+                        Key.DirectionDown -> {
+                            onAction(ChatAction.SlashMove(1))
+                            true
+                        }
+                        Key.Enter -> {
+                            onAction(ChatAction.SlashSelect)
+                            true
+                        }
+                        Key.NumPadEnter -> {
+                            onAction(ChatAction.SlashSelect)
+                            true
+                        }
+                        Key.Escape -> {
+                            onAction(ChatAction.SlashClose)
+                            true
+                        }
+                        else -> false
+                    }
+                }
+            },
+            attachments = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    state.reply?.let { reply ->
+                        ReplyPreview(
+                            reply = reply,
+                            onCancel = { onAction(ChatAction.CancelReply) },
+                        )
+                    }
+                    if (state.attachments.isNotEmpty()) {
+                        AttachmentRow(
+                            attachments = state.attachments,
+                            onRemove = { onAction(ChatAction.RemoveAttachment(it)) },
+                        )
+                    }
+                }
+            },
+            pills = {
+                FocusComposerPill(
+                    icon = FocusIcons.Provider,
+                    contentDescription = state.providerName.ifBlank {
+                        stringResource(R.string.chat_picker_provider_title)
+                    },
+                    compact = true,
+                    onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Provider)) },
                 )
-            }
-        },
-        pills = {
-            FocusComposerPill(
-                icon = FocusIcons.Provider,
-                contentDescription = state.providerName.ifBlank {
-                    stringResource(R.string.chat_picker_provider_title)
-                },
-                compact = true,
-                onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Provider)) },
-            )
-            FocusComposerPill(
-                label = state.model.ifBlank { stringResource(R.string.chat_picker_model_empty) },
-                icon = FocusIcons.Assistant,
-                compact = true,
-                onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Model)) },
-            )
-            FocusComposerPill(
-                label = stringResource(state.reasoningLevel.labelRes()),
-                icon = FocusIcons.Idea,
-                selected = state.reasoningLevel.isEnabled,
-                compact = true,
-                onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Reasoning)) },
-            )
-        },
-    )
+                FocusComposerPill(
+                    label = state.model.ifBlank { stringResource(R.string.chat_picker_model_empty) },
+                    icon = FocusIcons.Assistant,
+                    compact = true,
+                    onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Model)) },
+                )
+                FocusComposerPill(
+                    label = stringResource(state.reasoningLevel.labelRes()),
+                    icon = FocusIcons.Idea,
+                    selected = state.reasoningLevel.isEnabled,
+                    compact = true,
+                    onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Reasoning)) },
+                )
+            },
+        )
+    }
 
     when (state.picker) {
         ComposerPicker.Provider -> ProviderPickerSheet(
@@ -139,6 +188,7 @@ internal fun Composer(
         }
         ComposerPicker.Reasoning -> ReasoningPickerSheet(
             level = state.reasoningLevel,
+            model = state.model,
             onSelect = { onAction(ChatAction.SelectReasoning(it)) },
             onDismiss = { onAction(ChatAction.OpenPicker(null)) },
         )
@@ -171,6 +221,65 @@ private fun ChatUiState.inputPlaceholder(): String {
         stringResource(R.string.chat_input_hint)
     } else {
         stringResource(R.string.chat_input_hint_titled, title)
+    }
+}
+
+@Composable
+private fun ReplyPreview(
+    reply: ReplyUi,
+    onCancel: () -> Unit,
+) {
+    val author = reply.author.ifBlank { stringResource(R.string.chat_quote_you) }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = FocusIcons.Reply,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.chat_reply_title, author),
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = reply.preview,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.82f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Surface(
+                onClick = onCancel,
+                modifier = Modifier.size(32.dp),
+                shape = CircleShape,
+                color = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = FocusIcons.Close,
+                        contentDescription = stringResource(R.string.chat_reply_cancel),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
     }
 }
 

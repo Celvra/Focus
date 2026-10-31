@@ -3,6 +3,7 @@ package fan.x0.focus.core.designsystem.components
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.PhotoCamera
@@ -37,8 +39,9 @@ import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.RssFeed
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Stop
@@ -61,6 +64,7 @@ object FocusIcons {
     val Assistant: ImageVector = Icons.Rounded.AutoAwesome
     val Add: ImageVector = Icons.Rounded.Add
     val Back: ImageVector = Icons.AutoMirrored.Rounded.ArrowBack
+    val Reply: ImageVector = Icons.AutoMirrored.Rounded.Reply
     val Send: ImageVector = Icons.AutoMirrored.Rounded.Send
     val Stop: ImageVector = Icons.Rounded.Stop
     val Check: ImageVector = Icons.Rounded.Check
@@ -72,10 +76,12 @@ object FocusIcons {
     val More: ImageVector = Icons.Rounded.MoreVert
     val Refresh: ImageVector = Icons.Rounded.Refresh
     val Search: ImageVector = Icons.Rounded.Search
+    val SelectAll: ImageVector = Icons.Rounded.SelectAll
     val Share: ImageVector = Icons.Rounded.Share
     val Calendar: ImageVector = Icons.Rounded.CalendarMonth
     val Feed: ImageVector = Icons.Rounded.RssFeed
     val Folder: ImageVector = Icons.Rounded.Folder
+    val File: ImageVector = Icons.Rounded.Description
     val Link: ImageVector = Icons.Rounded.Link
     val Bolt: ImageVector = Icons.Rounded.Bolt
     val Idea: ImageVector = Icons.Rounded.Lightbulb

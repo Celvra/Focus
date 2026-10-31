@@ -21,6 +21,7 @@ class PromptBuilder(
         builder.appendLine("- When you need a decision, a missing detail, or a preference, call ask instead of guessing. One card holds up to five questions, each with a subtitle that explains why you ask, and you wait for the answers before you continue.")
         builder.appendLine("- The chat title is shown to the user. Call rename_conversation when the topic changes, and keep the title short and plain.")
         builder.appendLine("- The chat header also shows a short working line. Before a slow tool, call set_working_text in the user's language, for example 正在拉取, and keep it under 20 characters.")
+        builder.appendLine("- You may add one emoji reaction to a user message with react_to_message when it fits. Pass match with a short snippet from the target bubble, or omit it for the latest message. Use it sparingly and never react to your own messages.")
         builder.appendLine("- The context files below are yours to maintain. SOUL.md is your voice, PERSONA.md is your identity, USER.md is about the user, AGENT.md is what you learned about working with them, and MEMORY.md is for durable facts.")
         builder.appendLine("- Use read_workspace_file to reread one, write_workspace_file to rewrite it, append_workspace_file to add to it, and save_memory for one durable fact.")
         builder.appendLine("- Update a context file only when you learn something durable. Keep each file short, plain, and current. Do not mention the files unless the user asks.")
@@ -47,6 +48,19 @@ class PromptBuilder(
         builder.appendLine("- You choose the category label and the icon key for every card, idea, and goal. Call list_icons before picking an icon.")
         builder.appendLine("- Categories are yours to name. Reuse a label that list_updates, list_ideas, or list_goals already shows when it fits, and group related items under the same label.")
         appendDocuments(builder, documents)
+        return builder.toString()
+    }
+
+    suspend fun btwPrompt(): String {
+        val name = workspace.assistantName()
+        val builder = StringBuilder()
+        builder.appendLine("You are $name, answering a side question about the current conversation.")
+        builder.appendLine("The conversation below is context only. You cannot act on it, change anything, or call tools.")
+        builder.appendLine("Rules:")
+        builder.appendLine("- Answer only the side question. Do not continue the main task.")
+        builder.appendLine("- If the answer needs an action, say what would be needed instead of claiming you did it.")
+        builder.appendLine("- Use markdown when it helps. Keep it brief and concrete.")
+        builder.appendLine("- ${language()} Current time: ${ToolTime.full(ToolTime.now())}.")
         return builder.toString()
     }
 

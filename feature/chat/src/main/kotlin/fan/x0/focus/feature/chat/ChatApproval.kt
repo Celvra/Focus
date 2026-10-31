@@ -5,7 +5,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,13 +19,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.FocusIcons
@@ -72,19 +71,23 @@ fun FocusApprovalCard(
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(badgeTint.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center,
+                Surface(
+                    modifier = Modifier.size(32.dp),
+                    shape = CircleShape,
+                    color = badgeTint.copy(alpha = 0.14f),
+                    contentColor = badgeTint,
                 ) {
-                    Icon(
-                        imageVector = if (card.phase == ApprovalPhase.Waiting) FocusIcons.Warning else FocusIcons.Bolt,
-                        contentDescription = null,
-                        tint = badgeTint,
-                        modifier = Modifier.size(16.dp),
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (card.phase == ApprovalPhase.Waiting) {
+                                FocusIcons.Warning
+                            } else {
+                                FocusIcons.Bolt
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -114,6 +117,9 @@ fun FocusApprovalCard(
                                 summary = step.summary,
                                 isFirst = index == 0,
                                 isLast = index == card.steps.lastIndex,
+                                durationMs = step.durationMs,
+                                startedAt = step.startedAt,
+                                diffs = step.diffs.map { diff -> diff.toFocusDiff() },
                             )
                         }
                     }

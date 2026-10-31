@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 9) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 11) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -23,8 +23,7 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 mode TEXT NOT NULL DEFAULT 'build',
                 plan_json TEXT,
                 plan_status TEXT NOT NULL DEFAULT 'none',
-                plan_request_id TEXT NOT NULL DEFAULT '',
-                variant TEXT NOT NULL DEFAULT ''
+                plan_request_id TEXT NOT NULL DEFAULT ''
             )
             """.trimIndent(),
         )
@@ -44,7 +43,9 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 label TEXT,
                 reply_to_id INTEGER,
                 stats_json TEXT,
-                reaction TEXT
+                reaction TEXT,
+                elapsed_ms INTEGER NOT NULL DEFAULT 0,
+                diff_json TEXT
             )
             """.trimIndent(),
         )
@@ -233,7 +234,6 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             db.execSQL("ALTER TABLE conversations ADD COLUMN plan_json TEXT")
             db.execSQL("ALTER TABLE conversations ADD COLUMN plan_status TEXT NOT NULL DEFAULT 'none'")
             db.execSQL("ALTER TABLE conversations ADD COLUMN plan_request_id TEXT NOT NULL DEFAULT ''")
-            db.execSQL("ALTER TABLE conversations ADD COLUMN variant TEXT NOT NULL DEFAULT ''")
             db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS conversation_todos(
@@ -316,6 +316,12 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 db.execSQL("ALTER TABLE file_index ADD COLUMN content TEXT NOT NULL DEFAULT ''")
             }
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_file_index_path ON file_index(path)")
+        }
+        if (oldVersion < 10) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN elapsed_ms INTEGER NOT NULL DEFAULT 0")
+        }
+        if (oldVersion < 11) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN diff_json TEXT")
         }
     }
 

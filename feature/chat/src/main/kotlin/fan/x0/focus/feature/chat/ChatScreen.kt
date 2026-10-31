@@ -1,6 +1,8 @@
 package fan.x0.focus.feature.chat
 
+import android.content.ClipData
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,9 +16,9 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -74,12 +76,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -91,7 +94,6 @@ import fan.x0.focus.core.designsystem.components.AvatarState
 import fan.x0.focus.core.designsystem.components.AvatarStyle
 import fan.x0.focus.core.designsystem.components.FocusAvatar
 import fan.x0.focus.core.designsystem.components.FocusBubbleEnter
-import fan.x0.focus.core.designsystem.components.FocusChatBubble
 import fan.x0.focus.core.designsystem.components.FocusReasoningCard
 import fan.x0.focus.core.designsystem.components.FocusTraceCard
 import fan.x0.focus.core.designsystem.components.FocusTraceStep
@@ -104,6 +106,7 @@ import fan.x0.focus.core.designsystem.components.FocusMarkdown
 import fan.x0.focus.core.designsystem.components.FocusReveal
 import fan.x0.focus.core.designsystem.components.FocusTimelineStep
 import fan.x0.focus.core.designsystem.components.LocalFocusDrawerOpener
+import fan.x0.focus.core.designsystem.components.LocalFocusSettingsOpener
 import fan.x0.focus.core.designsystem.components.pressScale
 import fan.x0.focus.core.designsystem.components.shimmer
 import fan.x0.focus.core.designsystem.components.stateLayer
@@ -111,6 +114,7 @@ import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
+import fan.x0.focus.core.mvi.CollectEffect
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -125,6 +129,21 @@ fun ChatRoute(viewModel: ChatViewModel = koinViewModel()) {
     val snackbar = remember { SnackbarHostState() }
     HandleAppErrors(viewModel.errors, snackbar)
     val context = LocalContext.current
+    val openSettings = LocalFocusSettingsOpener.current
+    val openDrawer = LocalFocusDrawerOpener.current
+    val copied = stringResource(R.string.chat_copied)
+    val deleted = stringResource(R.string.chat_deleted)
+    val editSaved = stringResource(R.string.chat_edit_saved)
+    CollectEffect(viewModel.effect) { effect ->
+        when (effect) {
+            ChatEffect.Copied -> snackbar.showSnackbar(copied)
+            ChatEffect.Deleted -> snackbar.showSnackbar(deleted)
+            ChatEffect.EditSaved -> snackbar.showSnackbar(editSaved)
+            ChatEffect.ReplySent -> Unit
+            ChatEffect.OpenSettings -> openSettings()
+            ChatEffect.OpenSessions -> openDrawer()
+        }
+    }
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
@@ -173,6 +192,27 @@ fun ChatScreen(
     onPickPhotos: () -> Unit = {},
     onTakePhoto: () -> Unit = {},
 ) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val copied = stringResource(R.string.chat_copied)
+    val copyText: (String) -> Unit = { text ->
+        onAction(ChatAction.CloseMessageMenu)
+        scope.launch {
+            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(null, text)))
+            snackbar.showSnackbar(copied)
+        }
+    }
+    BackHandler(enabled = state.selectionKey != null) {
+        onAction(ChatAction.ClearSelection)
+    }
+    LaunchedEffect(state.message?.nonce) {
+        val message = state.message ?: return@LaunchedEffect
+        snackbar.showSnackbar(
+            context.getString(message.resId, *message.args.toTypedArray()),
+        )
+        onAction(ChatAction.ConsumeMessage)
+    }
     var celebrate by remember { mutableStateOf(false) }
     var wasSending by remember { mutableStateOf(false) }
     LaunchedEffect(state.sending) {
@@ -185,6 +225,7 @@ fun ChatScreen(
     }
     val avatarState = state.avatarState(celebrate)
     val working = state.sending
+    val retry = state.retry
     var mascotTop by remember { mutableStateOf<Offset?>(null) }
     var mascotBottom by remember { mutableStateOf<Offset?>(null) }
     var overlayOrigin by remember { mutableStateOf(Offset.Zero) }
@@ -207,6 +248,7 @@ fun ChatScreen(
                         state.assistantName.ifBlank { stringResource(R.string.chat_title) }
                     },
                     subtitle = when {
+                        retry != null -> stringResource(R.string.chat_retrying, retry.attempt, retry.max)
                         state.sending -> state.workingText.ifBlank {
                             stringResource(R.string.chat_working)
                         }
@@ -237,6 +279,8 @@ fun ChatScreen(
             var composerHeight by remember { mutableStateOf(0) }
             val hazeState = rememberHazeState()
             val composerPadding = with(LocalDensity.current) { composerHeight.toDp() } + 12.dp
+            val composerOffset = with(LocalDensity.current) { composerHeight.toDp() } + 8.dp
+            val motion = LocalFocusMotion.current
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -267,6 +311,7 @@ fun ChatScreen(
                                 else -> ChatThread(
                                     state = conversation,
                                     onAction = onAction,
+                                    onCopy = copyText,
                                     bottomPadding = composerPadding,
                                     working = working,
                                     onMascotDock = { mascotBottom = it },
@@ -274,6 +319,30 @@ fun ChatScreen(
                             }
                         }
                     }
+                }
+                AnimatedVisibility(
+                    visible = state.slash.visible,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(start = 12.dp, end = 12.dp, bottom = composerOffset),
+                    enter = slideInVertically(motion.spatialDefault()) { it } +
+                        fadeIn(motion.effectsDefault()),
+                    exit = slideOutVertically(motion.spatialDefault()) { it } +
+                        fadeOut(motion.effectsFast()),
+                ) {
+                    SlashCommandPanel(slash = state.slash, onAction = onAction)
+                }
+                AnimatedVisibility(
+                    visible = state.selectionKey != null && !state.slash.visible,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(start = 12.dp, end = 12.dp, bottom = composerOffset),
+                    enter = slideInVertically(motion.spatialDefault()) { it } +
+                        fadeIn(motion.effectsDefault()),
+                    exit = slideOutVertically(motion.spatialDefault()) { it } +
+                        fadeOut(motion.effectsFast()),
+                ) {
+                    SelectionModeBar(onDone = { onAction(ChatAction.ClearSelection) })
                 }
                 Composer(
                     state = state,
@@ -289,7 +358,7 @@ fun ChatScreen(
                 )
             }
         }
-        if (!state.isEmpty) {
+        if (!state.isEmpty && !state.slash.visible) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -307,6 +376,33 @@ fun ChatScreen(
                     overlayOrigin = overlayOrigin,
                 )
             }
+        }
+        if (state.btw.open) {
+            BtwSheet(
+                btw = state.btw,
+                onClose = { onAction(ChatAction.CloseBtw) },
+                onRetry = { onAction(ChatAction.RetryBtw) },
+            )
+        }
+        state.subAgent?.let { run ->
+            SubAgentSheet(
+                run = run,
+                onClose = { onAction(ChatAction.CloseSubAgent) },
+            )
+        }
+        state.edit?.let { edit ->
+            MessageEditSheet(
+                edit = edit,
+                onDraftChange = { onAction(ChatAction.EditDraftChanged(it)) },
+                onSave = { onAction(ChatAction.SaveEdit) },
+                onDismiss = { onAction(ChatAction.CancelEdit) },
+            )
+        }
+        if (state.pendingDelete != null) {
+            MessageDeleteDialog(
+                onConfirm = { onAction(ChatAction.ConfirmDelete) },
+                onDismiss = { onAction(ChatAction.CancelDelete) },
+            )
         }
     }
 }
@@ -474,6 +570,7 @@ internal const val ChatThreadTag = "chat-thread"
 private fun ChatThread(
     state: ChatUiState,
     onAction: (ChatAction) -> Unit,
+    onCopy: (String) -> Unit,
     bottomPadding: Dp = 0.dp,
     working: Boolean = false,
     onMascotDock: (Offset?) -> Unit = {},
@@ -481,6 +578,9 @@ private fun ChatThread(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val entries = state.entries
+    val retry = state.retry
+    val todos = state.todos
+    val stats = state.stats?.takeIf { it.hasStats(state.statsConfig) }
     var follow by remember { mutableStateOf(true) }
     val played = remember(state.conversationId) { mutableSetOf<String>() }
 
@@ -503,21 +603,41 @@ private fun ChatThread(
         }
     }
 
-    LaunchedEffect(entries.size, state.live, bottomPadding, working) {
+    LaunchedEffect(entries.size, state.live, bottomPadding, working, retry, stats, todos) {
         if (follow && entries.isNotEmpty()) {
-            listState.requestScrollToItem(entries.size + if (working) 1 else 0)
+            listState.requestScrollToItem(
+                entries.size +
+                    (if (retry != null) 1 else 0) +
+                    (if (todos.isNotEmpty()) 1 else 0) +
+                    (if (stats != null) 1 else 0) +
+                    (if (working) 1 else 0),
+            )
         }
+    }
+
+    LaunchedEffect(state.highlightKey) {
+        val key = state.highlightKey ?: return@LaunchedEffect
+        val index = entries.indexOfFirst { it.key == key }
+        if (index < 0) {
+            onAction(ChatAction.ConsumeHighlight)
+            return@LaunchedEffect
+        }
+        listState.animateScrollToItem(index)
+        delay(1600)
+        onAction(ChatAction.ConsumeHighlight)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().testTag(ChatThreadTag),
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag(ChatThreadTag),
             contentPadding = PaddingValues(
                 start = 16.dp,
                 top = 8.dp,
                 end = 16.dp,
-                bottom = bottomPadding + 8.dp,
+                bottom = bottomPadding + if (state.selectionKey != null) 64.dp else 8.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -530,7 +650,10 @@ private fun ChatThread(
                         is ChatEntry.Assistant -> "assistant"
                         is ChatEntry.Trace -> "trace"
                         is ChatEntry.Approval -> "approval"
+                        is ChatEntry.Plan -> "plan"
                         is ChatEntry.Ask -> "ask"
+                        is ChatEntry.Failure -> "failure"
+                        is ChatEntry.Notice -> "notice"
                     }
                 },
             ) { entry ->
@@ -541,43 +664,134 @@ private fun ChatThread(
                     onPlayed = { played += entry.key },
                 ) {
                     when (entry) {
-                        is ChatEntry.User -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        is ChatEntry.User -> Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
                             if (entry.attachments.isNotEmpty()) {
                                 UserAttachmentStrip(attachments = entry.attachments)
                             }
                             if (entry.text.isNotBlank()) {
-                                FocusChatBubble(text = entry.text, fromUser = true)
+                                ChatMessageBubble(
+                                    entry = entry,
+                                    fromUser = true,
+                                    state = state,
+                                    onAction = onAction,
+                                    onCopy = onCopy,
+                                )
+                            } else if (entry.reactions.isNotEmpty()) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    entry.reactions.distinct().forEach { reaction ->
+                                        MessageReactionChip(
+                                            reaction = reaction,
+                                            count = entry.reactions.count { it == reaction },
+                                        )
+                                    }
+                                }
                             }
                         }
-                        is ChatEntry.Assistant -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        is ChatEntry.Assistant -> Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.Start,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
                             if (entry.reasoning.isNotBlank()) {
                                 key(entry.key) {
-                                    FocusReasoningCard(text = entry.reasoning, running = entry.live)
+                                    FocusReasoningCard(
+                                        text = entry.reasoning,
+                                        running = entry.live,
+                                        durationMs = entry.reasoningMs,
+                                        startedAt = entry.reasoningStartedAt,
+                                    )
                                 }
                             }
                             if (entry.text.isNotBlank()) {
-                                FocusChatBubble(
-                                    text = entry.text,
+                                ChatMessageBubble(
+                                    entry = entry,
                                     fromUser = false,
+                                    state = state,
+                                    onAction = onAction,
+                                    onCopy = onCopy,
                                     streaming = entry.live,
                                 )
                             }
                         }
                         is ChatEntry.Trace -> FocusTraceCard(
                             steps = entry.steps.map {
-                                FocusTraceStep(it.label, it.status.toStepStatus(), it.summary)
+                                FocusTraceStep(
+                                    label = it.label,
+                                    status = it.status.toStepStatus(),
+                                    summary = it.summary,
+                                    openKey = if (it.tool == "spawn_agent" && it.id.isNotBlank()) {
+                                        it.id
+                                    } else {
+                                        null
+                                    },
+                                    durationMs = it.durationMs,
+                                    startedAt = it.startedAt,
+                                    diffs = it.diffs.map { diff -> diff.toFocusDiff() },
+                                )
                             },
+                            onOpen = { onAction(ChatAction.OpenSubAgent(it)) },
                         )
                         is ChatEntry.Approval -> FocusApprovalCard(
                             card = entry.card,
                             onDecide = { onAction(ChatAction.Decide(entry.card.id, it)) },
+                        )
+                        is ChatEntry.Plan -> FocusApprovalCard(
+                            card = entry.card,
+                            onDecide = { approve ->
+                                onAction(
+                                    ChatAction.DecidePlan(
+                                        approvalId = entry.card.id,
+                                        approve = approve,
+                                        policy = state.policy,
+                                    ),
+                                )
+                            },
                         )
                         is ChatEntry.Ask -> FocusAskCard(
                             card = entry.card,
                             drafts = state.askDrafts,
                             onAction = onAction,
                         )
+                        is ChatEntry.Failure -> ChatFailureCard(
+                            message = entry.message,
+                            retryable = entry.retryable,
+                            onRetry = { onAction(ChatAction.RetryLast) },
+                        )
+                        is ChatEntry.Notice -> ChatNoticeCard(text = entry.text)
                     }
+                }
+            }
+            if (retry != null) {
+                item(key = "retry") {
+                    ChatRetryCard(
+                        retry = retry,
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+            }
+            if (todos.isNotEmpty()) {
+                item(key = "todos", contentType = "todos") {
+                    ChatTodoCard(
+                        conversationId = state.conversationId,
+                        todos = todos,
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+            }
+            if (stats != null) {
+                item(key = "stats") {
+                    ChatStatsLine(
+                        stats = stats,
+                        config = state.statsConfig,
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
             item(key = "tail") { Spacer(Modifier.height(1.dp)) }

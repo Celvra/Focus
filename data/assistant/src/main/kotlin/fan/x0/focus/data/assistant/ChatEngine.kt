@@ -4,6 +4,7 @@ import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.AppErrorType
 import fan.x0.focus.core.error.NetworkException
 import fan.x0.focus.core.error.toAppError
+import fan.x0.focus.core.network.ProviderRequestConfig
 import fan.x0.focus.core.network.openai.ChatCompletionRequest
 import fan.x0.focus.core.network.openai.ChatMessageDto
 import fan.x0.focus.core.network.openai.ChatProtocol
@@ -47,6 +48,7 @@ data class TurnOptions(
 sealed interface ChatEvent {
     data class Delta(val text: String) : ChatEvent
     data class ReasoningDelta(val text: String) : ChatEvent
+    data class ReasoningTimed(val durationMs: Long) : ChatEvent
     data class UserMessageAppended(val turns: Int) : ChatEvent
     data class ToolStarted(
         val label: String,
@@ -61,6 +63,8 @@ sealed interface ChatEvent {
         val tool: String? = null,
         val id: String = "",
         val output: String? = null,
+        val durationMs: Long = 0,
+        val diffs: List<FileDiff> = emptyList(),
     ) : ChatEvent
     data class WorkingTextChanged(val text: String) : ChatEvent
     data class ApprovalRequested(val request: ApprovalRequest) : ChatEvent
@@ -145,6 +149,7 @@ class ChatEngine(
             emit(ChatEvent.Failed(AppError(AppErrorType.Unauthorized, serverMessage = "Set the API key first.")))
             return@flow
         }
+        val requestConfig = provider?.requestConfig(apiKey) ?: ProviderRequestConfig(apiKey = apiKey)
 
         val startedAt = System.currentTimeMillis()
         var agentMode = options.agentMode
@@ -209,7 +214,7 @@ class ChatEngine(
                 val roundResult = streamRound(
                     endpoint = endpoint,
                     protocol = protocol,
-                    apiKey = apiKey,
+                    config = requestConfig,
                     request = request,
                     retry = retry,
                     round = round,
@@ -220,6 +225,9 @@ class ChatEngine(
                     emitRetry = { attempt, max, reason -> emit(ChatEvent.RetryScheduled(attempt, max, reason)) },
                     emitReset = { emit(ChatEvent.RetryReset) },
                 )
+                if (roundResult.reasoningMs > 0) {
+                    emit(ChatEvent.ReasoningTimed(roundResult.reasoningMs))
+                }
                 val message = roundResult.message
                 totalStats = roundResult.stats.copy(
                     round = round,
@@ -236,6 +244,7 @@ class ChatEngine(
                         ToolCallRecord(it.id, it.name, ToolCatalog.redactArguments(it.name, it.arguments))
                     },
                     stats = totalStats,
+                    elapsedMs = roundResult.reasoningMs,
                 )
                 if (message.toolCalls.isEmpty()) {
                     emit(ChatEvent.Completed)
@@ -253,7 +262,7 @@ class ChatEngine(
                         ),
                     )
                 }
-                val results = executeTools(message.toolCalls, conversationId, agentMode)
+                val results = executeTools(message.toolCalls, conversationId, agentMode, providerId, model)
                 for ((call, result) in message.toolCalls.zip(results)) {
                     stepCount++
                     totalStats = totalStats.copy(step = stepCount, durationMs = System.currentTimeMillis() - startedAt)
@@ -276,6 +285,7 @@ class ChatEngine(
                             toolCallId = call.id,
                             name = call.name,
                             label = ask.questionLabels(),
+                            elapsedMs = result.durationMs,
                         )
                         continue
                     }
@@ -307,8 +317,18 @@ class ChatEngine(
                             toolCallId = call.id,
                             name = call.name,
                             label = plan.title,
+                            elapsedMs = result.durationMs,
                         )
-                        emit(ChatEvent.ToolFinished(label, true, plan.title, call.name, call.id))
+                        emit(
+                            ChatEvent.ToolFinished(
+                                label = label,
+                                ok = true,
+                                summary = plan.title,
+                                tool = call.name,
+                                id = call.id,
+                                durationMs = result.durationMs,
+                            ),
+                        )
                         continue
                     }
                     val approval = result.approval
@@ -321,10 +341,22 @@ class ChatEngine(
                                 toolCallId = call.id,
                                 name = call.name,
                                 label = label,
+                                elapsedMs = result.durationMs,
                             )
                             continue
                         }
-                        emit(ChatEvent.ToolFinished(label, result.ok, result.summary, call.name, call.id, result.content))
+                        emit(
+                            ChatEvent.ToolFinished(
+                                label = label,
+                                ok = result.ok,
+                                summary = result.summary,
+                                tool = call.name,
+                                id = call.id,
+                                output = result.content,
+                                durationMs = result.durationMs,
+                                diffs = result.diffs,
+                            ),
+                        )
                         chats.append(
                             conversationId = conversationId,
                             role = ChatRole.Tool,
@@ -332,6 +364,8 @@ class ChatEngine(
                             toolCallId = call.id,
                             name = call.name,
                             label = label,
+                            elapsedMs = result.durationMs,
+                            diffs = result.diffs.takeIf { it.isNotEmpty() }?.let { listOf(it) }.orEmpty(),
                         )
                         continue
                     }
@@ -340,11 +374,23 @@ class ChatEngine(
                     val approved = awaitDecision(approval.id)
                     emit(ChatEvent.ApprovalResolved(approval, approved))
                     val lines = mutableListOf<String>()
+                    val stepDiffs = mutableListOf<List<FileDiff>>()
                     if (approved) {
                         approval.steps.forEach { step ->
                             emit(ChatEvent.ToolStarted(step.label, tool = step.tool, arguments = step.arguments.take(500)))
+                            val stepStartedAt = System.currentTimeMillis()
                             val outcome = tools.runStep(step, conversationId, agentMode)
-                            emit(ChatEvent.ToolFinished(step.label, outcome.ok, outcome.summary, step.tool))
+                            stepDiffs += outcome.diffs
+                            emit(
+                                ChatEvent.ToolFinished(
+                                    label = step.label,
+                                    ok = outcome.ok,
+                                    summary = outcome.summary,
+                                    tool = step.tool,
+                                    durationMs = System.currentTimeMillis() - stepStartedAt,
+                                    diffs = outcome.diffs,
+                                ),
+                            )
                             lines += "${step.label}: ${if (outcome.ok) "done" else "failed"}. ${outcome.summary}"
                         }
                         approvals.decide(approval.id, ApprovalStatus.Approved, lines.joinToString("\n").take(500))
@@ -362,8 +408,19 @@ class ChatEngine(
                             .filter { it.isNotBlank() }
                             .takeIf { it.isNotEmpty() }
                             ?.joinToString("\n"),
+                        elapsedMs = result.durationMs,
+                        diffs = stepDiffs.takeIf { list -> list.any { it.isNotEmpty() } }.orEmpty(),
                     )
-                    emit(ChatEvent.ToolFinished(label, approved, if (approved) "Approved" else "Rejected", call.name, call.id))
+                    emit(
+                        ChatEvent.ToolFinished(
+                            label = label,
+                            ok = approved,
+                            summary = if (approved) "Approved" else "Rejected",
+                            tool = call.name,
+                            id = call.id,
+                            durationMs = result.durationMs,
+                        ),
+                    )
                 }
             }
             emit(ChatEvent.Completed)
@@ -379,6 +436,8 @@ class ChatEngine(
         calls: List<CompletedToolCall>,
         conversationId: String,
         mode: AgentMode,
+        providerId: String,
+        model: String,
     ): List<ToolResult> = coroutineScope {
         val semaphore = Semaphore(TOOL_CONCURRENCY)
         val readCalls = calls.filter { call ->
@@ -387,7 +446,7 @@ class ChatEngine(
         val deferred = readCalls.associate { call ->
             call.id to async {
                 semaphore.withPermit {
-                    if (call.name == "spawn_agent") runSubAgent(call) else tools.execute(call, conversationId, mode)
+                    executeTool(call, conversationId, mode, providerId, model)
                 }
             }
         }
@@ -395,12 +454,32 @@ class ChatEngine(
             if (call.id in deferred) {
                 deferred.getValue(call.id).await()
             } else {
-                if (call.name == "spawn_agent") runSubAgent(call) else tools.execute(call, conversationId, mode)
+                executeTool(call, conversationId, mode, providerId, model)
             }
         }
     }
 
-    private suspend fun runSubAgent(call: CompletedToolCall): ToolResult {
+    private suspend fun executeTool(
+        call: CompletedToolCall,
+        conversationId: String,
+        mode: AgentMode,
+        providerId: String,
+        model: String,
+    ): ToolResult {
+        val startedAt = System.currentTimeMillis()
+        val result = if (call.name == "spawn_agent") {
+            runSubAgent(call, providerId, model)
+        } else {
+            tools.execute(call, conversationId, mode)
+        }
+        return result.copy(durationMs = System.currentTimeMillis() - startedAt)
+    }
+
+    private suspend fun runSubAgent(
+        call: CompletedToolCall,
+        providerId: String,
+        model: String,
+    ): ToolResult {
         val args = runCatching {
             kotlinx.serialization.json.Json.parseToJsonElement(call.arguments)
                 as kotlinx.serialization.json.JsonObject
@@ -409,10 +488,18 @@ class ChatEngine(
         val tools = (args["tools"] as? kotlinx.serialization.json.JsonArray)
             ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
             .orEmpty()
-        val model = (args["model"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+        val overrideModel = (args["model"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
         val rounds = (args["max_rounds"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: 6
         val result = subAgents.run(
-            SubAgentRequest(task = task, tools = tools, model = model, maxRounds = rounds),
+            SubAgentRequest(
+                task = task,
+                tools = tools,
+                model = overrideModel,
+                parentProviderId = providerId,
+                parentModel = model,
+                maxRounds = rounds,
+                runId = call.id,
+            ),
         )
         val content = buildString {
             appendLine(result.summary)
@@ -443,7 +530,7 @@ class ChatEngine(
     private suspend fun streamRound(
         endpoint: ModelEndpoint,
         protocol: ChatProtocol,
-        apiKey: String,
+        config: ProviderRequestConfig,
         request: ChatCompletionRequest,
         retry: RetryConfig,
         round: Int,
@@ -459,6 +546,8 @@ class ChatEngine(
             var latest = totalStats.copy(round = round, step = step)
             val accumulator = StreamAccumulator()
             var visible = false
+            var reasoningStartedAt = 0L
+            var reasoningEndedAt = 0L
             var roundStats = MessageStats(
                 providerId = totalStats.providerId,
                 providerName = totalStats.providerName,
@@ -467,12 +556,20 @@ class ChatEngine(
                 step = step,
             )
             try {
-                client.stream(endpoint, protocol, apiKey, request).collect { event ->
+                client.stream(endpoint, protocol, config, request).collect { event ->
                     if (event is ChatStreamEvent.Text && event.delta.isNotBlank()) visible = true
                     accumulator.apply(event)
                     when (event) {
-                        is ChatStreamEvent.Text -> Unit
-                        is ChatStreamEvent.Reasoning -> Unit
+                        is ChatStreamEvent.Text -> {
+                            if (reasoningStartedAt > 0 && reasoningEndedAt == 0L) {
+                                reasoningEndedAt = System.currentTimeMillis()
+                            }
+                        }
+                        is ChatStreamEvent.Reasoning -> {
+                            if (reasoningStartedAt == 0L) {
+                                reasoningStartedAt = System.currentTimeMillis()
+                            }
+                        }
                         is ChatStreamEvent.Usage -> {
                             roundStats = roundStats.copy(
                                 inputTokens = event.prompt,
@@ -495,7 +592,12 @@ class ChatEngine(
                 if (message.text.isBlank() && message.toolCalls.isEmpty() && message.reasoning.isBlank()) {
                     throw ModelProtocolException("stream ended before a reply")
                 }
-                return RoundResult(message, latest)
+                val reasoningMs = when {
+                    reasoningStartedAt == 0L -> 0L
+                    reasoningEndedAt > 0 -> reasoningEndedAt - reasoningStartedAt
+                    else -> System.currentTimeMillis() - reasoningStartedAt
+                }
+                return RoundResult(message, latest, reasoningMs)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -537,7 +639,7 @@ class ChatEngine(
 
     private suspend fun List<ChatMessage>.toDtos(): List<ChatMessageDto> {
         val quotes = chats.messagesByIds(mapNotNull { it.replyToId }.toSet())
-        return mapNotNull { message ->
+        return withoutDanglingToolCalls().mapNotNull { message ->
             when (message.role) {
                 ChatRole.User -> ChatMessageDto(
                     role = "user",
@@ -566,6 +668,37 @@ class ChatEngine(
                 )
             }
         }
+    }
+
+    private fun List<ChatMessage>.withoutDanglingToolCalls(): List<ChatMessage> {
+        val consumed = BooleanArray(size)
+        val kept = mutableListOf<ChatMessage>()
+        for (index in indices) {
+            if (consumed[index]) continue
+            val message = this[index]
+            if (message.role == ChatRole.Tool) continue
+            if (message.role != ChatRole.Assistant || message.toolCalls.isEmpty()) {
+                kept += message
+                continue
+            }
+            val ids = message.toolCalls.mapTo(mutableSetOf()) { it.id }
+            val answered = mutableSetOf<String>()
+            val results = mutableListOf<ChatMessage>()
+            for (next in index + 1 until size) {
+                val candidate = this[next]
+                if (candidate.role == ChatRole.Assistant) break
+                val callId = candidate.toolCallId
+                if (candidate.role == ChatRole.Tool && callId != null && callId in ids && answered.add(callId)) {
+                    consumed[next] = true
+                    results += candidate
+                }
+            }
+            if (answered.containsAll(ids)) {
+                kept += message
+                kept += results
+            }
+        }
+        return kept
     }
 
     private fun ChatMessage.toUserContent(quoted: ChatMessage?): MessageContent {
@@ -605,4 +738,5 @@ class ChatEngine(
 private data class RoundResult(
     val message: CompletedMessage,
     val stats: MessageStats,
+    val reasoningMs: Long = 0,
 )

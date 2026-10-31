@@ -56,7 +56,8 @@ class AssistantSettings(@Provided private val context: Context) {
         val active = prefs[Keys.activeProviderId]
             ?.takeIf { id -> providers.any { it.id == id } }
             ?: providers.firstOrNull { it.id == LEGACY_PROVIDER_ID && it.model.isNotBlank() }?.id
-            ?: providers.first().id
+            ?: providers.firstOrNull()?.id
+            ?: ""
         AssistantConfig(
             providers = providers,
             activeProviderId = active,
@@ -92,12 +93,13 @@ class AssistantSettings(@Provided private val context: Context) {
 
     suspend fun removeProvider(providerId: String) {
         context.assistantDataStore.edit { prefs ->
-            val next = readProviders(prefs)
-                .filterNot { it.id == providerId }
-                .ifEmpty { ProviderCatalog.presets }
+            val next = readProviders(prefs).filterNot { it.id == providerId }
             prefs[Keys.providers] = json.encodeToString(providersSerializer, next)
-            if (prefs[Keys.activeProviderId] == providerId || prefs[Keys.activeProviderId].isNullOrBlank()) {
-                prefs[Keys.activeProviderId] = next.first().id
+            if (prefs[Keys.activeProviderId] == providerId ||
+                prefs[Keys.activeProviderId].isNullOrBlank() ||
+                next.none { it.id == prefs[Keys.activeProviderId] }
+            ) {
+                prefs[Keys.activeProviderId] = next.firstOrNull()?.id.orEmpty()
             }
         }
     }
@@ -109,7 +111,10 @@ class AssistantSettings(@Provided private val context: Context) {
     ) {
         context.assistantDataStore.edit { prefs ->
             val current = readProviders(prefs)
-            val activeId = prefs[Keys.activeProviderId] ?: current.first().id
+            val activeId = prefs[Keys.activeProviderId]
+                ?.takeIf { id -> current.any { it.id == id } }
+                ?: current.firstOrNull()?.id
+                ?: return@edit
             val next = current.map {
                 if (it.id == activeId) {
                     it.copy(
@@ -137,7 +142,6 @@ class AssistantSettings(@Provided private val context: Context) {
     private fun readProviders(prefs: Preferences): List<ProviderConfig> {
         val stored = prefs[Keys.providers]
             ?.let { runCatching { json.decodeFromString(providersSerializer, it) }.getOrNull() }
-            ?.takeIf { it.isNotEmpty() }
         if (stored != null) return stored
         val legacyBase = prefs[Keys.baseUrl]
         val legacyModel = prefs[Keys.model].orEmpty()
@@ -151,7 +155,7 @@ class AssistantSettings(@Provided private val context: Context) {
         } else {
             null
         }
-        return listOfNotNull(legacy) + ProviderCatalog.presets
+        return listOfNotNull(legacy)
     }
 
     companion object {

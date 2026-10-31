@@ -1,5 +1,6 @@
 package fan.x0.focus.data.assistant
 
+import fan.x0.focus.core.network.ProviderRequestConfig
 import fan.x0.focus.core.network.openai.ChatCompletionRequest
 import fan.x0.focus.core.network.openai.ChatMessageDto
 import fan.x0.focus.core.network.openai.ChatProtocol
@@ -21,7 +22,7 @@ class LlmJudge(private val client: ChatWireClient) {
     suspend fun judge(
         endpoint: ModelEndpoint,
         protocol: ChatProtocol,
-        apiKey: String,
+        config: ProviderRequestConfig,
         action: JudgeAction,
         history: List<String>,
         timeoutSeconds: Int,
@@ -39,7 +40,7 @@ class LlmJudge(private val client: ChatWireClient) {
         )
         val reply = try {
             withTimeout(timeoutSeconds * 1000L) {
-                client.complete(endpoint, protocol, apiKey, request)
+                client.complete(endpoint, protocol, config, request)
             }
         } catch (e: CancellationException) {
             throw e

@@ -1,6 +1,8 @@
 package fan.x0.focus.core.network.openai
 
 import fan.x0.focus.core.network.NetworkExceptionMapper
+import fan.x0.focus.core.network.ProviderRequestConfig
+import fan.x0.focus.core.network.applyProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
@@ -30,24 +32,32 @@ class ProviderBalanceClient(
 ) {
     fun supports(providerId: String): Boolean = providerId in SUPPORTED
 
-    suspend fun fetch(providerId: String, baseUrl: String, apiKey: String): ProviderBalance =
-        when (providerId) {
-            "openrouter" -> {
-                val url = "${baseUrl.trim().trimEnd('/').removeSuffix("/chat/completions")}/credits"
-                parseOpenRouterBalance(request(url, apiKey, 25_000), json)
-            }
-            "deepseek" -> {
-                val url = "${rootUrl(baseUrl)}/user/balance"
-                parseDeepSeekBalance(request(url, apiKey, 25_000), json)
-            }
-            else -> fetchGeneric(baseUrl, apiKey)
+    suspend fun fetch(
+        providerId: String,
+        baseUrl: String,
+        config: ProviderRequestConfig,
+        protocol: ChatProtocol = ChatProtocol.ChatCompletions,
+    ): ProviderBalance = when (providerId) {
+        "openrouter" -> {
+            val url = "${baseUrl.trim().trimEnd('/').removeSuffix("/chat/completions")}/credits"
+            parseOpenRouterBalance(request(url, config, protocol, 25_000), json)
         }
+        "deepseek" -> {
+            val url = "${rootUrl(baseUrl)}/user/balance"
+            parseDeepSeekBalance(request(url, config, protocol, 25_000), json)
+        }
+        else -> fetchGeneric(baseUrl, config, protocol)
+    }
 
-    private suspend fun fetchGeneric(baseUrl: String, apiKey: String): ProviderBalance {
+    private suspend fun fetchGeneric(
+        baseUrl: String,
+        config: ProviderRequestConfig,
+        protocol: ChatProtocol,
+    ): ProviderBalance {
         var last: Throwable? = null
         for (url in candidateUrls(baseUrl)) {
             try {
-                val balance = parseGenericBalance(request(url, apiKey, 5_000), json)
+                val balance = parseGenericBalance(request(url, config, protocol, 5_000), json)
                 if (balance != null) return balance
             } catch (e: CancellationException) {
                 throw e
@@ -58,10 +68,15 @@ class ProviderBalanceClient(
         throw ModelProtocolException(last?.message ?: "No balance endpoint found")
     }
 
-    private suspend fun request(url: String, apiKey: String, timeoutMillis: Long): String {
+    private suspend fun request(
+        url: String,
+        config: ProviderRequestConfig,
+        protocol: ChatProtocol,
+        timeoutMillis: Long,
+    ): String {
         val response = try {
             http.get(url) {
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
+                applyProvider(config, protocol)
                 header(HttpHeaders.Accept, "application/json")
                 timeout {
                     requestTimeoutMillis = timeoutMillis

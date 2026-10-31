@@ -51,6 +51,10 @@ class FileRepository(
             .sortedWith(compareByDescending<SourceFile> { it.isDirectory }.thenBy { it.name.lowercase() })
     }
 
+    suspend fun nameOf(uri: String): String? = withContext(Dispatchers.IO) {
+        runCatching { document(uri).name }.getOrNull()
+    }
+
     suspend fun readText(uri: String, maxChars: Int = MAX_CHARS): String = withContext(Dispatchers.IO) {
         val document = document(uri)
         if (document.isDirectory) throw SourceException(SourceError.Unsupported, "uri is a folder")

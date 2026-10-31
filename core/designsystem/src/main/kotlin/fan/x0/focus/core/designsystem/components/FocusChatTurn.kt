@@ -54,10 +54,19 @@ data class FocusTraceStep(
     val label: String,
     val status: FocusStepStatus,
     val summary: String? = null,
+    val openKey: String? = null,
+    val durationMs: Long = 0,
+    val startedAt: Long = 0,
+    val diffs: List<FocusDiff> = emptyList(),
 )
 
 @Composable
-fun FocusReasoningCard(text: String, running: Boolean) {
+fun FocusReasoningCard(
+    text: String,
+    running: Boolean,
+    durationMs: Long = 0,
+    startedAt: Long = 0,
+) {
     val motion = LocalFocusMotion.current
     var expanded by remember { mutableStateOf(running) }
     LaunchedEffect(running) {
@@ -102,6 +111,11 @@ fun FocusReasoningCard(text: String, running: Boolean) {
                     modifier = Modifier
                         .weight(1f)
                         .shimmer(running, highlight = MaterialTheme.colorScheme.onSurface),
+                )
+                FocusDurationText(
+                    durationMs = durationMs,
+                    startedAt = startedAt,
+                    running = running,
                 )
                 Icon(
                     imageVector = FocusIcons.ArrowDown,
@@ -167,14 +181,16 @@ private fun ReasoningBody(text: String, running: Boolean) {
 }
 
 @Composable
-fun FocusTraceCard(steps: List<FocusTraceStep>) {
+fun FocusTraceCard(steps: List<FocusTraceStep>, onOpen: ((String) -> Unit)? = null) {
     val motion = LocalFocusMotion.current
     val scheme = MaterialTheme.colorScheme
     val running = steps.any { it.status == FocusStepStatus.Running || it.status == FocusStepStatus.Pending }
     val failed = steps.any { it.status == FocusStepStatus.Failed }
-    var expanded by remember { mutableStateOf(running) }
+    var expanded by remember {
+        mutableStateOf(running || steps.any { it.diffs.isNotEmpty() })
+    }
     LaunchedEffect(running) {
-        if (!running) expanded = false
+        if (!running) expanded = steps.any { it.diffs.isNotEmpty() }
     }
     val container by animateColorAsState(
         targetValue = if (running) scheme.surfaceContainerHigh else scheme.surfaceContainerLow,
@@ -244,7 +260,7 @@ fun FocusTraceCard(steps: List<FocusTraceStep>) {
                     tint = scheme.onSurfaceVariant,
                     modifier = Modifier
                         .size(16.dp)
-                        .rotate(chevron),
+                        .graphicsLayer { rotationZ = chevron },
                 )
             }
             AnimatedVisibility(
@@ -255,12 +271,21 @@ fun FocusTraceCard(steps: List<FocusTraceStep>) {
                 Column {
                     steps.forEachIndexed { index, step ->
                         key(index, step.label) {
+                            val openKey = step.openKey
                             FocusTimelineStep(
                                 label = step.label,
                                 status = step.status,
                                 summary = step.summary,
+                                durationMs = step.durationMs,
+                                startedAt = step.startedAt,
+                                diffs = step.diffs,
                                 isFirst = index == 0,
                                 isLast = index == steps.lastIndex,
+                                onOpen = if (openKey != null && onOpen != null) {
+                                    { onOpen(openKey) }
+                                } else {
+                                    null
+                                },
                             )
                         }
                     }

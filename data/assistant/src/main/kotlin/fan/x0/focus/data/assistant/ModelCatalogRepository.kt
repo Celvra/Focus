@@ -1,5 +1,6 @@
 package fan.x0.focus.data.assistant
 
+import fan.x0.focus.core.network.ProviderRequestConfig
 import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ModelEntry
 import fan.x0.focus.core.network.openai.ModelEndpoint
@@ -17,10 +18,10 @@ class ModelCatalogRepository(
         providerId: String,
         baseUrl: String,
         model: String,
-        apiKey: String,
+        config: ProviderRequestConfig,
         protocol: ChatProtocol = ChatProtocol.ChatCompletions,
     ): List<ModelEntry> {
-        val entries = upstream.details(ModelEndpoint(baseUrl, model), apiKey, protocol)
+        val entries = upstream.details(ModelEndpoint(baseUrl, model), config, protocol)
         if (entries.isEmpty()) return entries
         val fallback = try {
             modelsDev.metadata(providerId, baseUrl, entries.map { it.id })

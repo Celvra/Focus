@@ -265,7 +265,9 @@ private fun ShellContent(
                 FocusRoute.Library -> NavEntry(route) { LibraryRoute() }
                 FocusRoute.Bridge -> NavEntry(route) { BridgeRoute() }
                 FocusRoute.Assistant -> NavEntry(route) { AssistantRoute() }
-                FocusRoute.Settings -> NavEntry(route) { SettingsRoute() }
+                FocusRoute.Settings -> NavEntry(route) {
+                    SettingsRoute(onExit = { backStack.back() })
+                }
                 FocusRoute.History -> NavEntry(route) {
                     val state = shellState.value
                     HistoryRoute(

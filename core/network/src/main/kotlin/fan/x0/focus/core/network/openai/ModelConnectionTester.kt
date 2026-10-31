@@ -1,6 +1,7 @@
 package fan.x0.focus.core.network.openai
 
 import fan.x0.focus.core.network.NetworkExceptionMapper
+import fan.x0.focus.core.network.ProviderRequestConfig
 import fan.x0.focus.core.error.NetworkException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.toList
@@ -25,7 +26,7 @@ data class ConnectionReport(
 class ModelConnectionTester(private val client: ChatWireClient) {
     suspend fun test(
         endpoint: ModelEndpoint,
-        apiKey: String,
+        config: ProviderRequestConfig,
         protocol: ChatProtocol = ChatProtocol.ChatCompletions,
     ): ConnectionReport {
         val started = System.currentTimeMillis()
@@ -33,7 +34,7 @@ class ModelConnectionTester(private val client: ChatWireClient) {
             client.stream(
                 endpoint = endpoint,
                 protocol = protocol,
-                apiKey = apiKey,
+                config = config,
                 request = ChatCompletionRequest(
                     model = endpoint.model,
                     messages = listOf(
@@ -62,7 +63,7 @@ class ModelConnectionTester(private val client: ChatWireClient) {
             client.complete(
                 endpoint = endpoint,
                 protocol = protocol,
-                apiKey = apiKey,
+                config = config,
                 request = ChatCompletionRequest(
                     model = endpoint.model,
                     messages = listOf(

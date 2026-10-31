@@ -10,9 +10,11 @@ import fan.x0.focus.data.assistant.AskKind
 import fan.x0.focus.data.assistant.AttachmentKind
 import fan.x0.focus.data.assistant.AttachmentLoader
 import fan.x0.focus.data.assistant.AssistantSettings
+import fan.x0.focus.data.assistant.BtwRunner
 import fan.x0.focus.data.assistant.ChatAttachment
 import fan.x0.focus.data.assistant.ChatCommand
 import fan.x0.focus.data.assistant.ChatDetailSettings
+import fan.x0.focus.data.assistant.ChatEvent
 import fan.x0.focus.data.assistant.ChatMessage
 import fan.x0.focus.data.assistant.ChatRole
 import fan.x0.focus.data.assistant.ChatStore
@@ -34,14 +36,19 @@ import fan.x0.focus.data.assistant.PolicySettings
 import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ReasoningLevel
 import fan.x0.focus.data.assistant.SecretStore
+import fan.x0.focus.data.assistant.SubAgentRunState
+import fan.x0.focus.data.assistant.SubAgentRunStatus
+import fan.x0.focus.data.assistant.SubAgentRunStore
 import fan.x0.focus.data.assistant.TodoPriority
 import fan.x0.focus.data.assistant.TodoStatus
 import fan.x0.focus.data.assistant.ToolCatalog
 import fan.x0.focus.data.assistant.ToolLabels
 import fan.x0.focus.data.assistant.TurnOptions
 import fan.x0.focus.data.assistant.WorkspaceStore
+import fan.x0.focus.data.assistant.requestConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
@@ -59,11 +66,15 @@ class ChatViewModel(
     private val suggestionGenerator: ChatSuggestionGenerator,
     private val details: ChatDetailSettings,
     private val policy: PolicySettings,
+    private val btw: BtwRunner,
+    private val subAgents: SubAgentRunStore,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
     private var modelJob: Job? = null
     private var suggestionJob: Job? = null
+    private var btwJob: Job? = null
+    private var statsJob: Job? = null
     private var lastSend: PendingSend? = null
     private var redoEntry: PendingSend? = null
 
@@ -106,6 +117,48 @@ class ChatViewModel(
                 updateState { copy(statsConfig = config) }
             }
         }
+        viewModelScope.launch {
+            policy.config.collect { config ->
+                updateState { copy(policy = config.policy) }
+            }
+        }
+        viewModelScope.launch {
+            subAgents.runs.collect { runs ->
+                updateState {
+                    copy(
+                        subAgentRuns = runs.mapValues { it.value.toUi() },
+                        subAgentOpenId = subAgentOpenId?.takeIf { it in runs },
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            settings.config.collect { config ->
+                updateState {
+                    if (loading) return@updateState this
+                    val resolved = providerId
+                        .takeIf { id -> config.providers.any { it.id == id } }
+                        ?: config.activeProviderId
+                    val provider = config.providers.firstOrNull { it.id == resolved }
+                        ?: config.activeProvider
+                    val previous = providers.firstOrNull { it.id == providerId }
+                    val nextModel = when {
+                        provider == null -> model
+                        resolved != providerId -> provider.model
+                        model.isBlank() -> provider.model
+                        previous != null && model == previous.model -> provider.model
+                        else -> model
+                    }
+                    copy(
+                        providers = config.providers.map {
+                            ProviderOption(it.id, it.name, it.model, it.icon)
+                        },
+                        providerId = resolved,
+                        model = nextModel,
+                    )
+                }
+            }
+        }
     }
 
     override fun onAction(action: ChatAction) {
@@ -127,6 +180,8 @@ class ChatViewModel(
             is ChatAction.AskSubmit -> submitAsk(action.askId, skipped = false)
             is ChatAction.AskSkip -> submitAsk(action.askId, skipped = true)
             ChatAction.NewConversation -> viewModelScope.launch { newConversation() }
+            ChatAction.CloseBtw -> closeBtw()
+            ChatAction.RetryBtw -> retryBtw()
             is ChatAction.OpenPicker -> {
                 updateState { copy(picker = action.picker, modelQuery = "") }
                 if (action.picker == ComposerPicker.Model && currentState.models.isEmpty()) {
@@ -138,7 +193,6 @@ class ChatViewModel(
             is ChatAction.ModelQueryChanged -> updateState { copy(modelQuery = action.value) }
             ChatAction.RefreshModels -> loadModels()
             is ChatAction.SelectReasoning -> selectReasoning(action.level)
-            is ChatAction.SetVariant -> setVariant(action.variant)
             is ChatAction.AttachPicked -> attach(action.uris)
             is ChatAction.RemoveAttachment -> updateState {
                 copy(attachments = attachments.filterNot { it.id == action.id })
@@ -148,7 +202,6 @@ class ChatViewModel(
             ChatAction.CloseMessageMenu -> updateState { copy(menu = null) }
             is ChatAction.ReplyTo -> replyTo(action.key)
             ChatAction.CancelReply -> updateState { copy(reply = null) }
-            is ChatAction.ToggleReaction -> toggleReaction(action.key, action.reaction)
             is ChatAction.StartEdit -> startEdit(action.key)
             is ChatAction.EditDraftChanged -> updateState {
                 copy(edit = edit?.copy(draft = action.value))
@@ -163,7 +216,7 @@ class ChatViewModel(
             }
             ChatAction.ClearSelection -> updateState { copy(selectionKey = null) }
             is ChatAction.JumpToMessage -> updateState {
-                copy(highlightKey = action.key, menu = null)
+                copy(highlightKey = action.key, menu = null, selectionKey = null)
             }
             ChatAction.ConsumeHighlight -> updateState { copy(highlightKey = null) }
             is ChatAction.SlashInputChanged -> inputChanged(action.value)
@@ -174,12 +227,18 @@ class ChatViewModel(
             ChatAction.RetryLast -> retryLast()
             ChatAction.OpenSessions -> sendEffect(ChatEffect.OpenSessions)
             ChatAction.OpenSettings -> sendEffect(ChatEffect.OpenSettings)
+            is ChatAction.OpenSubAgent -> updateState { copy(subAgentOpenId = action.id) }
+            ChatAction.CloseSubAgent -> updateState { copy(subAgentOpenId = null) }
             ChatAction.ConsumeMessage -> updateState { copy(message = null) }
         }
     }
 
     private fun inputChanged(value: String) {
         val state = currentState
+        if (state.slash.visible && !state.input.contains('\n') && value.contains('\n')) {
+            selectSlash()
+            return
+        }
         val slash = if (value.startsWith("/") && !value.contains('\n')) {
             val query = value.substringBefore(' ')
             val matches = SlashCommands.filter(query)
@@ -212,12 +271,39 @@ class ChatViewModel(
         val spec = SlashCommands.filter(state.slash.query)
             .getOrNull(state.slash.selected)
             ?: return
-        insertSlash(spec)
+        if (state.input.trim().equals(spec.command, ignoreCase = true)) {
+            runSlash(spec)
+        } else {
+            updateState {
+                copy(
+                    input = spec.command,
+                    slash = slash.copy(
+                        open = true,
+                        query = spec.command,
+                        selected = 0,
+                        commandIds = listOf(spec.id),
+                    ),
+                )
+            }
+        }
     }
 
     private fun pickSlash(id: SlashCommandId) {
         val spec = SlashCommands.all.firstOrNull { it.id == id } ?: return
-        insertSlash(spec)
+        runSlash(spec)
+    }
+
+    private fun runSlash(spec: SlashCommandSpec) {
+        when (spec.id) {
+            SlashCommandId.Btw,
+            SlashCommandId.Resume,
+            -> insertSlash(spec)
+
+            else -> {
+                updateState { copy(input = "", slash = slash.copy(open = false, query = "")) }
+                executeCommand(spec, "")
+            }
+        }
     }
 
     private fun insertSlash(spec: SlashCommandSpec) {
@@ -233,7 +319,6 @@ class ChatViewModel(
     private fun send() {
         val state = currentState
         val text = state.input.trim()
-        if (state.sending) return
         if (state.slash.visible) {
             selectSlash()
             return
@@ -247,6 +332,7 @@ class ChatViewModel(
                 return
             }
         }
+        if (state.sending) return
         if (text.isBlank() && state.attachments.isEmpty()) return
         sendText(
             text = text,
@@ -266,7 +352,7 @@ class ChatViewModel(
         if (conversationId.isBlank() || turns.isRunning(conversationId)) return
         val options = TurnOptions(
             providerId = state.providerId,
-            model = state.modelWithVariant(),
+            model = state.model,
             reasoning = state.reasoningLevel,
             attachments = attachments.map { it.toModel() },
             agentMode = state.mode,
@@ -286,7 +372,11 @@ class ChatViewModel(
                 askDrafts = emptyMap(),
                 reply = null,
                 retry = null,
-                liveStats = MessageStats(),
+                liveStats = MessageStats(
+                    providerId = state.providerId,
+                    providerName = state.providerName,
+                    model = state.model,
+                ),
                 turn = turn + 1,
                 history = history + ChatEntry.User(
                     key = "local-${System.currentTimeMillis()}",
@@ -304,24 +394,32 @@ class ChatViewModel(
             )
         }
         turns.start(conversationId, text, options)
+        startStatsTicker()
+    }
+
+    private fun startStatsTicker() {
+        statsJob?.cancel()
+        val startedAt = System.currentTimeMillis() - currentState.liveStats.durationMs
+        statsJob = viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                if (!currentState.sending) return@launch
+                updateState {
+                    if (!sending) {
+                        this
+                    } else {
+                        copy(liveStats = liveStats.copy(durationMs = System.currentTimeMillis() - startedAt))
+                    }
+                }
+            }
+        }
     }
 
     private fun executeCommand(spec: SlashCommandSpec, argument: String) {
         when (spec.id) {
             SlashCommandId.Undo -> undo()
             SlashCommandId.Redo -> redo()
-            SlashCommandId.Btw -> {
-                if (argument.isBlank()) {
-                    showMessage(R.string.chat_btw_usage)
-                } else {
-                    sendText(
-                        text = "[Side note. Answer briefly without changing the main task.] $argument",
-                        attachments = emptyList(),
-                        replyToId = null,
-                        displayText = argument,
-                    )
-                }
-            }
+            SlashCommandId.Btw -> startBtw(argument)
             SlashCommandId.New -> viewModelScope.launch { newConversation() }
             SlashCommandId.Resume -> resume(argument)
             SlashCommandId.Sessions -> sendEffect(ChatEffect.OpenSessions)
@@ -337,20 +435,58 @@ class ChatViewModel(
                 }
                 if (level != null) selectReasoning(level) else onAction(ChatAction.OpenPicker(ComposerPicker.Reasoning))
             }
-            SlashCommandId.Variant -> {
-                if (argument.isBlank()) {
-                    if (currentState.variant.isBlank()) {
-                        showMessage(R.string.chat_variant_none)
-                    } else {
-                        showMessage(R.string.chat_variant_current, listOf(currentState.variant))
-                    }
-                } else {
-                    setVariant(argument)
-                }
-            }
             SlashCommandId.Settings -> sendEffect(ChatEffect.OpenSettings)
             SlashCommandId.Help -> showMessage(R.string.chat_command_usage)
         }
+    }
+
+    private fun startBtw(question: String) {
+        val text = question.trim()
+        if (text.isBlank()) {
+            showMessage(R.string.chat_btw_usage)
+            return
+        }
+        val state = currentState
+        if (state.conversationId.isBlank()) return
+        btwJob?.cancel()
+        updateState {
+            copy(btw = BtwUi(open = true, question = text, loading = true))
+        }
+        btwJob = viewModelScope.launch {
+            btw.ask(
+                conversationId = state.conversationId,
+                question = text,
+                options = TurnOptions(
+                    providerId = state.providerId,
+                    model = state.model,
+                    reasoning = state.reasoningLevel,
+                ),
+            ).collect { event ->
+                when (event) {
+                    is ChatEvent.Delta -> updateState {
+                        copy(btw = btw.copy(answer = btw.answer + event.text))
+                    }
+                    ChatEvent.Completed -> updateState {
+                        copy(btw = btw.copy(loading = false))
+                    }
+                    is ChatEvent.Failed -> updateState {
+                        copy(btw = btw.copy(loading = false, error = event.error))
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    private fun closeBtw() {
+        btwJob?.cancel()
+        btwJob = null
+        updateState { copy(btw = BtwUi()) }
+    }
+
+    private fun retryBtw() {
+        val question = currentState.btw.question
+        if (question.isNotBlank()) startBtw(question)
     }
 
     private fun showMessage(resId: Int, args: List<Any> = emptyList()) {
@@ -407,11 +543,6 @@ class ChatViewModel(
             is ChatEntry.Assistant -> entry.text
             else -> return
         }
-        val reaction = when (entry) {
-            is ChatEntry.User -> entry.reaction
-            is ChatEntry.Assistant -> entry.reaction
-            else -> null
-        }
         updateState {
             copy(
                 menu = ChatMenuUi(
@@ -420,10 +551,10 @@ class ChatViewModel(
                     author = if (fromUser) name.orEmpty() else assistantName,
                     text = text,
                     fromUser = fromUser,
-                    reaction = reaction,
                     canEdit = fromUser,
                     canDelete = true,
                 ),
+                selectionKey = null,
             )
         }
     }
@@ -445,32 +576,6 @@ class ChatViewModel(
                 ),
                 menu = null,
             )
-        }
-    }
-
-    private fun toggleReaction(key: String, reaction: String) {
-        viewModelScope.launch {
-            val entry = currentState.history.lastOrNull { it.key == key } ?: return@launch
-            val messageId = entry.messageId ?: return@launch
-            val current = when (entry) {
-                is ChatEntry.User -> entry.reaction
-                is ChatEntry.Assistant -> entry.reaction
-                else -> null
-            }
-            val next = if (reaction.isBlank() || reaction == current) null else reaction
-            chats.setReaction(messageId, next)
-            updateState {
-                copy(
-                    history = history.map {
-                        when {
-                            it is ChatEntry.User && it.key == key -> it.copy(reaction = next)
-                            it is ChatEntry.Assistant && it.key == key -> it.copy(reaction = next)
-                            else -> it
-                        }
-                    },
-                    menu = menu?.copy(reaction = next),
-                )
-            }
         }
     }
 
@@ -504,7 +609,7 @@ class ChatViewModel(
                 text = "",
                 options = TurnOptions(
                     providerId = currentState.providerId,
-                    model = currentState.modelWithVariant(),
+                    model = currentState.model,
                     reasoning = currentState.reasoningLevel,
                     agentMode = currentState.mode,
                 ),
@@ -547,7 +652,7 @@ class ChatViewModel(
                 text = "",
                 options = TurnOptions(
                     providerId = currentState.providerId,
-                    model = currentState.modelWithVariant(),
+                    model = currentState.model,
                     reasoning = currentState.reasoningLevel,
                     agentMode = currentState.mode,
                     replyToId = lastUser.replyToId,
@@ -621,7 +726,7 @@ class ChatViewModel(
                     text = "",
                     options = TurnOptions(
                         providerId = currentState.providerId,
-                        model = currentState.modelWithVariant(),
+                        model = currentState.model,
                         reasoning = currentState.reasoningLevel,
                         agentMode = AgentMode.Build,
                     ),
@@ -708,7 +813,6 @@ class ChatViewModel(
             copy(
                 providerId = option.id,
                 model = option.model,
-                variant = "",
                 picker = null,
                 models = emptyList(),
             )
@@ -718,29 +822,13 @@ class ChatViewModel(
 
     private fun selectModel(model: String) {
         persistTurnSettings(model = model)
-        updateState { copy(model = model, variant = "", picker = null) }
-        viewModelScope.launch {
-            val id = currentState.conversationId
-            if (id.isNotBlank()) chats.setVariant(id, "")
-        }
+        updateState { copy(model = model, picker = null) }
     }
 
     private fun selectReasoning(level: ReasoningLevel) {
         persistTurnSettings(reasoning = level.name)
-        updateState { copy(reasoningLevel = level, picker = null) }
+        updateState { copy(reasoningLevel = level) }
     }
-
-    private fun setVariant(variant: String) {
-        val value = variant.trim().removePrefix(":").take(80)
-        val id = currentState.conversationId
-        updateState { copy(variant = value, model = model.substringBefore(':').ifBlank { model }) }
-        if (id.isNotBlank()) {
-            viewModelScope.launch { chats.setVariant(id, value) }
-        }
-    }
-
-    private fun ChatUiState.modelWithVariant(): String =
-        if (variant.isBlank()) model else "${model.substringBefore(':')}:$variant"
 
     private fun persistTurnSettings(
         providerId: String = currentState.providerId,
@@ -767,7 +855,13 @@ class ChatViewModel(
                 return@launch
             }
             val models = try {
-                catalog.models(state.providerId, provider.baseUrl, state.model, key, provider.protocol)
+                catalog.models(
+                    state.providerId,
+                    provider.baseUrl,
+                    state.model,
+                    provider.requestConfig(key),
+                    provider.protocol,
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -819,10 +913,9 @@ class ChatViewModel(
                 live = emptyList(),
                 sending = false,
                 workingText = "",
-                providers = config.providers.map { ProviderOption(it.id, it.name, it.model) },
+                providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon) },
                 providerId = providerId,
                 model = model,
-                variant = conversation?.variant.orEmpty(),
                 askDrafts = emptyMap(),
                 retry = null,
                 liveStats = MessageStats(),
@@ -836,6 +929,9 @@ class ChatViewModel(
 
     private suspend fun load(conversationId: String) {
         suggestionJob?.cancel()
+        btwJob?.cancel()
+        btwJob = null
+        statsJob?.cancel()
         val messages = chats.messages(conversationId)
         val conversation = chats.conversation(conversationId)
         val name = workspace.userName()
@@ -867,10 +963,9 @@ class ChatViewModel(
                 input = "",
                 turn = 0,
                 attachments = emptyList(),
-                providers = config.providers.map { ProviderOption(it.id, it.name, it.model) },
+                providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon) },
                 providerId = providerId,
                 model = model,
-                variant = conversation?.variant.orEmpty(),
                 reasoningLevel = level,
                 mode = conversation?.mode ?: AgentMode.Build,
                 models = emptyList(),
@@ -886,6 +981,8 @@ class ChatViewModel(
                 reply = null,
                 pendingDelete = null,
                 slash = SlashUi(open = false),
+                btw = BtwUi(),
+                subAgentOpenId = null,
                 highlightKey = null,
                 selectionKey = null,
                 plan = conversation?.plan,
@@ -949,6 +1046,7 @@ class ChatViewModel(
     private fun applyTurn(turn: ChatTurnState) {
         if (turn.conversationId != currentState.conversationId) return
         if (!turn.running) {
+            statsJob?.cancel()
             updateState {
                 copy(
                     sending = false,
@@ -956,7 +1054,6 @@ class ChatViewModel(
                     workingText = "",
                     askDrafts = emptyMap(),
                     retry = null,
-                    liveStats = MessageStats(),
                     todos = if (turn.todos.isNotEmpty()) turn.todos else todos,
                 )
             }
@@ -966,18 +1063,30 @@ class ChatViewModel(
             copy(
                 sending = true,
                 workingText = turn.workingText,
-                live = turn.entries.mapIndexed { index, entry -> entry.toUi(turn.turnId, index) },
+                live = turn.entries.mapIndexed { index, entry -> entry.toUi("live-${turn.turnId}", index) },
                 retry = turn.retry?.let { RetryUi(it.attempt, it.max, it.reason) },
-                liveStats = turn.stats,
+                liveStats = when {
+                    turn.stats.hasUsage || turn.stats.round > 0 -> turn.stats.copy(
+                        durationMs = maxOf(turn.stats.durationMs, liveStats.durationMs),
+                    )
+                    turn.stats.providerId.isNotBlank() -> liveStats.copy(
+                        providerId = turn.stats.providerId,
+                        providerName = turn.stats.providerName.ifBlank { liveStats.providerName },
+                        model = turn.stats.model.ifBlank { liveStats.model },
+                    )
+                    else -> liveStats
+                },
                 todos = turn.todos.ifEmpty { todos },
                 plan = turn.plan ?: plan,
             )
         }
+        if (statsJob?.isActive != true) startStatsTicker()
     }
 
     private suspend fun handleResult(result: ChatTurnResult) {
         if (result.conversationId != currentState.conversationId) return
         if (!turns.consumeResult(result.conversationId, result.turnId)) return
+        statsJob?.cancel()
         result.error?.let { error ->
             val message = error.serverMessage ?: error.serverTitle ?: error.type.name
             chats.append(
@@ -999,19 +1108,21 @@ class ChatViewModel(
         updateState { copy(title = title) }
     }
 
-    private fun ChatTurnEntry.toUi(turnId: Long, index: Int): ChatEntry = when (this) {
+    private fun ChatTurnEntry.toUi(prefix: String, index: Int): ChatEntry = when (this) {
         is ChatTurnEntry.Answer -> ChatEntry.Assistant(
-            key = "live-answer-$turnId-$index",
+            key = "$prefix-answer-$index",
             text = text,
             live = true,
             reasoning = reasoning,
+            reasoningMs = reasoningMs,
+            reasoningStartedAt = reasoningStartedAt,
         )
         is ChatTurnEntry.Trace -> ChatEntry.Trace(
-            key = "live-trace-$turnId-$index",
+            key = "$prefix-trace-$index",
             steps = steps.map { it.toUi() },
         )
         is ChatTurnEntry.Approval -> ChatEntry.Approval(
-            key = "live-approval-${card.id}",
+            key = "$prefix-approval-${card.id}",
             card = ApprovalUi(
                 id = card.id,
                 title = card.title,
@@ -1021,7 +1132,7 @@ class ChatViewModel(
             ),
         )
         is ChatTurnEntry.Plan -> ChatEntry.Plan(
-            key = "live-plan-${card.id}",
+            key = "$prefix-plan-${card.id}",
             plan = plan,
             card = ApprovalUi(
                 id = card.id,
@@ -1034,10 +1145,24 @@ class ChatViewModel(
             ),
         )
         is ChatTurnEntry.Ask -> ChatEntry.Ask(
-            key = "live-ask-${card.id}",
+            key = "$prefix-ask-${card.id}",
             card = card.toUi(),
         )
     }
+
+    private fun SubAgentRunState.toUi(): SubAgentRunUi = SubAgentRunUi(
+        id = id,
+        task = task,
+        providerName = providerName,
+        model = model,
+        running = status == SubAgentRunStatus.Running,
+        failed = status == SubAgentRunStatus.Failed,
+        summary = summary,
+        error = error,
+        entries = entries.mapIndexed { index, entry ->
+            entry.toUi("subagent-$id", index)
+        },
+    )
 
     private fun ChatTurnStep.toUi(): TraceStep = TraceStep(
         label = label,
@@ -1052,6 +1177,9 @@ class ChatViewModel(
         tool = tool,
         arguments = arguments,
         output = output,
+        durationMs = durationMs,
+        startedAt = startedAt,
+        diffs = diffs,
     )
 
     private fun ChatTurnApprovalPhase.toUi(): ApprovalPhase = when (this) {
@@ -1089,7 +1217,7 @@ class ChatViewModel(
                                 fromUser = quoted?.role == ChatRole.User,
                             )
                         },
-                        reaction = message.reaction?.takeIf { it.isNotBlank() },
+                        reactions = message.reactions.filter { it.isNotBlank() },
                     )
                 }
                 ChatRole.Assistant -> {
@@ -1101,8 +1229,9 @@ class ChatViewModel(
                             text = message.content,
                             live = false,
                             reasoning = message.reasoning,
+                            reasoningMs = message.elapsedMs,
                             messageId = message.id,
-                            reaction = message.reaction?.takeIf { it.isNotBlank() },
+                            reactions = message.reactions.filter { it.isNotBlank() },
                             stats = stats,
                         )
                     } else if (stats != null) {
@@ -1175,8 +1304,11 @@ class ChatViewModel(
                     label = labels.firstOrNull() ?: ToolLabels.of(name),
                     status = TraceStatus.Done,
                     summary = summaries.firstOrNull()?.take(120),
+                    id = toolCallId.orEmpty(),
                     tool = name.orEmpty(),
                     output = content.take(2000),
+                    durationMs = elapsedMs,
+                    diffs = stepDiffs.firstOrNull().orEmpty(),
                 ),
             )
         }
@@ -1185,8 +1317,11 @@ class ChatViewModel(
                 label = value,
                 status = TraceStatus.Done,
                 summary = summaries.getOrNull(index)?.take(120),
+                id = toolCallId.orEmpty(),
                 tool = name.orEmpty(),
                 output = content.take(2000),
+                durationMs = elapsedMs,
+                diffs = stepDiffs.getOrNull(index).orEmpty(),
             )
         }
     }

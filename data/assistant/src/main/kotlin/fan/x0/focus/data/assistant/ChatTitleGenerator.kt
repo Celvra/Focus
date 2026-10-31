@@ -27,6 +27,7 @@ class ChatTitleGenerator(
         if (!endpoint.isUsable) return null
         val apiKey = secrets.apiKey(provider.id).orEmpty()
         if (apiKey.isBlank()) return null
+        val requestConfig = provider.requestConfig(apiKey)
         val history = chats.messages(conversationId, CONTEXT_MESSAGES)
         if (history.none { it.role == ChatRole.User }) return null
         val request = ChatCompletionRequest(
@@ -37,7 +38,7 @@ class ChatTitleGenerator(
             ),
             stream = false,
         )
-        val raw = client.complete(endpoint, provider.protocol, apiKey, request).text
+        val raw = client.complete(endpoint, provider.protocol, requestConfig, request).text
             .takeIf { it.isNotBlank() }
             ?: return null
         val title = clean(raw) ?: return null

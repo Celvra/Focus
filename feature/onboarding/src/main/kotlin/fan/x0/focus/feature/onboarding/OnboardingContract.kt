@@ -7,14 +7,6 @@ import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
 import fan.x0.focus.core.network.openai.ChatProtocol
 
-data class OnboardingMessage(
-    val id: Long,
-    val fromUser: Boolean,
-    val text: String,
-    val reasoning: String = "",
-    val steps: List<FocusTraceStep> = emptyList(),
-)
-
 sealed interface OnboardingEntry {
     val key: String
 

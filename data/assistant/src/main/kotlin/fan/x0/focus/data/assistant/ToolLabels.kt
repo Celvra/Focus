@@ -23,6 +23,7 @@ object ToolLabels {
         "list_providers", "save_provider", "test_provider", "list_models", "switch_model" -> "Model"
         "complete_onboarding" -> "Setup"
         "rename_conversation" -> "Title"
+        "react_to_message" -> "Reaction"
         "bridge_list_devices", "bridge_list_sessions", "bridge_read_session" -> "Computer"
         "bridge_run_command", "bridge_session_open", "bridge_session_send", "bridge_close_session" -> "Computer shell"
         "bridge_fs_read", "bridge_fs_list", "bridge_fs_glob", "bridge_fs_grep" -> "Computer files"

@@ -25,7 +25,9 @@ data class ChatMessage(
     val label: String? = null,
     val replyToId: Long? = null,
     val stats: MessageStats? = null,
-    val reaction: String? = null,
+    val reactions: List<String> = emptyList(),
+    val elapsedMs: Long = 0,
+    val stepDiffs: List<List<FileDiff>> = emptyList(),
 )
 
 enum class AgentMode {
@@ -108,7 +110,6 @@ data class Conversation(
     val plan: ProposedPlan? = null,
     val planStatus: PlanStatus = PlanStatus.None,
     val planRequestId: String = "",
-    val variant: String = "",
 )
 
 enum class GoalStatus { Active, Paused, Done }

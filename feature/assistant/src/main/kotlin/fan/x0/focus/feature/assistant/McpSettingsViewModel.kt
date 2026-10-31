@@ -67,6 +67,7 @@ sealed interface McpAction : UiAction {
     data object Save : McpAction
     data object Delete : McpAction
     data object Test : McpAction
+    data class EnabledChanged(val value: Boolean) : McpAction
     data class SetEnabled(val id: String, val enabled: Boolean) : McpAction
     data object ClearMessage : McpAction
 }
@@ -120,6 +121,7 @@ class McpSettingsViewModel(
             McpAction.Save -> save()
             McpAction.Delete -> delete()
             McpAction.Test -> test()
+            is McpAction.EnabledChanged -> updateDraft { it.copy(enabled = action.value) }
             is McpAction.SetEnabled -> viewModelScope.launch {
                 settings.setEnabled(action.id, action.enabled)
                 val servers = settings.configOnce().servers

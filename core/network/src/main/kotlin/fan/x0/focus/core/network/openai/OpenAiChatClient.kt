@@ -1,6 +1,8 @@
 package fan.x0.focus.core.network.openai
 
 import fan.x0.focus.core.network.NetworkExceptionMapper
+import fan.x0.focus.core.network.ProviderRequestConfig
+import fan.x0.focus.core.network.applyProvider
 import io.ktor.client.HttpClient
 import fan.x0.focus.core.network.allowLongStream
 import io.ktor.client.request.header
@@ -46,12 +48,12 @@ class OpenAiChatClient(
 ) {
     suspend fun complete(
         endpoint: ModelEndpoint,
-        apiKey: String,
+        config: ProviderRequestConfig,
         request: ChatCompletionRequest,
     ): ChatCompletionResponse {
         val response = try {
             http.post(endpoint.chatUrl) {
-                if (apiKey.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $apiKey")
+                applyProvider(config, ChatProtocol.ChatCompletions)
                 header(HttpHeaders.Accept, "application/json")
                 contentType(ContentType.Application.Json)
                 setBody(json.encodeToString(ChatCompletionRequest.serializer(), request))
@@ -75,13 +77,13 @@ class OpenAiChatClient(
 
     fun stream(
         endpoint: ModelEndpoint,
-        apiKey: String,
+        config: ProviderRequestConfig,
         request: ChatCompletionRequest,
     ): Flow<ChatStreamEvent> = flow {
         val response = try {
             http.post(endpoint.chatUrl) {
                 allowLongStream()
-                if (apiKey.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $apiKey")
+                applyProvider(config, ChatProtocol.ChatCompletions)
                 header(HttpHeaders.Accept, "text/event-stream")
                 contentType(ContentType.Application.Json)
                 setBody(json.encodeToString(ChatCompletionRequest.serializer(), request))

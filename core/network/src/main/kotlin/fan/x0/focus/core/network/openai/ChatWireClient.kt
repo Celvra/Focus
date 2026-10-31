@@ -1,5 +1,6 @@
 package fan.x0.focus.core.network.openai
 
+import fan.x0.focus.core.network.ProviderRequestConfig
 import kotlinx.coroutines.flow.Flow
 
 class ChatWireClient(
@@ -10,23 +11,23 @@ class ChatWireClient(
     fun stream(
         endpoint: ModelEndpoint,
         protocol: ChatProtocol,
-        apiKey: String,
+        config: ProviderRequestConfig,
         request: ChatCompletionRequest,
     ): Flow<ChatStreamEvent> = when (protocol) {
-        ChatProtocol.ChatCompletions -> chat.stream(endpoint, apiKey, request)
-        ChatProtocol.Responses -> responses.stream(endpoint, apiKey, request)
-        ChatProtocol.AnthropicMessages -> anthropic.stream(endpoint, apiKey, request)
+        ChatProtocol.ChatCompletions -> chat.stream(endpoint, config, request)
+        ChatProtocol.Responses -> responses.stream(endpoint, config, request)
+        ChatProtocol.AnthropicMessages -> anthropic.stream(endpoint, config, request)
     }
 
     suspend fun complete(
         endpoint: ModelEndpoint,
         protocol: ChatProtocol,
-        apiKey: String,
+        config: ProviderRequestConfig,
         request: ChatCompletionRequest,
     ): ChatReply = when (protocol) {
-        ChatProtocol.ChatCompletions -> chat.complete(endpoint, apiKey, request).toReply()
-        ChatProtocol.Responses -> responses.complete(endpoint, apiKey, request)
-        ChatProtocol.AnthropicMessages -> anthropic.complete(endpoint, apiKey, request)
+        ChatProtocol.ChatCompletions -> chat.complete(endpoint, config, request).toReply()
+        ChatProtocol.Responses -> responses.complete(endpoint, config, request)
+        ChatProtocol.AnthropicMessages -> anthropic.complete(endpoint, config, request)
     }
 }
 

@@ -85,6 +85,9 @@
     <string name="chat_reasoning_xhigh_desc">Heavy reasoning for hard problems.</string>
     <string name="chat_reasoning_max">Max</string>
     <string name="chat_reasoning_max_desc">Deepest reasoning, slowest and most expensive.</string>
+    <string name="chat_reasoning_max_boost_title">Max</string>
+    <string name="chat_reasoning_max_deepseek_title">神鲸...</string>
+    <string name="chat_reasoning_max_boost_desc">Faster consumption</string>
     <string name="chat_mode_build">Build</string>
     <string name="chat_mode_plan">Plan</string>
     <string name="chat_mode_build_desc">Execute changes and run commands directly.</string>
@@ -95,8 +98,6 @@
     <string name="chat_menu_edit">Edit</string>
     <string name="chat_menu_delete">Delete</string>
     <string name="chat_menu_select">Select text</string>
-    <string name="chat_menu_reactions">React</string>
-    <string name="chat_menu_remove_reaction">Remove reaction</string>
     <string name="chat_reply_title">Replying to %1$s</string>
     <string name="chat_reply_cancel">Cancel reply</string>
     <string name="chat_quote_deleted">Message deleted</string>
@@ -120,6 +121,8 @@
     <string name="chat_retry_waiting">Waiting to retry</string>
     <string name="chat_failed">This turn failed.</string>
     <string name="chat_failed_retry">Try again</string>
+    <string name="chat_stats_provider">Provider</string>
+    <string name="chat_stats_model">Model</string>
     <string name="chat_stats_input">In</string>
     <string name="chat_stats_output">Out</string>
     <string name="chat_stats_total">Total</string>
@@ -138,9 +141,8 @@
     <string name="chat_todo_pending">Pending</string>
     <string name="chat_todo_completed">Completed</string>
     <string name="chat_todo_cancelled">Cancelled</string>
-    <string name="chat_todo_priority_high">High</string>
-    <string name="chat_todo_priority_medium">Medium</string>
-    <string name="chat_todo_priority_low">Low</string>
+    <string name="chat_todo_expanded">Expanded</string>
+    <string name="chat_todo_collapsed">Collapsed</string>
     <string name="chat_plan_files">Files</string>
     <string name="chat_plan_risks">Risks</string>
     <string name="chat_plan_verification">Verification</string>
@@ -152,8 +154,7 @@
     <string name="chat_plan_approved">Approved</string>
     <string name="chat_plan_rejected">Changes requested</string>
     <string name="chat_plan_pending">Waiting for approval</string>
-    <string name="chat_command_help">Command</string>
-    <string name="chat_command_usage">Type a command and its argument.</string>
+    <string name="chat_command_usage">Type / to see commands. Enter completes, Enter again runs.</string>
     <string name="chat_notice_title">App notice</string>
     <string name="chat_tool_arguments">Arguments</string>
     <string name="chat_tool_result">Result</string>
@@ -168,7 +169,6 @@
     <string name="slash_sessions_desc">Browse conversations.</string>
     <string name="slash_models_desc">Open the model picker.</string>
     <string name="slash_effort_desc">Set reasoning depth.</string>
-    <string name="slash_variant_desc">Show model variant options.</string>
     <string name="slash_settings_desc">Open settings.</string>
     <string name="slash_help_desc">Show the command list.</string>
     <string name="slash_no_arg">No argument</string>
@@ -176,12 +176,19 @@
     <string name="slash_resume_hint">Conversation id or title</string>
     <string name="slash_models_hint">Search text, optional</string>
     <string name="slash_effort_hint">off, auto, low, medium, high, xhigh, max</string>
-    <string name="slash_variant_hint">Variant name</string>
     <string name="slash_settings_hint">Page name, optional</string>
 
     <string name="chat_undo_done">Undid the last message. Use /redo to send it again.</string>
     <string name="chat_resume_help">Use /resume with a conversation id or title, or /sessions to browse.</string>
-    <string name="chat_variant_none">No variant set. Use /variant with a provider variant name.</string>
-    <string name="chat_variant_current">Current variant: %1$s</string>
     <string name="chat_btw_usage">Usage: /btw your side question</string>
+    <string name="chat_btw_title">By the way</string>
+    <string name="chat_btw_note">Read only, not saved to this chat</string>
+    <string name="chat_btw_question">Question</string>
+    <string name="chat_btw_close">Close</string>
+    <string name="chat_subagent_title">Subagent</string>
+    <string name="chat_subagent_task">Task</string>
+    <string name="chat_subagent_running">Running</string>
+    <string name="chat_subagent_done">Finished</string>
+    <string name="chat_subagent_failed">Failed</string>
+    <string name="chat_subagent_close">Close</string>
 </resources>

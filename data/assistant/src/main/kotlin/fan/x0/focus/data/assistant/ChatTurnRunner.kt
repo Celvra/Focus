@@ -86,21 +86,38 @@ class ChatTurnRunner(
                 engine.send(conversationId, text, ChatMode.Chat, options, appendUser).collect { event ->
                     when (event) {
                         is ChatEvent.Delta -> updateEntries(conversationId, turnId) { entries ->
-                            entries.appendAnswer(event.text, reasoning = false)
+                            entries.appendAnswer(event.text, reasoning = false, now = System.currentTimeMillis())
                         }
                         is ChatEvent.ReasoningDelta -> updateEntries(conversationId, turnId) { entries ->
-                            entries.appendAnswer(event.text, reasoning = true)
+                            entries.appendAnswer(event.text, reasoning = true, now = System.currentTimeMillis())
+                        }
+                        is ChatEvent.ReasoningTimed -> updateEntries(conversationId, turnId) { entries ->
+                            entries.finishReasoning(event.durationMs)
                         }
                         is ChatEvent.UserMessageAppended -> scheduleTitle(conversationId, event.turns, options)
                         is ChatEvent.WorkingTextChanged -> updateState(conversationId, turnId) { state ->
                             state.copy(workingText = event.text)
                         }
                         is ChatEvent.ToolStarted -> updateEntries(conversationId, turnId) { entries ->
-                            entries.startStep(event.id, event.label, event.tool, event.arguments)
+                            entries.startStep(
+                                id = event.id,
+                                label = event.label,
+                                tool = event.tool,
+                                arguments = event.arguments,
+                                startedAt = System.currentTimeMillis(),
+                            )
                         }
                         is ChatEvent.ToolFinished -> {
                             updateEntries(conversationId, turnId) { entries ->
-                                entries.finishStep(event.id, event.label, event.ok, event.summary, event.output)
+                                entries.finishStep(
+                                    id = event.id,
+                                    label = event.label,
+                                    ok = event.ok,
+                                    summary = event.summary,
+                                    output = event.output,
+                                    durationMs = event.durationMs,
+                                    diffs = event.diffs,
+                                )
                             }
                             if (event.tool == RENAME_TOOL) _titleUpdates.tryEmit(conversationId)
                         }
@@ -262,103 +279,8 @@ class ChatTurnRunner(
             content = text,
             reasoning = reasoning,
             stats = state.stats,
+            elapsedMs = answer.reasoningMs,
         )
-    }
-
-    private fun List<ChatTurnEntry>.resetAnswer(): List<ChatTurnEntry> =
-        dropLastWhile { it is ChatTurnEntry.Answer }
-
-    private fun List<ChatTurnEntry>.appendAnswer(text: String, reasoning: Boolean): List<ChatTurnEntry> {
-        val last = lastOrNull()
-        if (last is ChatTurnEntry.Answer) {
-            val updated = if (reasoning) {
-                last.copy(reasoning = last.reasoning + text)
-            } else {
-                last.copy(text = last.text + text)
-            }
-            return dropLast(1) + updated
-        }
-        return this + if (reasoning) ChatTurnEntry.Answer("", text) else ChatTurnEntry.Answer(text, "")
-    }
-
-    private fun List<ChatTurnEntry>.startStep(
-        id: String,
-        label: String,
-        tool: String,
-        arguments: String,
-    ): List<ChatTurnEntry> {
-        val last = lastOrNull()
-        val step = ChatTurnStep(
-            label = label,
-            status = ChatTurnStepStatus.Running,
-            id = id,
-            tool = tool,
-            arguments = arguments,
-        )
-        return when (last) {
-            is ChatTurnEntry.Approval -> dropLast(1) + last.copy(
-                card = last.card.copy(
-                    steps = last.card.steps.upsert(step, ChatTurnStepStatus.Running, null),
-                ),
-            )
-            else -> this + ChatTurnEntry.Trace(listOf(step))
-        }
-    }
-
-    private fun List<ChatTurnEntry>.finishStep(
-        id: String,
-        label: String,
-        ok: Boolean,
-        summary: String,
-        output: String?,
-    ): List<ChatTurnEntry> {
-        val status = if (ok) ChatTurnStepStatus.Done else ChatTurnStepStatus.Failed
-        val step = ChatTurnStep(
-            label = label,
-            status = status,
-            id = id,
-            summary = summary,
-            output = output?.take(4000),
-        )
-        return map { entry ->
-            when {
-                entry is ChatTurnEntry.Trace && entry.steps.any {
-                    (id.isNotBlank() && it.id == id) ||
-                        (id.isBlank() && it.label == label && it.status == ChatTurnStepStatus.Running)
-                } -> entry.copy(steps = entry.steps.upsert(step, status, summary))
-                entry is ChatTurnEntry.Approval && entry.card.steps.any {
-                    (id.isNotBlank() && it.id == id) ||
-                        (id.isBlank() && it.label == label && it.status == ChatTurnStepStatus.Running)
-                } -> entry.copy(
-                    card = entry.card.copy(steps = entry.card.steps.upsert(step, status, summary)),
-                )
-                else -> entry
-            }
-        }
-    }
-
-    private fun List<ChatTurnStep>.upsert(
-        step: ChatTurnStep,
-        status: ChatTurnStepStatus,
-        summary: String?,
-    ): List<ChatTurnStep> {
-        val index = indexOfLast {
-            (step.id.isNotBlank() && it.id == step.id) ||
-                (step.id.isBlank() && it.label == step.label &&
-                    (it.status == ChatTurnStepStatus.Pending || it.status == ChatTurnStepStatus.Running))
-        }
-        if (index < 0) {
-            return if (status == ChatTurnStepStatus.Running) this + step else this
-        }
-        return toMutableList().also {
-            it[index] = it[index].copy(
-                status = status,
-                summary = summary ?: it[index].summary,
-                tool = step.tool.ifBlank { it[index].tool },
-                arguments = step.arguments.ifBlank { it[index].arguments },
-                output = step.output ?: it[index].output,
-            )
-        }
     }
 
     private fun List<ChatTurnEntry>.resolveApproval(

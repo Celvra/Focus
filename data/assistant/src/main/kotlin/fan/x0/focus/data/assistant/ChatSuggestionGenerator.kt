@@ -48,6 +48,7 @@ class ChatSuggestionGenerator(
         if (!endpoint.isUsable) return emptyList()
         val apiKey = secrets.apiKey(provider.id).orEmpty()
         if (apiKey.isBlank()) return emptyList()
+        val requestConfig = provider.requestConfig(apiKey)
 
         val request = ChatCompletionRequest(
             model = endpoint.model,
@@ -57,7 +58,7 @@ class ChatSuggestionGenerator(
             ),
             stream = false,
         )
-        val reply = client.complete(endpoint, provider.protocol, apiKey, request)
+        val reply = client.complete(endpoint, provider.protocol, requestConfig, request)
         return parse(reply.text)
     }
 

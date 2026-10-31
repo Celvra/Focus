@@ -7,6 +7,7 @@ import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.AppErrorType
 import fan.x0.focus.core.error.toAppError
 import fan.x0.focus.core.mvi.BaseViewModel
+import fan.x0.focus.core.network.ProviderRequestConfig
 import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ConnectionTestException
 import fan.x0.focus.core.network.openai.ModelConnectionTester
@@ -202,7 +203,7 @@ class OnboardingViewModel(
                                     FocusTraceStep(
                                         label = event.label,
                                         status = FocusStepStatus.Running,
-                                        arguments = event.arguments,
+                                        summary = event.arguments.take(120).ifBlank { null },
                                     ),
                                 ),
                             ))
@@ -384,7 +385,7 @@ class OnboardingViewModel(
         updateState { copy(testing = true, providerFailure = null, connectionOk = false) }
         viewModelScope.launch {
             try {
-                tester.test(ModelEndpoint(baseUrl, model), key, state.protocol)
+                tester.test(ModelEndpoint(baseUrl, model), ProviderRequestConfig(apiKey = key), state.protocol)
                 updateState { copy(testing = false, connectionOk = true) }
             } catch (e: CancellationException) {
                 throw e
@@ -491,7 +492,11 @@ class OnboardingViewModel(
         if (key.isBlank() && !state.keyOptional) return
         updateState { copy(fetchingModels = true) }
         try {
-            val models = catalog.list(ModelEndpoint(baseUrl, state.model.trim()), key, state.protocol)
+            val models = catalog.list(
+                ModelEndpoint(baseUrl, state.model.trim()),
+                ProviderRequestConfig(apiKey = key),
+                state.protocol,
+            )
             if (token != fetchToken) return
             updateState {
                 copy(

@@ -5,6 +5,7 @@ import android.database.Cursor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import org.koin.core.annotation.Single
 import java.util.UUID
@@ -14,11 +15,13 @@ class ChatStore(private val database: AssistantDatabase) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
     private val callsSerializer = ListSerializer(ToolCallRecord.serializer())
     private val attachmentsSerializer = ListSerializer(ChatAttachment.serializer())
+    private val reactionsSerializer = ListSerializer(String.serializer())
+    private val diffsSerializer = ListSerializer(ListSerializer(FileDiff.serializer()))
 
     suspend fun conversations(archived: Boolean = false): List<Conversation> = withContext(Dispatchers.IO) {
         database.readableDatabase.rawQuery(
             "SELECT c.id, c.title, c.created_at, c.updated_at, c.archived, c.provider_id, c.model, " +
-                "c.reasoning, c.mode, c.plan_json, c.plan_status, c.plan_request_id, c.variant " +
+                "c.reasoning, c.mode, c.plan_json, c.plan_status, c.plan_request_id " +
                 "FROM conversations c " +
                 "WHERE c.archived = ? " +
                 "AND EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id) " +
@@ -34,7 +37,7 @@ class ChatStore(private val database: AssistantDatabase) {
     suspend fun conversation(id: String): Conversation? = withContext(Dispatchers.IO) {
         database.readableDatabase.rawQuery(
             "SELECT id, title, created_at, updated_at, archived, provider_id, model, reasoning, " +
-                "mode, plan_json, plan_status, plan_request_id, variant FROM conversations WHERE id = ? LIMIT 1",
+                "mode, plan_json, plan_status, plan_request_id FROM conversations WHERE id = ? LIMIT 1",
             arrayOf(id),
         ).use { cursor ->
             if (cursor.moveToFirst()) cursor.toConversation() else null
@@ -44,7 +47,7 @@ class ChatStore(private val database: AssistantDatabase) {
     suspend fun ensureConversation(): Conversation = withContext(Dispatchers.IO) {
         val existing = database.readableDatabase.rawQuery(
             "SELECT id, title, created_at, updated_at, archived, provider_id, model, reasoning, " +
-                "mode, plan_json, plan_status, plan_request_id, variant FROM conversations WHERE archived = 0 " +
+                "mode, plan_json, plan_status, plan_request_id FROM conversations WHERE archived = 0 " +
                 "ORDER BY updated_at DESC LIMIT 1",
             null,
         ).use { cursor ->
@@ -85,11 +88,6 @@ class ChatStore(private val database: AssistantDatabase) {
 
     suspend fun setMode(id: String, mode: AgentMode) = withContext(Dispatchers.IO) {
         val values = ContentValues().apply { put("mode", mode.wire) }
-        database.writableDatabase.update("conversations", values, "id = ?", arrayOf(id))
-    }
-
-    suspend fun setVariant(id: String, variant: String) = withContext(Dispatchers.IO) {
-        val values = ContentValues().apply { put("variant", variant.take(80)) }
         database.writableDatabase.update("conversations", values, "id = ?", arrayOf(id))
     }
 
@@ -181,7 +179,9 @@ class ChatStore(private val database: AssistantDatabase) {
         label: String? = null,
         replyToId: Long? = null,
         stats: MessageStats? = null,
-        reaction: String? = null,
+        reactions: List<String> = emptyList(),
+        elapsedMs: Long = 0,
+        diffs: List<List<FileDiff>> = emptyList(),
     ): Long = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val values = ContentValues().apply {
@@ -200,7 +200,9 @@ class ChatStore(private val database: AssistantDatabase) {
             put("label", label)
             put("reply_to_id", replyToId)
             put("stats_json", stats?.let { json.encodeToString(MessageStats.serializer(), it) })
-            put("reaction", reaction)
+            put("reaction", if (reactions.isEmpty()) null else json.encodeToString(reactionsSerializer, reactions))
+            put("elapsed_ms", elapsedMs)
+            put("diff_json", if (diffs.isEmpty()) null else json.encodeToString(diffsSerializer, diffs))
         }
         val id = database.writableDatabase.insertOrThrow("messages", null, values)
         val touch = ContentValues().apply { put("updated_at", now) }
@@ -220,8 +222,10 @@ class ChatStore(private val database: AssistantDatabase) {
         database.writableDatabase.update("messages", values, "id = ?", arrayOf(id.toString()))
     }
 
-    suspend fun setReaction(id: Long, reaction: String?) = withContext(Dispatchers.IO) {
-        val values = ContentValues().apply { put("reaction", reaction) }
+    suspend fun setReactions(id: Long, reactions: List<String>) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply {
+            put("reaction", if (reactions.isEmpty()) null else json.encodeToString(reactionsSerializer, reactions))
+        }
         database.writableDatabase.update("messages", values, "id = ?", arrayOf(id.toString()))
     }
 
@@ -323,7 +327,6 @@ class ChatStore(private val database: AssistantDatabase) {
         },
         planStatus = PlanStatus.fromWire(getString(10).orEmpty()),
         planRequestId = getString(11).orEmpty(),
-        variant = getString(12).orEmpty(),
     )
 
     private fun Cursor.toMessage(): ChatMessage {
@@ -340,6 +343,10 @@ class ChatStore(private val database: AssistantDatabase) {
         val stats = rawStats?.let {
             runCatching { json.decodeFromString(MessageStats.serializer(), it) }.getOrNull()
         }
+        val rawDiffs = if (isNull(15)) null else getString(15)
+        val diffs = rawDiffs?.let {
+            runCatching { json.decodeFromString(diffsSerializer, it) }.getOrDefault(emptyList())
+        }.orEmpty()
         return ChatMessage(
             id = getLong(0),
             conversationId = getString(1),
@@ -359,13 +366,22 @@ class ChatStore(private val database: AssistantDatabase) {
             label = if (isNull(10)) null else getString(10),
             replyToId = if (isNull(11)) null else getLong(11),
             stats = stats,
-            reaction = if (isNull(13)) null else getString(13),
+            reactions = if (isNull(13)) {
+                emptyList()
+            } else {
+                val raw = getString(13).orEmpty()
+                runCatching { json.decodeFromString(reactionsSerializer, raw) }
+                    .getOrElse { listOf(raw) }
+                    .filter { it.isNotBlank() }
+            },
+            elapsedMs = getLong(14),
+            stepDiffs = diffs,
         )
     }
 
     companion object {
         private const val MESSAGE_COLUMNS =
             "id, conversation_id, role, content, reasoning, tool_calls, tool_call_id, name, " +
-                "created_at, attachments, label, reply_to_id, stats_json, reaction"
+                "created_at, attachments, label, reply_to_id, stats_json, reaction, elapsed_ms, diff_json"
     }
 }

@@ -1,6 +1,9 @@
 package fan.x0.focus.data.assistant
 
 import fan.x0.focus.core.network.NetworkExceptionMapper
+import fan.x0.focus.core.network.ProviderRequestConfig
+import fan.x0.focus.core.network.applyProvider
+import fan.x0.focus.core.network.openai.ChatProtocol
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
@@ -29,7 +32,7 @@ class JevJudge(private val http: HttpClient) {
 
     suspend fun judge(
         baseUrl: String,
-        apiKey: String,
+        config: ProviderRequestConfig,
         model: String,
         action: JudgeAction,
         history: List<String>,
@@ -38,7 +41,7 @@ class JevJudge(private val http: HttpClient) {
     ): JudgeVerdict {
         val response = try {
             http.post(systemOneUrl(baseUrl)) {
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
+                applyProvider(config, ChatProtocol.ChatCompletions)
                 header(HttpHeaders.Accept, "application/json")
                 contentType(ContentType.Application.Json)
                 timeout {

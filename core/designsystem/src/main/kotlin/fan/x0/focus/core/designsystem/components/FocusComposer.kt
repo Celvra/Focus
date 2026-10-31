@@ -39,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -65,6 +67,7 @@ fun FocusComposer(
     onHeightChange: (Int) -> Unit = {},
     onAdd: (() -> Unit)? = null,
     addContentDescription: String? = null,
+    onKeyEvent: (KeyEvent) -> Boolean = { false },
     attachments: @Composable ColumnScope.() -> Unit = {},
     pills: @Composable RowScope.() -> Unit = {},
 ) {
@@ -128,7 +131,9 @@ fun FocusComposer(
             TextField(
                 value = input,
                 onValueChange = onInputChange,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onPreviewKeyEvent(onKeyEvent),
                 placeholder = {
                     Text(placeholder)
                 },

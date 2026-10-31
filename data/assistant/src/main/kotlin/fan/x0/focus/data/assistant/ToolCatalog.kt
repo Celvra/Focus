@@ -245,23 +245,38 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "list_providers",
-            description = "List saved model providers with their base URL, model, protocol, and whether a key is stored.",
+            description = "List saved model providers with their base URL, model, protocol, icon, auth type, user agent, custom headers, and whether a key is stored.",
             kind = ToolKind.Read,
             parameters = schema {},
         ),
         ToolSpec(
             name = "save_provider",
-            description = "Save an OpenAI-compatible provider and model. The API key is stored encrypted on the device. Never repeat the key back to the user.",
+            description = "Save an OpenAI-compatible provider and model. The API key is stored encrypted on the device. User agent, custom headers, and auth type are optional. Never repeat the key back to the user.",
             kind = ToolKind.Write,
             parameters = schema {
                 put("provider_id", string("Saved provider id to update, optional"))
                 put("name", string("Short provider name, for example OpenAI"))
+                put("icon", string("Icon key: openai, openrouter, anthropic, deepseek, google, azure, bedrock, vertex, ollama, groq, together, fireworks, perplexity, siliconcloud, nvidia, cohere, minimax, kimi, zhipu, qwen, mistral, xai, hunyuan, doubao, tencent, baidu, stepfun, baichuan, yi, meta, or github. Empty means auto."))
                 put("base_url", string("Base URL, for example https://api.openai.com/v1"))
                 put("model", string("Model id"))
                 put("api_key", string("API key. Stored encrypted and never shown again."))
                 put("protocol", string("chat, responses, or anthropic. Default chat."))
                 put("make_active", boolean("Make this the active provider. Default true."))
                 put("requires_key", boolean("False only when the provider serves models without an API key."))
+                put("user_agent", string("User-Agent header for this provider, optional"))
+                put(
+                    "headers",
+                    buildJsonObject {
+                        put("type", "object")
+                        put("description", "Extra request headers as name and value strings")
+                        putJsonObject("additionalProperties") {
+                            put("type", "string")
+                        }
+                    },
+                )
+                put("auth_type", string("default, bearer, header, query, basic, or none"))
+                put("auth_header", string("Header or query parameter name for header or query auth"))
+                put("auth_username", string("Username for basic auth"))
             },
         ),
         ToolSpec(
@@ -321,6 +336,15 @@ object ToolCatalog {
             kind = ToolKind.Write,
             parameters = schema(required = listOf("title")) {
                 put("title", string("Short plain title, under 40 characters"))
+            },
+        ),
+        ToolSpec(
+            name = "react_to_message",
+            description = "Add one emoji reaction to a user message. Pass match with a short snippet from the target bubble to pick it, or omit match for the latest user message. Use it sparingly and never react to your own messages.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("reaction")) {
+                put("reaction", string("One emoji, for example 👍 or ❤️"))
+                put("match", string("Short text from the target user message. Omit to use the latest user message."))
             },
         ),
         ToolSpec(
@@ -713,7 +737,7 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "spawn_agent",
-            description = "Run a self-contained subtask in a separate read-only agent context. Use it to inspect a large area without flooding this chat. Returns a summary, files, and steps.",
+            description = "Run a self-contained subtask in a separate read-only agent context. It uses the chat provider and model unless a subagent model is set in settings. Use it to inspect a large area without flooding this chat. Returns a summary, files, and steps.",
             kind = ToolKind.Read,
             parameters = schema(required = listOf("task")) {
                 put("task", string("Clear task with the expected result"))
@@ -722,7 +746,7 @@ object ToolCatalog {
                     put("description", "Optional read-only tool names for the subagent")
                     putJsonObject("items") { put("type", "string") }
                 })
-                put("model", string("Optional model id"))
+                put("model", string("Optional model id override for this run"))
                 put("max_rounds", number("Maximum tool rounds, default 6"))
             },
         ),

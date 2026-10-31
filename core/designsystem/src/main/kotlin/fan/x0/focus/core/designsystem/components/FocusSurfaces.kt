@@ -1,7 +1,6 @@
 package fan.x0.focus.core.designsystem.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
@@ -29,7 +29,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -247,9 +246,7 @@ fun FocusChip(
                 style = LocalFocusTypography.current.labelLarge,
             )
         },
-        modifier = modifier
-            .minimumInteractiveComponentSize()
-            .pressScale(interaction),
+        modifier = modifier.pressScale(interaction),
         leadingIcon = if (leadingIcon != null) {
             {
                 Icon(
@@ -261,15 +258,6 @@ fun FocusChip(
         } else {
             null
         },
-        shape = FocusShapeTokens.pill,
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        ),
         interactionSource = interaction,
     )
 }
@@ -296,13 +284,12 @@ fun FocusStatusPill(text: String, tone: StatusTone, modifier: Modifier = Modifie
         MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "pillContent",
     )
-    Surface(modifier = modifier, shape = FocusShapeTokens.pill, color = container) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = content,
-        )
+    Badge(
+        containerColor = container,
+        contentColor = content,
+        modifier = modifier.heightIn(min = 24.dp),
+    ) {
+        Text(text = text)
     }
 }
 
@@ -314,14 +301,15 @@ fun FocusIconBadge(
     container: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primaryContainer,
     size: Dp = 40.dp,
 ) {
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(FocusShapeTokens.pill)
-            .background(container),
-        contentAlignment = Alignment.Center,
+    Surface(
+        modifier = modifier.size(size),
+        shape = CircleShape,
+        color = container,
+        contentColor = tint,
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.5f))
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(size * 0.5f))
+        }
     }
 }
 

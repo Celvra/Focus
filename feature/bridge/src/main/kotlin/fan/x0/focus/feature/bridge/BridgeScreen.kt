@@ -74,6 +74,7 @@ fun BridgeScreen(
             val sections = listOf(
                 BridgeTab.Devices to stringResource(R.string.bridge_tab_devices),
                 BridgeTab.Terminal to stringResource(R.string.bridge_tab_terminal),
+                BridgeTab.Background to stringResource(R.string.bridge_tab_background),
             )
             val selected = sections.indexOfFirst { it.first == state.tab }.coerceAtLeast(0)
             FocusTabSwitcher(
@@ -89,6 +90,7 @@ fun BridgeScreen(
                 when (sections[index].first) {
                     BridgeTab.Devices -> DevicesPane(state = state, onAction = onAction)
                     BridgeTab.Terminal -> TerminalPane(state = state, onAction = onAction)
+                    BridgeTab.Background -> BackgroundPane(state = state, onAction = onAction)
                 }
             }
         }

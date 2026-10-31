@@ -1,9 +1,13 @@
 package fan.x0.focus.core.designsystem.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -41,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 
 private val GroupCorner = 20.dp
 private val GroupSpacing = 2.dp
@@ -55,6 +60,8 @@ private data class GroupItem(
     val supportingContent: (@Composable () -> Unit)?,
     val trailingContent: (@Composable () -> Unit)?,
     val formContent: (@Composable ColumnScope.() -> Unit)? = null,
+    val hasHeader: Boolean = true,
+    val expanded: Boolean = true,
 )
 
 @DslMarker
@@ -73,6 +80,14 @@ interface FocusCardGroupScope {
     )
 
     fun formItem(
+        headlineContent: (@Composable () -> Unit)? = null,
+        supportingContent: (@Composable () -> Unit)? = null,
+        leadingContent: (@Composable () -> Unit)? = null,
+        content: @Composable ColumnScope.() -> Unit,
+    )
+
+    fun collapsibleFormItem(
+        expanded: Boolean,
         headlineContent: (@Composable () -> Unit)? = null,
         supportingContent: (@Composable () -> Unit)? = null,
         leadingContent: (@Composable () -> Unit)? = null,
@@ -109,6 +124,38 @@ private class CardGroupScopeImpl : FocusCardGroupScope {
         leadingContent: (@Composable () -> Unit)?,
         content: @Composable ColumnScope.() -> Unit,
     ) {
+        pushFormItem(
+            expanded = true,
+            headlineContent = headlineContent,
+            supportingContent = supportingContent,
+            leadingContent = leadingContent,
+            content = content,
+        )
+    }
+
+    override fun collapsibleFormItem(
+        expanded: Boolean,
+        headlineContent: (@Composable () -> Unit)?,
+        supportingContent: (@Composable () -> Unit)?,
+        leadingContent: (@Composable () -> Unit)?,
+        content: @Composable ColumnScope.() -> Unit,
+    ) {
+        pushFormItem(
+            expanded = expanded,
+            headlineContent = headlineContent,
+            supportingContent = supportingContent,
+            leadingContent = leadingContent,
+            content = content,
+        )
+    }
+
+    private fun pushFormItem(
+        expanded: Boolean,
+        headlineContent: (@Composable () -> Unit)?,
+        supportingContent: (@Composable () -> Unit)?,
+        leadingContent: (@Composable () -> Unit)?,
+        content: @Composable ColumnScope.() -> Unit,
+    ) {
         items += GroupItem(
             selected = false,
             onClick = null,
@@ -117,6 +164,8 @@ private class CardGroupScopeImpl : FocusCardGroupScope {
             supportingContent = supportingContent,
             trailingContent = null,
             formContent = content,
+            hasHeader = headlineContent != null,
+            expanded = expanded,
         )
     }
 }
@@ -169,13 +218,15 @@ fun FocusCardGroupIcon(
         animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
         label = "groupIconContent",
     )
-    Box(
-        modifier = modifier
-            .size(40.dp)
-            .background(container, CircleShape),
-        contentAlignment = Alignment.Center,
+    Surface(
+        modifier = modifier.size(40.dp),
+        shape = CircleShape,
+        color = container,
+        contentColor = content,
     ) {
-        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(20.dp))
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+        }
     }
 }
 
@@ -214,14 +265,27 @@ fun FocusCardGroup(
             }
         }
         val count = scope.items.size
+        val motion = LocalFocusMotion.current
         scope.items.forEachIndexed { index, item ->
             val form = item.formContent
             if (form != null) {
-                GroupFormItem(item, form, index, count)
+                AnimatedVisibility(
+                    visible = item.expanded,
+                    enter = expandVertically(
+                        animationSpec = motion.spatialDefault(),
+                        expandFrom = Alignment.Top,
+                    ) + fadeIn(animationSpec = motion.effectsDefault()),
+                    exit = shrinkVertically(
+                        animationSpec = motion.spatialDefault(),
+                        shrinkTowards = Alignment.Top,
+                    ) + fadeOut(animationSpec = motion.effectsFast()),
+                ) {
+                    GroupFormItem(item, form, index, count)
+                }
             } else {
                 GroupListItem(item, index, count)
             }
-            if (index != count - 1) Spacer(Modifier.height(GroupSpacing))
+            if (index != count - 1 && item.expanded) Spacer(Modifier.height(GroupSpacing))
         }
     }
 }
@@ -240,9 +304,9 @@ private fun GroupFormItem(
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(if (item.hasHeader) 12.dp else 0.dp),
         ) {
-            GroupHeader(item)
+            if (item.hasHeader) GroupHeader(item)
             formContent()
         }
     }

@@ -1,5 +1,9 @@
 package fan.x0.focus.data.assistant
 
+import fan.x0.focus.core.network.ProviderAuth
+import fan.x0.focus.core.network.ProviderAuthType
+import fan.x0.focus.core.network.ProviderHeader
+import fan.x0.focus.core.network.ProviderRequestConfig
 import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.CompletedToolCall
 import fan.x0.focus.core.network.openai.ConnectionTestException
@@ -25,6 +29,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import org.koin.core.annotation.Single
 import java.util.UUID
 
@@ -38,12 +43,15 @@ data class ToolResult(
     val completesOnboarding: Boolean = false,
     val todos: List<ConversationTodo>? = null,
     val plan: ProposedPlan? = null,
+    val durationMs: Long = 0,
+    val diffs: List<FileDiff> = emptyList(),
 )
 
 data class StepOutcome(
     val label: String,
     val ok: Boolean,
     val summary: String,
+    val diffs: List<FileDiff> = emptyList(),
 )
 
 @Single
@@ -93,7 +101,7 @@ class ToolExecutor(
             args == null -> StepOutcome(step.label, false, "Invalid arguments")
             else -> {
                 val result = runTool(spec, args, conversationId)
-                StepOutcome(step.label, result.ok, result.summary)
+                StepOutcome(step.label, result.ok, result.summary, result.diffs)
             }
         }
     }
@@ -323,14 +331,20 @@ class ToolExecutor(
             "write_workspace_file" -> {
                 val file = args.workspaceFile() ?: return fail("file must be one of ${WorkspaceFile.keys()}")
                 val content = args.text("content") ?: return fail("content is required")
+                val old = workspace.read(file)
                 workspace.write(file, content)
-                ok("Saved ${file.fileName}", "${file.fileName} updated.")
+                val updated = workspace.read(file)
+                val diff = LineDiff.compute(file.fileName, old, updated)
+                ok("Saved ${file.fileName}", "${file.fileName} updated.", listOfNotNull(diff))
             }
             "append_workspace_file" -> {
                 val file = args.workspaceFile() ?: return fail("file must be one of ${WorkspaceFile.keys()}")
                 val content = args.text("content") ?: return fail("content is required")
+                val old = workspace.read(file)
                 workspace.append(file, content)
-                ok("Updated ${file.fileName}", "${file.fileName} updated.")
+                val updated = workspace.read(file)
+                val diff = LineDiff.compute(file.fileName, old, updated)
+                ok("Updated ${file.fileName}", "${file.fileName} updated.", listOfNotNull(diff))
             }
             "list_reminders" -> {
                 val list = reminders.upcoming(ToolTime.now())
@@ -476,19 +490,28 @@ class ToolExecutor(
             "write_text_file" -> {
                 val uri = args.text("uri") ?: return fail("uri is required")
                 val content = args.text("content") ?: return fail("content is required")
-                files.writeText(uri, content.take(100_000))
-                ok("File saved", "File updated.")
+                val text = content.take(100_000)
+                val name = localName(uri)
+                val old = localText(uri)
+                files.writeText(uri, text)
+                val diff = old?.let { LineDiff.compute(name, it, text) }
+                ok("File saved", "File updated.", listOfNotNull(diff))
             }
             "create_text_file" -> {
                 val name = args.text("name") ?: return fail("name is required")
                 val content = args.text("content") ?: return fail("content is required")
-                val file = files.createText(name, content.take(100_000))
-                ok("Created ${file.name}", "Created file ${file.name}.")
+                val text = content.take(100_000)
+                val file = files.createText(name, text)
+                val diff = LineDiff.compute(file.name, "", text)
+                ok("Created ${file.name}", "Created file ${file.name}.", listOfNotNull(diff))
             }
             "delete_file" -> {
                 val uri = args.text("uri") ?: return fail("uri is required")
+                val name = localName(uri)
+                val old = localText(uri)
                 files.delete(uri)
-                ok("Deleted file", "File deleted.")
+                val diff = old?.let { LineDiff.compute(name, it, "") }
+                ok("Deleted file", "File deleted.", listOfNotNull(diff))
             }
             "save_profile" -> {
                 workspace.updateUserProfile(
@@ -510,11 +533,18 @@ class ToolExecutor(
                     buildJsonObject {
                         put("id", provider.id)
                         put("name", provider.name)
+                        put("icon", if (provider.icon.startsWith("data:image/")) "custom" else provider.icon)
                         put("base_url", provider.baseUrl)
                         put("model", provider.model)
                         put("protocol", provider.protocol.name)
                         put("active", provider.id == config.activeProviderId)
                         put("key_saved", !secrets.apiKey(provider.id).isNullOrBlank())
+                        put("user_agent", provider.userAgent)
+                        put("auth_type", provider.auth.type.name)
+                        put("auth_header", provider.auth.name)
+                        putJsonArray("header_names") {
+                            provider.headers.forEach { add(it.name) }
+                        }
                     }
                 }
                 ok(
@@ -554,6 +584,15 @@ class ToolExecutor(
                 val id = existing?.id ?: UUID.randomUUID().toString()
                 val makeActive = args.flag("make_active") ?: true
                 val requiresKey = args.flag("requires_key") ?: existing?.requiresKey ?: true
+                val userAgent = args.text("user_agent") ?: existing?.userAgent.orEmpty()
+                val headers = args.headers("headers") ?: existing?.headers.orEmpty()
+                val icon = args.text("icon") ?: existing?.icon.orEmpty()
+                val authType = args.text("auth_type")?.let { value ->
+                    authTypeOf(value) ?: return fail("auth_type must be default, bearer, header, query, basic, or none")
+                } ?: existing?.auth?.type ?: ProviderAuthType.Default
+                val authName = args.text("auth_header") ?: existing?.auth?.name.orEmpty()
+                val authUsername = args.text("auth_username") ?: existing?.auth?.username.orEmpty()
+                val auth = ProviderAuth(type = authType, name = authName, username = authUsername)
                 settings.updateProvider(
                     ProviderConfig(
                         id = id,
@@ -562,6 +601,10 @@ class ToolExecutor(
                         model = model,
                         protocol = protocol,
                         requiresKey = requiresKey,
+                        userAgent = userAgent,
+                        headers = headers,
+                        auth = auth,
+                        icon = icon,
                     ),
                     makeActive = makeActive,
                 )
@@ -578,6 +621,11 @@ class ToolExecutor(
                         put("active", makeActive)
                         put("requires_key", requiresKey)
                         put("key_saved", keySaved)
+                        put("user_agent", userAgent)
+                        put("auth_type", authType.name)
+                        putJsonObject("headers") {
+                            headers.forEach { put(it.name, it.value) }
+                        }
                     }.toString(),
                 )
             }
@@ -599,8 +647,9 @@ class ToolExecutor(
                 val key = args.text("api_key")
                     ?: saved?.let { secrets.apiKey(it.id) }
                     ?: return fail("api_key or provider_id is required")
+                val requestConfig = saved?.requestConfig(key) ?: ProviderRequestConfig(apiKey = key)
                 try {
-                    val report = tester.test(ModelEndpoint(baseUrl, model), key, protocol)
+                    val report = tester.test(ModelEndpoint(baseUrl, model), requestConfig, protocol)
                     ok(
                         "Connection works",
                         buildJsonObject {
@@ -630,11 +679,12 @@ class ToolExecutor(
                 val key = args.text("api_key")
                     ?: saved?.let { secrets.apiKey(it.id) }
                     ?: return fail("api_key or provider_id is required")
+                val requestConfig = saved?.requestConfig(key) ?: ProviderRequestConfig(apiKey = key)
                 val entries = catalog.models(
                     providerId = saved?.id ?: baseUrl,
                     baseUrl = baseUrl,
                     model = saved?.model.orEmpty(),
-                    apiKey = key,
+                    config = requestConfig,
                     protocol = protocol,
                 ).take(200)
                 ok(
@@ -693,6 +743,32 @@ class ToolExecutor(
                 if (conversationId.isBlank()) return fail("No active conversation")
                 chats.rename(conversationId, title)
                 ok("Renamed to $title", "Conversation renamed: $title.")
+            }
+            "react_to_message" -> {
+                val reaction = args.text("reaction")?.trim().orEmpty()
+                if (reaction.isBlank()) return fail("reaction is required")
+                if (reaction.length > 16) return fail("reaction must be one emoji")
+                val match = args.text("match")?.trim().orEmpty()
+                val history = chats.messages(conversationId, 200)
+                val target = if (match.isBlank()) {
+                    history.lastOrNull { it.role == ChatRole.User }
+                } else {
+                    history.lastOrNull {
+                        it.role == ChatRole.User && it.content.contains(match, ignoreCase = true)
+                    }
+                }
+                if (target == null) {
+                    return fail(
+                        if (match.isBlank()) {
+                            "No user message to react to"
+                        } else {
+                            "No user message contains: $match"
+                        },
+                    )
+                }
+                val next = target.reactions + reaction
+                chats.setReactions(target.id, next)
+                ok("Reacted with $reaction", "Added $reaction to the matched user message.")
             }
             ToolCatalog.SET_WORKING_TEXT -> {
                 val text = args.text("text") ?: return fail("text is required")
@@ -977,10 +1053,17 @@ class ToolExecutor(
                 val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val path = args.text("path") ?: return fail("path is required")
                 val content = args.text("content") ?: return fail("content is required")
+                val before = bridgeText(endpoint, path)
                 bridge.write(endpoint, path, content)
+                val diff = if (before?.truncated == true) {
+                    null
+                } else {
+                    LineDiff.compute(path, before?.text.orEmpty(), content)
+                }
                 ok(
                     "Wrote $path on ${endpoint.name}",
                     "File $path written on ${endpoint.name} (${content.length} characters).",
+                    listOfNotNull(diff),
                 )
             }
             "bridge_fs_edit" -> {
@@ -988,14 +1071,30 @@ class ToolExecutor(
                 val path = args.text("path") ?: return fail("path is required")
                 val old = args.text("old") ?: return fail("old is required")
                 val new = args.text("new") ?: return fail("new is required")
+                val before = bridgeText(endpoint, path)
                 bridge.edit(endpoint, path, old, new, args.flag("replace_all") ?: false)
-                ok("Edited $path", "Replaced snippet in $path on ${endpoint.name}.")
+                val after = bridgeText(endpoint, path)
+                val diff = if (
+                    before != null && !before.truncated &&
+                    after != null && !after.truncated
+                ) {
+                    LineDiff.compute(path, before.text, after.text)
+                } else {
+                    null
+                }
+                ok("Edited $path", "Replaced snippet in $path on ${endpoint.name}.", listOfNotNull(diff))
             }
             "bridge_fs_delete" -> {
                 val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val path = args.text("path") ?: return fail("path is required")
+                val before = bridgeText(endpoint, path)
                 bridge.remove(endpoint, path)
-                ok("Deleted $path", "Path $path deleted on ${endpoint.name}.")
+                val diff = if (before != null && !before.truncated) {
+                    LineDiff.compute(path, before.text, "")
+                } else {
+                    null
+                }
+                ok("Deleted $path", "Path $path deleted on ${endpoint.name}.", listOfNotNull(diff))
             }
             "bridge_set_workspace" -> {
                 val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
@@ -1547,8 +1646,22 @@ class ToolExecutor(
         return runCatching { Json.parseToJsonElement(raw) as JsonObject }.getOrNull()
     }
 
-    private fun ok(summary: String, content: String): ToolResult =
-        ToolResult(ok = true, content = content, summary = summary)
+    private suspend fun localName(uri: String): String =
+        runCatching { files.nameOf(uri) }.getOrNull()?.takeIf { it.isNotBlank() }
+            ?: uri.substringAfterLast('/').ifBlank { uri }
+
+    private suspend fun localText(uri: String): String? =
+        runCatching { files.readText(uri, 120_000) }.getOrNull()
+
+    private suspend fun bridgeText(endpoint: BridgeEndpoint, path: String): BridgeText? {
+        val result = runCatching { bridge.read(endpoint, path, limit = 2000) }.getOrNull() ?: return null
+        return BridgeText(result.content.ifEmpty { result.lines }, result.truncated)
+    }
+
+    private data class BridgeText(val text: String, val truncated: Boolean)
+
+    private fun ok(summary: String, content: String, diffs: List<FileDiff> = emptyList()): ToolResult =
+        ToolResult(ok = true, content = content, summary = summary, diffs = diffs)
 
     private fun fail(message: String, summary: String = message): ToolResult =
         ToolResult(ok = false, content = "Error: $message", summary = summary)
@@ -1673,6 +1786,24 @@ class ToolExecutor(
 
     private fun JsonObject.flag(key: String): Boolean? =
         (this[key] as? JsonPrimitive)?.content?.toBooleanStrictOrNull()
+
+    private fun JsonObject.headers(key: String): List<ProviderHeader>? {
+        val objectValue = this[key] as? JsonObject ?: return null
+        return objectValue.mapNotNull { (name, value) ->
+            val text = (value as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+            if (name.isBlank() || text == null) null else ProviderHeader(name = name, value = text)
+        }
+    }
+
+    private fun authTypeOf(value: String?): ProviderAuthType? = when (value?.trim()?.lowercase()) {
+        "default", "protocol" -> ProviderAuthType.Default
+        "bearer", "token" -> ProviderAuthType.Bearer
+        "header", "api_key", "apikey" -> ProviderAuthType.ApiKeyHeader
+        "query", "query_param" -> ProviderAuthType.Query
+        "basic" -> ProviderAuthType.Basic
+        "none" -> ProviderAuthType.None
+        else -> null
+    }
 
     private fun protocolOf(value: String?): ChatProtocol? = when (value?.trim()?.lowercase()) {
         "chat", "chat_completions", "chatcompletions", "openai" -> ChatProtocol.ChatCompletions

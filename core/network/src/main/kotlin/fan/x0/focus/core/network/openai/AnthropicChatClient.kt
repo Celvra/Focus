@@ -1,7 +1,9 @@
 package fan.x0.focus.core.network.openai
 
 import fan.x0.focus.core.network.NetworkExceptionMapper
+import fan.x0.focus.core.network.ProviderRequestConfig
 import fan.x0.focus.core.network.allowLongStream
+import fan.x0.focus.core.network.applyProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -31,12 +33,12 @@ class AnthropicChatClient(
 ) {
     suspend fun complete(
         endpoint: ModelEndpoint,
-        apiKey: String,
+        config: ProviderRequestConfig,
         request: ChatCompletionRequest,
     ): ChatReply {
         val response = try {
             http.post(endpoint.messagesUrl) {
-                anthropicHeaders(apiKey)
+                applyProvider(config, ChatProtocol.AnthropicMessages)
                 header(HttpHeaders.Accept, "application/json")
                 contentType(ContentType.Application.Json)
                 setBody(payload(request, stream = false))
@@ -59,13 +61,13 @@ class AnthropicChatClient(
 
     fun stream(
         endpoint: ModelEndpoint,
-        apiKey: String,
+        config: ProviderRequestConfig,
         request: ChatCompletionRequest,
     ): Flow<ChatStreamEvent> = flow {
         val response = try {
             http.post(endpoint.messagesUrl) {
                 allowLongStream()
-                anthropicHeaders(apiKey)
+                applyProvider(config, ChatProtocol.AnthropicMessages)
                 header(HttpHeaders.Accept, "text/event-stream")
                 contentType(ContentType.Application.Json)
                 setBody(payload(request, stream = true))
@@ -103,11 +105,6 @@ class AnthropicChatClient(
                 ?: throw ModelProtocolException("invalid stream event")
             decoder.decode(root).forEach { emit(it) }
         }
-    }
-
-    private fun io.ktor.client.request.HttpRequestBuilder.anthropicHeaders(apiKey: String) {
-        if (apiKey.isNotBlank()) header("x-api-key", apiKey)
-        header("anthropic-version", "2023-06-01")
     }
 
     private fun decodeResponse(body: String): ChatReply {

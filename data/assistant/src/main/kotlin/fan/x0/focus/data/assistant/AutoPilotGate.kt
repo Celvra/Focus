@@ -1,5 +1,6 @@
 package fan.x0.focus.data.assistant
 
+import fan.x0.focus.core.network.ProviderRequestConfig
 import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ModelEndpoint
 import kotlinx.coroutines.CancellationException
@@ -10,7 +11,7 @@ private data class JudgeTarget(
     val baseUrl: String,
     val model: String,
     val protocol: ChatProtocol,
-    val apiKey: String,
+    val requestConfig: ProviderRequestConfig,
 )
 
 @Single
@@ -43,7 +44,7 @@ class AutoPilotGate(
                 when (config.judgeKind) {
                     JudgeKind.Jev -> jev.judge(
                         baseUrl = target.baseUrl,
-                        apiKey = target.apiKey,
+                        config = target.requestConfig,
                         model = target.model,
                         action = action,
                         history = history,
@@ -53,7 +54,7 @@ class AutoPilotGate(
                     JudgeKind.Llm -> llm.judge(
                         endpoint = ModelEndpoint(target.baseUrl, target.model),
                         protocol = target.protocol,
-                        apiKey = target.apiKey,
+                        config = target.requestConfig,
                         action = action,
                         history = history,
                         timeoutSeconds = config.timeoutSeconds,
@@ -83,7 +84,7 @@ class AutoPilotGate(
             baseUrl = provider.baseUrl,
             model = config.judgeModel.ifBlank { provider.model },
             protocol = provider.protocol,
-            apiKey = key,
+            requestConfig = provider.requestConfig(key),
         )
     }
 

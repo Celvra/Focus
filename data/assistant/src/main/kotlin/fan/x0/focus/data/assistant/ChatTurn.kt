@@ -12,6 +12,9 @@ data class ChatTurnStep(
     val arguments: String = "",
     val summary: String? = null,
     val output: String? = null,
+    val durationMs: Long = 0,
+    val startedAt: Long = 0,
+    val diffs: List<FileDiff> = emptyList(),
 )
 
 enum class ChatTurnApprovalPhase { Waiting, Running, Finished, Declined }
@@ -35,7 +38,12 @@ data class ChatTurnAsk(
 )
 
 sealed interface ChatTurnEntry {
-    data class Answer(val text: String, val reasoning: String) : ChatTurnEntry
+    data class Answer(
+        val text: String,
+        val reasoning: String,
+        val reasoningMs: Long = 0,
+        val reasoningStartedAt: Long = 0,
+    ) : ChatTurnEntry
     data class Trace(val steps: List<ChatTurnStep>) : ChatTurnEntry
     data class Approval(val card: ChatTurnApproval) : ChatTurnEntry
     data class Plan(val plan: ProposedPlan, val card: ChatTurnApproval) : ChatTurnEntry

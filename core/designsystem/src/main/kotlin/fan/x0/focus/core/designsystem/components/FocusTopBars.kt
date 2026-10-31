@@ -15,8 +15,10 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import fan.x0.focus.core.designsystem.R
 
 // Screens use these to reach the shell without depending on the app module.
 val LocalFocusDrawerOpener = staticCompositionLocalOf<() -> Unit> { {} }
@@ -30,14 +32,18 @@ fun FocusLargeTopBar(
     scrollBehavior: TopAppBarScrollBehavior,
     modifier: Modifier = Modifier,
     onMenu: (() -> Unit)? = if (LocalFocusDrawerAvailable.current) LocalFocusDrawerOpener.current else null,
+    onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     LargeFlexibleTopAppBar(
         title = { Text(title) },
         modifier = modifier,
         navigationIcon = {
-            if (onMenu != null) {
-                IconButton(onClick = onMenu) {
+            when {
+                onBack != null -> IconButton(onClick = onBack) {
+                    Icon(FocusIcons.Back, contentDescription = stringResource(R.string.common_back))
+                }
+                onMenu != null -> IconButton(onClick = onMenu) {
                     Icon(FocusIcons.Menu, contentDescription = null)
                 }
             }
@@ -85,7 +91,7 @@ fun FocusCompactTopBar(
         navigationIcon = {
             when {
                 onBack != null -> IconButton(onClick = onBack) {
-                    Icon(FocusIcons.Back, contentDescription = null)
+                    Icon(FocusIcons.Back, contentDescription = stringResource(R.string.common_back))
                 }
                 onMenu != null -> IconButton(onClick = onMenu) {
                     Icon(FocusIcons.Menu, contentDescription = null)

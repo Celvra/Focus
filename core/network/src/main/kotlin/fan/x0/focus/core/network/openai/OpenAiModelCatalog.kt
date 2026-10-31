@@ -1,9 +1,10 @@
 package fan.x0.focus.core.network.openai
 
 import fan.x0.focus.core.network.NetworkExceptionMapper
+import fan.x0.focus.core.network.ProviderRequestConfig
+import fan.x0.focus.core.network.applyProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.timeout
-import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
@@ -22,18 +23,18 @@ class OpenAiModelCatalog(
 ) {
     suspend fun list(
         endpoint: ModelEndpoint,
-        apiKey: String,
+        config: ProviderRequestConfig,
         protocol: ChatProtocol = ChatProtocol.ChatCompletions,
-    ): List<String> = details(endpoint, apiKey, protocol).map { it.id }
+    ): List<String> = details(endpoint, config, protocol).map { it.id }
 
     suspend fun details(
         endpoint: ModelEndpoint,
-        apiKey: String,
+        config: ProviderRequestConfig,
         protocol: ChatProtocol = ChatProtocol.ChatCompletions,
     ): List<ModelEntry> {
         val response = try {
             http.get(endpoint.modelsUrl) {
-                authHeaders(apiKey, protocol)
+                applyProvider(config, protocol)
                 header(HttpHeaders.Accept, "application/json")
                 timeout {
                     requestTimeoutMillis = 25_000
@@ -52,14 +53,6 @@ class OpenAiModelCatalog(
         return parseModelEntries(body, json)
     }
 
-    private fun HttpRequestBuilder.authHeaders(apiKey: String, protocol: ChatProtocol) {
-        if (protocol == ChatProtocol.AnthropicMessages) {
-            header("x-api-key", apiKey)
-            header("anthropic-version", "2023-06-01")
-        } else {
-            if (apiKey.isNotBlank()) header(HttpHeaders.Authorization, "Bearer $apiKey")
-        }
-    }
 }
 
 internal fun parseModelIds(body: String, json: Json = Json { ignoreUnknownKeys = true }): List<String> =

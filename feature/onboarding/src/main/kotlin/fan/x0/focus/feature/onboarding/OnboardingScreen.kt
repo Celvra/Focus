@@ -192,10 +192,11 @@ private fun Conversation(
     hazeState: HazeState,
 ) {
     val listState = rememberLazyListState()
-    val live = state.sending || state.streamingText.isNotBlank()
-    LaunchedEffect(state.messages.size, state.streamingText.length, live) {
-        val count = state.messages.size + if (live) 1 else 0
-        if (count > 0) listState.requestScrollToItem(count - 1)
+    val lastText = (state.entries.lastOrNull() as? OnboardingEntry.Assistant)?.text.orEmpty()
+    LaunchedEffect(state.entries.size, lastText.length, state.sending) {
+        if (state.entries.isNotEmpty()) {
+            listState.requestScrollToItem(state.entries.lastIndex)
+        }
     }
     LazyColumn(
         state = listState,
@@ -211,53 +212,63 @@ private fun Conversation(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         itemsIndexed(
-            items = state.messages,
-            key = { _, it -> it.id },
-            contentType = { _, it -> if (it.fromUser) "user" else "assistant" },
-        ) { _, message ->
-            val fresh = message.id == state.lastMessageId && !state.restored
-            FocusBubbleEnter(play = fresh, fromUser = message.fromUser) {
-                AssistantTurn(
-                    message = message,
-                    live = false,
-                )
-            }
-        }
-        if (live) {
-            item(key = "live", contentType = "assistant") {
-                FocusBubbleEnter(play = state.sending, fromUser = false) {
-                    AssistantTurn(
-                        message = OnboardingMessage(
-                            id = -1L,
-                            fromUser = false,
-                            text = state.streamingText,
-                            reasoning = state.reasoning,
-                            steps = state.steps,
-                        ),
-                        live = true,
-                    )
+            items = state.entries,
+            key = { _, it -> it.key },
+            contentType = { _, it ->
+                when (it) {
+                    is OnboardingEntry.User -> "user"
+                    is OnboardingEntry.Assistant -> "assistant"
+                    is OnboardingEntry.Trace -> "trace"
+                    is OnboardingEntry.Notice -> "notice"
                 }
+            },
+        ) { _, entry ->
+            when (entry) {
+                is OnboardingEntry.User -> FocusBubbleEnter(play = true, fromUser = true) {
+                    FocusChatBubble(text = entry.text, fromUser = true)
+                }
+                is OnboardingEntry.Assistant -> FocusBubbleEnter(
+                    play = entry.live,
+                    fromUser = false,
+                ) {
+                    AssistantTurn(entry = entry)
+                }
+                is OnboardingEntry.Trace -> FocusTraceCard(steps = entry.steps)
+                is OnboardingEntry.Notice -> OnboardingNotice(text = entry.text)
             }
         }
     }
 }
 
 @Composable
-private fun AssistantTurn(message: OnboardingMessage, live: Boolean) {
+private fun AssistantTurn(entry: OnboardingEntry.Assistant) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (message.reasoning.isNotBlank()) {
-            FocusReasoningCard(text = message.reasoning, running = live)
+        if (entry.reasoning.isNotBlank()) {
+            FocusReasoningCard(text = entry.reasoning, running = entry.live)
         }
-        if (message.steps.isNotEmpty()) {
-            FocusTraceCard(steps = message.steps)
-        }
-        if (message.text.isNotBlank() || live) {
+        if (entry.text.isNotBlank() || entry.live) {
             FocusChatBubble(
-                text = message.text,
-                fromUser = message.fromUser,
-                streaming = live,
+                text = entry.text,
+                fromUser = false,
+                streaming = entry.live,
             )
         }
+    }
+}
+
+@Composable
+private fun OnboardingNotice(text: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(12.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

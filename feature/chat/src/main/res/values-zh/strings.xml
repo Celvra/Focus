@@ -84,6 +84,9 @@
     <string name="chat_reasoning_xhigh_desc">难题，深度推理。</string>
     <string name="chat_reasoning_max">最高</string>
     <string name="chat_reasoning_max_desc">最深的推理，也最慢最贵。</string>
+    <string name="chat_reasoning_max_boost_title">Max</string>
+    <string name="chat_reasoning_max_deepseek_title">神鲸...</string>
+    <string name="chat_reasoning_max_boost_desc">更快的消耗速度</string>
     <string name="chat_mode_build">构建</string>
     <string name="chat_mode_plan">计划</string>
     <string name="chat_mode_build_desc">直接执行改动和命令。</string>
@@ -94,8 +97,6 @@
     <string name="chat_menu_edit">编辑</string>
     <string name="chat_menu_delete">删除</string>
     <string name="chat_menu_select">选择文本</string>
-    <string name="chat_menu_reactions">回应</string>
-    <string name="chat_menu_remove_reaction">移除回应</string>
     <string name="chat_reply_title">正在回复 %1$s</string>
     <string name="chat_reply_cancel">取消回复</string>
     <string name="chat_quote_deleted">消息已删除</string>
@@ -119,6 +120,8 @@
     <string name="chat_retry_waiting">等待重试</string>
     <string name="chat_failed">这一轮失败了。</string>
     <string name="chat_failed_retry">再试一次</string>
+    <string name="chat_stats_provider">供应商</string>
+    <string name="chat_stats_model">模型</string>
     <string name="chat_stats_input">输入</string>
     <string name="chat_stats_output">输出</string>
     <string name="chat_stats_total">总计</string>
@@ -137,9 +140,8 @@
     <string name="chat_todo_pending">待处理</string>
     <string name="chat_todo_completed">已完成</string>
     <string name="chat_todo_cancelled">已取消</string>
-    <string name="chat_todo_priority_high">高</string>
-    <string name="chat_todo_priority_medium">中</string>
-    <string name="chat_todo_priority_low">低</string>
+    <string name="chat_todo_expanded">已展开</string>
+    <string name="chat_todo_collapsed">已收起</string>
     <string name="chat_plan_files">涉及文件</string>
     <string name="chat_plan_risks">风险</string>
     <string name="chat_plan_verification">验证</string>
@@ -151,8 +153,7 @@
     <string name="chat_plan_approved">已批准</string>
     <string name="chat_plan_rejected">要求修改</string>
     <string name="chat_plan_pending">等待批准</string>
-    <string name="chat_command_help">命令</string>
-    <string name="chat_command_usage">输入命令和参数。</string>
+    <string name="chat_command_usage">输入 / 查看命令。回车补全，再次回车运行。</string>
     <string name="chat_notice_title">应用通知</string>
     <string name="chat_tool_arguments">参数</string>
     <string name="chat_tool_result">结果</string>
@@ -167,7 +168,6 @@
     <string name="slash_sessions_desc">浏览会话。</string>
     <string name="slash_models_desc">打开模型选择。</string>
     <string name="slash_effort_desc">设置思考深度。</string>
-    <string name="slash_variant_desc">查看模型变体。</string>
     <string name="slash_settings_desc">打开设置。</string>
     <string name="slash_help_desc">查看命令列表。</string>
     <string name="slash_no_arg">不需要参数</string>
@@ -175,12 +175,19 @@
     <string name="slash_resume_hint">会话 id 或标题</string>
     <string name="slash_models_hint">搜索文字，可选</string>
     <string name="slash_effort_hint">off, auto, low, medium, high, xhigh, max</string>
-    <string name="slash_variant_hint">变体名称</string>
     <string name="slash_settings_hint">页面名称，可选</string>
 
     <string name="chat_undo_done">已撤销最后一条消息。可以用 /redo 重新发送。</string>
     <string name="chat_resume_help">用 /resume 加会话 id 或标题，或者用 /sessions 浏览。</string>
-    <string name="chat_variant_none">还没有设置变体。用 /variant 加提供方的变体名。</string>
-    <string name="chat_variant_current">当前变体：%1$s</string>
     <string name="chat_btw_usage">用法：/btw 你的旁支问题</string>
+    <string name="chat_btw_title">顺便一问</string>
+    <string name="chat_btw_note">只读问答，不会写入当前会话</string>
+    <string name="chat_btw_question">问题</string>
+    <string name="chat_btw_close">关闭</string>
+    <string name="chat_subagent_title">子代理</string>
+    <string name="chat_subagent_task">任务</string>
+    <string name="chat_subagent_running">运行中</string>
+    <string name="chat_subagent_done">已完成</string>
+    <string name="chat_subagent_failed">已失败</string>
+    <string name="chat_subagent_close">关闭</string>
 </resources>

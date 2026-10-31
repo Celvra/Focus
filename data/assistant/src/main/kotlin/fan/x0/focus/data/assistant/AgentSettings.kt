@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -16,6 +17,8 @@ data class AgentConfig(
     val maxRounds: Int = AgentDefaults.MAX_ROUNDS,
     val unlimited: Boolean = false,
     val retry: RetryConfig = RetryConfig(),
+    val subagentProviderId: String = "",
+    val subagentModel: String = "",
 ) {
     val roundLimit: Int get() = if (unlimited) Int.MAX_VALUE else maxRounds
 }
@@ -55,6 +58,8 @@ class AgentSettings(@Provided private val context: Context) {
         val unlimited = booleanPreferencesKey("unlimited_rounds")
         val maxRetries = intPreferencesKey("max_retries")
         val baseDelayMs = intPreferencesKey("retry_base_delay_ms")
+        val subagentProviderId = stringPreferencesKey("subagent_provider_id")
+        val subagentModel = stringPreferencesKey("subagent_model")
     }
 
     val config: Flow<AgentConfig> = context.agentDataStore.data.map { prefs ->
@@ -65,6 +70,8 @@ class AgentSettings(@Provided private val context: Context) {
                 maxRetries = AgentDefaults.nearestRetries(prefs[Keys.maxRetries] ?: 4),
                 baseDelayMs = (prefs[Keys.baseDelayMs] ?: 800L.toInt()).coerceIn(100, 10_000).toLong(),
             ),
+            subagentProviderId = prefs[Keys.subagentProviderId].orEmpty(),
+            subagentModel = prefs[Keys.subagentModel].orEmpty(),
         )
     }
 
@@ -84,5 +91,16 @@ class AgentSettings(@Provided private val context: Context) {
         context.agentDataStore.edit { prefs ->
             prefs[Keys.maxRetries] = AgentDefaults.nearestRetries(value)
         }
+    }
+
+    suspend fun setSubagentProvider(providerId: String, model: String) {
+        context.agentDataStore.edit { prefs ->
+            prefs[Keys.subagentProviderId] = providerId
+            prefs[Keys.subagentModel] = model
+        }
+    }
+
+    suspend fun setSubagentModel(value: String) {
+        context.agentDataStore.edit { prefs -> prefs[Keys.subagentModel] = value }
     }
 }

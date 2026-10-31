@@ -1,5 +1,8 @@
 package fan.x0.focus.data.assistant
 
+import fan.x0.focus.core.network.ProviderAuth
+import fan.x0.focus.core.network.ProviderHeader
+import fan.x0.focus.core.network.ProviderRequestConfig
 import fan.x0.focus.core.network.openai.ChatProtocol
 import kotlinx.serialization.Serializable
 
@@ -13,6 +16,17 @@ data class ProviderConfig(
     val model: String = "",
     val protocol: ChatProtocol = ChatProtocol.ChatCompletions,
     val requiresKey: Boolean = true,
+    val userAgent: String = "",
+    val headers: List<ProviderHeader> = emptyList(),
+    val auth: ProviderAuth = ProviderAuth(),
+    val icon: String = "",
+)
+
+fun ProviderConfig.requestConfig(apiKey: String): ProviderRequestConfig = ProviderRequestConfig(
+    apiKey = apiKey,
+    auth = auth,
+    userAgent = userAgent,
+    headers = headers,
 )
 
 object ProviderCatalog {
