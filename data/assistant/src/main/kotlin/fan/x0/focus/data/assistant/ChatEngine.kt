@@ -736,7 +736,10 @@ class ChatEngine(
                     toolCalls = message.toolCalls.map { call ->
                         ToolCallDto(
                             id = call.id,
-                            function = FunctionCallDto(name = call.name, arguments = call.arguments),
+                            function = FunctionCallDto(
+                                name = call.name,
+                                arguments = ToolCatalog.redactArguments(call.name, call.arguments),
+                            ),
                         )
                     }.ifEmpty { null },
                 )

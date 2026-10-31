@@ -900,12 +900,7 @@ object ToolCatalog {
         val value = runCatching { Json.parseToJsonElement(arguments) as? JsonObject }.getOrNull()
             ?: return arguments
         if (!value.containsKey("api_key")) return arguments
-        val redacted = JsonObject(
-            value.mapValues { (key, item) ->
-                if (key == "api_key") JsonPrimitive("***") else item
-            },
-        )
-        return redacted.toString()
+        return JsonObject(value.filterKeys { it != "api_key" }).toString()
     }
 
     private val onboardingTools = setOf(

@@ -24,7 +24,7 @@ class KeystoreSecretStore(@Provided private val context: Context) : SecretStore 
     override suspend fun apiKey(providerId: String): String? = withContext(Dispatchers.IO) {
         val stored = prefs.getString(key(providerId), null)
             ?: if (providerId == LEGACY_PROVIDER_ID) prefs.getString(KEY_API, null) else null
-        stored?.let { runCatching { decrypt(it) }.getOrNull() }
+        stored?.let { runCatching { decrypt(it) }.getOrNull() }?.takeUnless { it == REDACTED_KEY }
     }
 
     override suspend fun setApiKey(providerId: String, value: String) = withContext(Dispatchers.IO) {
@@ -93,6 +93,7 @@ class KeystoreSecretStore(@Provided private val context: Context) : SecretStore 
     companion object {
         private const val PREFS = "focus_secrets"
         private const val KEY_API = "api_key"
+        private const val REDACTED_KEY = "***"
         private const val KEYSTORE = "AndroidKeyStore"
         private const val ALIAS = "focus_api_key"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
