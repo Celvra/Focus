@@ -50,6 +50,12 @@ import fan.x0.focus.core.designsystem.R
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 
+data class FocusTraceImage(
+    val id: String,
+    val name: String,
+    val base64: String,
+)
+
 data class FocusTraceStep(
     val label: String,
     val status: FocusStepStatus,
@@ -58,6 +64,7 @@ data class FocusTraceStep(
     val durationMs: Long = 0,
     val startedAt: Long = 0,
     val diffs: List<FocusDiff> = emptyList(),
+    val media: List<FocusTraceImage> = emptyList(),
 )
 
 @Composable
@@ -187,10 +194,10 @@ fun FocusTraceCard(steps: List<FocusTraceStep>, onOpen: ((String) -> Unit)? = nu
     val running = steps.any { it.status == FocusStepStatus.Running || it.status == FocusStepStatus.Pending }
     val failed = steps.any { it.status == FocusStepStatus.Failed }
     var expanded by remember {
-        mutableStateOf(running || steps.any { it.diffs.isNotEmpty() })
+        mutableStateOf(running || steps.any { it.diffs.isNotEmpty() || it.media.isNotEmpty() })
     }
     LaunchedEffect(running) {
-        if (!running) expanded = steps.any { it.diffs.isNotEmpty() }
+        if (!running) expanded = steps.any { it.diffs.isNotEmpty() || it.media.isNotEmpty() }
     }
     val container by animateColorAsState(
         targetValue = if (running) scheme.surfaceContainerHigh else scheme.surfaceContainerLow,
@@ -279,6 +286,7 @@ fun FocusTraceCard(steps: List<FocusTraceStep>, onOpen: ((String) -> Unit)? = nu
                                 durationMs = step.durationMs,
                                 startedAt = step.startedAt,
                                 diffs = step.diffs,
+                                media = step.media,
                                 isFirst = index == 0,
                                 isLast = index == steps.lastIndex,
                                 onOpen = if (openKey != null && onOpen != null) {

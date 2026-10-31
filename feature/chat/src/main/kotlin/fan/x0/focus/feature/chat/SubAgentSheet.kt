@@ -189,6 +189,7 @@ internal fun SubAgentSheet(
                                     durationMs = it.durationMs,
                                     startedAt = it.startedAt,
                                     diffs = it.diffs.map { diff -> diff.toFocusDiff() },
+                                    media = it.media.mapNotNull { image -> image.toFocusTraceImage() },
                                 )
                             },
                         )

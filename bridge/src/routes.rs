@@ -39,6 +39,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/sessions/{id}/tail", get(session_tail))
         .route("/sessions/{id}/input", post(session_input))
         .route("/fs/read", post(fs_read))
+        .route("/fs/media", post(fs_media))
         .route("/fs/write", post(fs_write))
         .route("/fs/edit", post(fs_edit))
         .route("/fs/list", post(fs_list))
@@ -409,6 +410,16 @@ async fn fs_read(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let workspace = device_workspace(&device);
     fs::read(&payload, &workspace)
+        .map(Json)
+        .map_err(|err| fail(StatusCode::BAD_REQUEST, err.to_string()))
+}
+
+async fn fs_media(
+    Extension(device): Extension<Device>,
+    Json(payload): Json<FsMediaRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let workspace = device_workspace(&device);
+    fs::media(&payload, &workspace)
         .map(Json)
         .map_err(|err| fail(StatusCode::BAD_REQUEST, err.to_string()))
 }

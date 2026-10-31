@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 11) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 13) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -50,6 +50,18 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             """.trimIndent(),
         )
         db.execSQL("CREATE INDEX idx_messages_conversation ON messages(conversation_id, id)")
+        db.execSQL(
+            """
+            CREATE TABLE compactions(
+                conversation_id TEXT PRIMARY KEY,
+                up_to_id INTEGER NOT NULL DEFAULT 0,
+                summary TEXT NOT NULL,
+                tokens_before INTEGER NOT NULL DEFAULT 0,
+                tokens_after INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
         db.execSQL(
             """
             CREATE TABLE goals(
@@ -322,6 +334,26 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
         }
         if (oldVersion < 11) {
             db.execSQL("ALTER TABLE messages ADD COLUMN diff_json TEXT")
+        }
+        if (oldVersion < 12) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS compactions(
+                    conversation_id TEXT PRIMARY KEY,
+                    up_to_id INTEGER NOT NULL DEFAULT 0,
+                    summary TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+        }
+        if (oldVersion < 13) {
+            if (!hasColumn(db, "compactions", "tokens_before")) {
+                db.execSQL("ALTER TABLE compactions ADD COLUMN tokens_before INTEGER NOT NULL DEFAULT 0")
+            }
+            if (!hasColumn(db, "compactions", "tokens_after")) {
+                db.execSQL("ALTER TABLE compactions ADD COLUMN tokens_after INTEGER NOT NULL DEFAULT 0")
+            }
         }
     }
 

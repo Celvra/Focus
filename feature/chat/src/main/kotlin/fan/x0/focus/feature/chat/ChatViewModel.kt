@@ -28,6 +28,7 @@ import fan.x0.focus.data.assistant.ChatTurnState
 import fan.x0.focus.data.assistant.ChatTurnStep
 import fan.x0.focus.data.assistant.ChatTurnStepStatus
 import fan.x0.focus.data.assistant.CommandPolicy
+import fan.x0.focus.data.assistant.ConversationCompaction
 import fan.x0.focus.data.assistant.ConversationTodo
 import fan.x0.focus.data.assistant.MessageStats
 import fan.x0.focus.data.assistant.ModelCatalogRepository
@@ -366,6 +367,7 @@ class ChatViewModel(
             copy(
                 input = "",
                 sending = true,
+                compacting = false,
                 workingText = "",
                 live = emptyList(),
                 attachments = emptyList(),
@@ -420,6 +422,7 @@ class ChatViewModel(
             SlashCommandId.Undo -> undo()
             SlashCommandId.Redo -> redo()
             SlashCommandId.Btw -> startBtw(argument)
+            SlashCommandId.Compact -> compact()
             SlashCommandId.New -> viewModelScope.launch { newConversation() }
             SlashCommandId.Resume -> resume(argument)
             SlashCommandId.Sessions -> sendEffect(ChatEffect.OpenSessions)
@@ -482,6 +485,32 @@ class ChatViewModel(
         btwJob?.cancel()
         btwJob = null
         updateState { copy(btw = BtwUi()) }
+    }
+
+    private fun compact() {
+        val state = currentState
+        val conversationId = state.conversationId
+        if (conversationId.isBlank() || turns.isRunning(conversationId)) return
+        updateState {
+            copy(
+                input = "",
+                slash = slash.copy(open = false, query = ""),
+                sending = true,
+                compacting = true,
+                workingText = "",
+                live = emptyList(),
+                retry = null,
+            )
+        }
+        turns.compact(
+            conversationId,
+            TurnOptions(
+                providerId = state.providerId,
+                model = state.model,
+                reasoning = state.reasoningLevel,
+                agentMode = state.mode,
+            ),
+        )
     }
 
     private fun retryBtw() {
@@ -899,6 +928,7 @@ class ChatViewModel(
         val id = currentState.conversationId
         val messages = chats.messages(id)
         val conversation = chats.conversation(id)
+        val compaction = chats.compaction(id)
         val config = settings.configOnce()
         val providerId = conversation?.providerId?.takeIf { candidate ->
             config.providers.any { it.id == candidate }
@@ -906,12 +936,13 @@ class ChatViewModel(
         val provider = config.providers.firstOrNull { it.id == providerId } ?: config.activeProvider
         val model = conversation?.model?.ifBlank { null } ?: provider?.model.orEmpty()
         val todos = chats.todos(id)
-        val entries = messages.toEntries() + listOfNotNull(planEntry(conversation))
+        val entries = messages.toEntries(compaction) + listOfNotNull(planEntry(conversation))
         updateState {
             copy(
                 history = entries,
                 live = emptyList(),
                 sending = false,
+                compacting = false,
                 workingText = "",
                 providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon) },
                 providerId = providerId,
@@ -934,6 +965,7 @@ class ChatViewModel(
         statsJob?.cancel()
         val messages = chats.messages(conversationId)
         val conversation = chats.conversation(conversationId)
+        val compaction = chats.compaction(conversationId)
         val name = workspace.userName()
         val assistantName = workspace.assistantName()
         val config = settings.configOnce()
@@ -947,7 +979,7 @@ class ChatViewModel(
             ?.let { ReasoningLevel.fromName(it) }
             ?: ReasoningLevel.Auto
         val todos = chats.todos(conversationId)
-        val entries = messages.toEntries() + listOfNotNull(planEntry(conversation))
+        val entries = messages.toEntries(compaction) + listOfNotNull(planEntry(conversation))
         updateState {
             copy(
                 loading = false,
@@ -959,6 +991,7 @@ class ChatViewModel(
                 live = emptyList(),
                 suggestions = emptyList(),
                 sending = false,
+                compacting = false,
                 workingText = "",
                 input = "",
                 turn = 0,
@@ -1050,6 +1083,7 @@ class ChatViewModel(
             updateState {
                 copy(
                     sending = false,
+                    compacting = false,
                     live = emptyList(),
                     workingText = "",
                     askDrafts = emptyMap(),
@@ -1062,6 +1096,7 @@ class ChatViewModel(
         updateState {
             copy(
                 sending = true,
+                compacting = turn.compacting,
                 workingText = turn.workingText,
                 live = turn.entries.mapIndexed { index, entry -> entry.toUi("live-${turn.turnId}", index) },
                 retry = turn.retry?.let { RetryUi(it.attempt, it.max, it.reason) },
@@ -1098,6 +1133,7 @@ class ChatViewModel(
         }
         reload()
         result.error?.let { emitError(it) }
+        if (result.compactionFailed) showMessage(R.string.chat_compact_empty)
         refreshTitle()
     }
 
@@ -1148,6 +1184,13 @@ class ChatViewModel(
             key = "$prefix-ask-${card.id}",
             card = card.toUi(),
         )
+        is ChatTurnEntry.Compaction -> ChatEntry.Compaction(
+            key = "$prefix-compaction-$index",
+            summary = summary,
+            streaming = streaming,
+            tokensBefore = tokensBefore,
+            tokensAfter = tokensAfter,
+        )
     }
 
     private fun SubAgentRunState.toUi(): SubAgentRunUi = SubAgentRunUi(
@@ -1180,6 +1223,7 @@ class ChatViewModel(
         durationMs = durationMs,
         startedAt = startedAt,
         diffs = diffs,
+        media = media.map { it.toUi() },
     )
 
     private fun ChatTurnApprovalPhase.toUi(): ApprovalPhase = when (this) {
@@ -1189,12 +1233,19 @@ class ChatViewModel(
         ChatTurnApprovalPhase.Declined -> ApprovalPhase.Declined
     }
 
-    private suspend fun List<ChatMessage>.toEntries(): List<ChatEntry> {
+    private suspend fun List<ChatMessage>.toEntries(compaction: ConversationCompaction?): List<ChatEntry> {
         val quotes = chats.messagesByIds(mapNotNull { it.replyToId }.toSet())
         val entries = mutableListOf<ChatEntry>()
         var pendingStats: MessageStats? = null
+        var compactionAdded = false
         val assistant = currentState.assistantName
         forEach { message ->
+            if (compaction != null && !compactionAdded && message.id > compaction.upToId) {
+                compactionAdded = true
+                if (compaction.summary.isNotBlank()) {
+                    entries += compaction.toEntry()
+                }
+            }
             when (message.role) {
                 ChatRole.User -> {
                     pendingStats = null
@@ -1262,8 +1313,18 @@ class ChatViewModel(
                 }
             }
         }
+        if (compaction != null && !compactionAdded && compaction.summary.isNotBlank()) {
+            entries += compaction.toEntry()
+        }
         return entries
     }
+
+    private fun ConversationCompaction.toEntry(): ChatEntry.Compaction = ChatEntry.Compaction(
+        key = "compaction-$upToId",
+        summary = summary,
+        tokensBefore = tokensBefore,
+        tokensAfter = tokensAfter,
+    )
 
     private fun planEntry(conversation: fan.x0.focus.data.assistant.Conversation?): ChatEntry.Plan? {
         val plan = conversation?.plan ?: return null
@@ -1309,6 +1370,7 @@ class ChatViewModel(
                     output = content.take(2000),
                     durationMs = elapsedMs,
                     diffs = stepDiffs.firstOrNull().orEmpty(),
+                    media = attachments.map { it.toUi() },
                 ),
             )
         }
@@ -1322,6 +1384,7 @@ class ChatViewModel(
                 output = content.take(2000),
                 durationMs = elapsedMs,
                 diffs = stepDiffs.getOrNull(index).orEmpty(),
+                media = if (index == 0) attachments.map { it.toUi() } else emptyList(),
             )
         }
     }

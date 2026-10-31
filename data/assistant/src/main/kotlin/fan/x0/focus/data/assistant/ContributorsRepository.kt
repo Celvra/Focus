@@ -58,7 +58,6 @@ class ContributorsRepository(private val http: HttpClient) {
         val response = try {
             http.get("$API_URL?per_page=$PER_PAGE&page=$page") {
                 header(HttpHeaders.Accept, "application/vnd.github+json")
-                header(HttpHeaders.UserAgent, "Focus")
                 timeout {
                     requestTimeoutMillis = REQUEST_TIMEOUT_MS
                     socketTimeoutMillis = REQUEST_TIMEOUT_MS
@@ -89,7 +88,6 @@ class ContributorsRepository(private val http: HttpClient) {
         if (url.isBlank()) return null
         val response = try {
             http.get(url) {
-                header(HttpHeaders.UserAgent, "Focus")
                 timeout {
                     requestTimeoutMillis = AVATAR_TIMEOUT_MS
                     socketTimeoutMillis = AVATAR_TIMEOUT_MS

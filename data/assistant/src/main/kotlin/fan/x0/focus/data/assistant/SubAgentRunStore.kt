@@ -71,8 +71,9 @@ class SubAgentRunStore {
         output: String?,
         durationMs: Long = 0,
         diffs: List<FileDiff> = emptyList(),
+        media: List<ChatAttachment> = emptyList(),
     ) {
-        updateEntries(id) { it.finishStep(callId, label, ok, summary, output, durationMs, diffs) }
+        updateEntries(id) { it.finishStep(callId, label, ok, summary, output, durationMs, diffs, media) }
     }
 
     fun finish(id: String, summary: String, error: String?) {

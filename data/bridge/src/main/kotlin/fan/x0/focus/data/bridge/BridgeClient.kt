@@ -2,7 +2,6 @@ package fan.x0.focus.data.bridge
 
 import fan.x0.focus.core.error.NetworkException
 import fan.x0.focus.core.network.NetworkExceptionMapper
-import fan.x0.focus.core.network.createHttpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.request.HttpRequestBuilder
@@ -27,7 +26,7 @@ import kotlinx.serialization.json.Json
 import org.koin.core.annotation.Single
 
 @Single
-class BridgeClient {
+class BridgeClient(client: HttpClient) {
     val json: Json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = false
@@ -35,7 +34,7 @@ class BridgeClient {
     }
 
     private val http: HttpClient by lazy {
-        createHttpClient().config {
+        client.config {
             install(WebSockets)
         }
     }
@@ -117,6 +116,15 @@ class BridgeClient {
             token,
             HttpMethod.Post,
             json.encodeToString(BridgeReadRequest.serializer(), request),
+        )
+
+    suspend fun media(endpoint: BridgeEndpoint, token: String, request: BridgeMediaRequest): BridgeMediaResult =
+        endpointCall(
+            "/fs/media",
+            endpoint,
+            token,
+            HttpMethod.Post,
+            json.encodeToString(BridgeMediaRequest.serializer(), request),
         )
 
     suspend fun write(endpoint: BridgeEndpoint, token: String, request: BridgeWriteRequest): BridgeOkResult =

@@ -2,7 +2,6 @@ package fan.x0.focus.data.bridge
 
 import fan.x0.focus.core.error.NetworkException
 import fan.x0.focus.core.network.NetworkExceptionMapper
-import fan.x0.focus.core.network.createHttpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
@@ -20,9 +19,9 @@ import kotlinx.serialization.json.Json
 import org.koin.core.annotation.Single
 
 @Single
-class BridgeTerminalClient {
+class BridgeTerminalClient(client: HttpClient) {
     private val http: HttpClient by lazy {
-        createHttpClient().config { install(WebSockets) }
+        client.config { install(WebSockets) }
     }
 
     fun attach(endpoint: BridgeEndpoint, token: String, sessionId: String, cols: Int, rows: Int): BridgeTerminal =

@@ -139,6 +139,13 @@ pub struct FsReadRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct FsMediaRequest {
+    pub path: String,
+    #[serde(default)]
+    pub max_bytes: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct FsWriteRequest {
     pub path: String,
     #[serde(default)]

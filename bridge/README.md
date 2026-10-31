@@ -79,6 +79,7 @@ All routes except `/health` and `/pair` need `Authorization: Bearer <token>`.
 | `GET /sessions/{id}/tail` | Read recent output without a socket. |
 | `POST /sessions/{id}/input` | Send text, resize, or a signal without a socket. |
 | `POST /fs/read` | Read a text file, optionally by line range. |
+| `POST /fs/media` | Read an image or video as base64, up to 20 MB. |
 | `POST /fs/write` | Write a whole file. |
 | `POST /fs/edit` | Replace an exact snippet. |
 | `POST /fs/list` | List a directory. |

@@ -1,5 +1,6 @@
 package fan.x0.focus.data.assistant
 
+import fan.x0.focus.core.error.NetworkException
 import fan.x0.focus.core.network.ProviderAuth
 import fan.x0.focus.core.network.ProviderAuthType
 import fan.x0.focus.core.network.ProviderHeader
@@ -45,6 +46,8 @@ data class ToolResult(
     val plan: ProposedPlan? = null,
     val durationMs: Long = 0,
     val diffs: List<FileDiff> = emptyList(),
+    val media: List<ChatAttachment> = emptyList(),
+    val previews: List<ChatAttachment> = emptyList(),
 )
 
 data class StepOutcome(
@@ -77,6 +80,7 @@ class ToolExecutor(
     private val mcp: McpManager,
     private val indexer: WorkspaceIndexer,
     private val backgroundWatch: BackgroundCommandMonitor,
+    private val media: MediaLoader,
 ) {
     val specs: List<ToolSpec> = ToolCatalog.chat()
 
@@ -254,7 +258,7 @@ class ToolExecutor(
                 )
             }
             "list_files" -> {
-                val list = files.list()
+                val list = files.list(args.text("uri"))
                 ok(
                     "${list.size} items",
                     buildJsonObject {
@@ -277,6 +281,11 @@ class ToolExecutor(
                 val uri = args.text("uri") ?: return fail("uri is required")
                 val text = files.readText(uri, 12_000)
                 ok("Read ${text.length} characters", text)
+            }
+            "read_media_file" -> {
+                val uri = args.text("uri") ?: return fail("uri is required")
+                val read = media.loadLocal(uri, frameCount(args))
+                ok(read.summary, mediaJson(read)).copy(media = read.attachments, previews = read.previews)
             }
             "read_web_article" -> {
                 val url = args.text("url") ?: return fail("url is required")
@@ -963,6 +972,25 @@ class ToolExecutor(
                     }.toString(),
                 )
             }
+            "bridge_fs_media" -> {
+                val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
+                val path = args.text("path") ?: return fail("path is required")
+                val result = try {
+                    bridge.media(endpoint, path, MediaLoader.MAX_BYTES)
+                } catch (e: NetworkException.Http) {
+                    if (e.statusCode == 404) {
+                        return fail("The paired computer needs a newer focus-bridge build to read media")
+                    }
+                    throw e
+                }
+                val read = media.loadRemote(
+                    name = result.name.ifBlank { path.substringAfterLast('/') },
+                    mime = result.mime,
+                    base64 = result.base64,
+                    frameCount = frameCount(args),
+                )
+                ok("${read.summary} on ${endpoint.name}", mediaJson(read)).copy(media = read.attachments, previews = read.previews)
+            }
             "bridge_fs_list" -> {
                 val endpoint = bridgeTarget(args) ?: return fail(bridgeTargetError(args))
                 val path = args.text("path") ?: return fail("path is required")
@@ -1469,7 +1497,7 @@ class ToolExecutor(
         }
         "delete_file" -> {
             val uri = args.text("uri") ?: return null
-            val name = runCatching { files.list().firstOrNull { it.uri == uri }?.name }.getOrNull()
+            val name = runCatching { files.nameOf(uri) }.getOrNull()
             SimpleDraft("Delete file", name ?: uri, "Delete file: ${name ?: uri}")
         }
         "bridge_run_command" -> {
@@ -1659,6 +1687,23 @@ class ToolExecutor(
     }
 
     private data class BridgeText(val text: String, val truncated: Boolean)
+
+    private fun frameCount(args: JsonObject): Int =
+        (args.number("frame_count") ?: MediaLoader.DEFAULT_FRAMES)
+            .coerceIn(1, MediaLoader.MAX_FRAMES)
+
+    private fun mediaJson(read: MediaRead): String = buildJsonObject {
+        put("kind", read.kind)
+        put("name", read.name)
+        put("mime", read.mime)
+        put("size", read.size)
+        put("width", read.width)
+        put("height", read.height)
+        put("duration_ms", read.durationMs)
+        put("frames", read.frameCount)
+        put("note", read.note)
+        put("attached", true)
+    }.toString()
 
     private fun ok(summary: String, content: String, diffs: List<FileDiff> = emptyList()): ToolResult =
         ToolResult(ok = true, content = content, summary = summary, diffs = diffs)

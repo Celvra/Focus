@@ -20,6 +20,7 @@ hex = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
+base64 = "0.22"
 thiserror = "2"
 regex = "1"
 toml = "0.9"

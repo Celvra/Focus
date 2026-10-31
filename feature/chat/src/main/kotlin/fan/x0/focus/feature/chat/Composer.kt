@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
@@ -47,6 +49,7 @@ import fan.x0.focus.core.designsystem.components.BrandIcons
 import fan.x0.focus.core.designsystem.components.FocusComposer
 import fan.x0.focus.core.designsystem.components.FocusComposerPill
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.FocusImageLightbox
 import fan.x0.focus.core.designsystem.components.FocusSearchPickerSheet
 import fan.x0.focus.data.assistant.AttachmentKind
 
@@ -365,6 +368,7 @@ internal fun AttachmentChip(
 
 @Composable
 internal fun UserAttachmentStrip(attachments: List<AttachmentUi>) {
+    var preview by remember { mutableStateOf<AttachmentUi?>(null) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
@@ -374,11 +378,12 @@ internal fun UserAttachmentStrip(attachments: List<AttachmentUi>) {
             if (bitmap != null) {
                 Image(
                     bitmap = bitmap,
-                    contentDescription = attachment.name,
+                    contentDescription = stringResource(R.string.chat_attachment_preview, attachment.name),
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(72.dp)
-                        .clip(RoundedCornerShape(16.dp)),
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable(role = Role.Button) { preview = attachment },
                 )
             } else {
                 Surface(
@@ -407,6 +412,16 @@ internal fun UserAttachmentStrip(attachments: List<AttachmentUi>) {
                     }
                 }
             }
+        }
+    }
+    preview?.let { attachment ->
+        val bitmap = rememberAttachmentBitmap(attachment)
+        if (bitmap != null) {
+            FocusImageLightbox(
+                image = bitmap,
+                title = attachment.name,
+                onDismiss = { preview = null },
+            )
         }
     }
 }

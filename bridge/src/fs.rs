@@ -1,15 +1,17 @@
 use anyhow::{anyhow, Result};
+use base64::Engine;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
 use crate::proto::{
-    FsEditRequest, FsGrepRequest, FsGlobRequest, FsListEntry, FsMoveRequest, FsPathRequest,
-    FsReadRequest, FsWriteRequest,
+    FsEditRequest, FsGrepRequest, FsGlobRequest, FsListEntry, FsMediaRequest, FsMoveRequest,
+    FsPathRequest, FsReadRequest, FsWriteRequest,
 };
 use crate::workspace::{self, Workspace};
 
 const MAX_READ_LINES: u32 = 2000;
 const DEFAULT_READ_LINES: u32 = 500;
+const MAX_MEDIA_BYTES: u64 = 20 * 1024 * 1024;
 const GREP_LIMIT: usize = 400;
 const GLOB_LIMIT: usize = 1000;
 const MAX_DEPTH: u32 = 64;
@@ -118,6 +120,114 @@ pub fn read(
         "notice": notice,
         "size": meta.len(),
     }))
+}
+
+pub fn media(
+    req: &FsMediaRequest,
+    workspace: &Workspace,
+) -> Result<serde_json::Value> {
+    let target = resolve(&req.path, workspace)?;
+    let meta = std::fs::metadata(&target)?;
+    if meta.is_dir() {
+        return Err(anyhow!("not a file: {}", target.display()));
+    }
+    let limit = req.max_bytes.unwrap_or(MAX_MEDIA_BYTES).clamp(1, MAX_MEDIA_BYTES);
+    if meta.len() > limit {
+        return Err(anyhow!(
+            "file is {} bytes, media limit is {} bytes",
+            meta.len(),
+            limit
+        ));
+    }
+    let bytes = std::fs::read(&target)?;
+    let mime = media_mime(&target, &bytes);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(json!({
+        "path": target.display().to_string(),
+        "name": target.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default(),
+        "mime": mime,
+        "size": bytes.len(),
+        "base64": encoded,
+    }))
+}
+
+fn media_mime(path: &Path, bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return "image/jpeg";
+    }
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return "image/png";
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return "image/gif";
+    }
+    if bytes.len() > 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        return "image/webp";
+    }
+    if bytes.len() > 12 && &bytes[4..8] == b"ftyp" {
+        let brand = &bytes[8..12];
+        if brand == b"heic" || brand == b"heix" || brand == b"hevc" || brand == b"mif1" {
+            return "image/heic";
+        }
+        if brand == b"avif" {
+            return "image/avif";
+        }
+        if brand == b"qt  " {
+            return "video/quicktime";
+        }
+        return "video/mp4";
+    }
+    if bytes.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
+        return "video/webm";
+    }
+    if bytes.len() > 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"AVI " {
+        return "video/x-msvideo";
+    }
+    if bytes.starts_with(b"BM") {
+        return "image/bmp";
+    }
+    if bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*") {
+        return "image/tiff";
+    }
+    if bytes.starts_with(b"fLaC") {
+        return "audio/flac";
+    }
+    if bytes.starts_with(b"OggS") {
+        return "audio/ogg";
+    }
+    if bytes.starts_with(b"ID3") || bytes.starts_with(&[0xFF, 0xFB]) {
+        return "audio/mpeg";
+    }
+    if bytes.len() > 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WAVE" {
+        return "audio/wav";
+    }
+    match path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "heic" | "heif" => "image/heic",
+        "avif" => "image/avif",
+        "tif" | "tiff" => "image/tiff",
+        "mp4" | "m4v" => "video/mp4",
+        "mov" => "video/quicktime",
+        "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        "avi" => "video/x-msvideo",
+        "3gp" => "video/3gpp",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "flac" => "audio/flac",
+        _ => "application/octet-stream",
+    }
 }
 
 pub fn write(

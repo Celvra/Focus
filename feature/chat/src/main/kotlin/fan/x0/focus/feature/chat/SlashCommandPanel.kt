@@ -183,6 +183,7 @@ private fun SlashCommandId.icon(): ImageVector = when (this) {
     SlashCommandId.Undo -> FocusIcons.History
     SlashCommandId.Redo -> FocusIcons.Refresh
     SlashCommandId.Btw -> FocusIcons.Chat
+    SlashCommandId.Compact -> FocusIcons.Archive
     SlashCommandId.New -> FocusIcons.Add
     SlashCommandId.Resume -> FocusIcons.History
     SlashCommandId.Sessions -> FocusIcons.Chat

@@ -249,6 +249,7 @@ fun ChatScreen(
                     },
                     subtitle = when {
                         retry != null -> stringResource(R.string.chat_retrying, retry.attempt, retry.max)
+                        state.compacting -> stringResource(R.string.chat_compacting)
                         state.sending -> state.workingText.ifBlank {
                             stringResource(R.string.chat_working)
                         }
@@ -654,6 +655,7 @@ private fun ChatThread(
                         is ChatEntry.Ask -> "ask"
                         is ChatEntry.Failure -> "failure"
                         is ChatEntry.Notice -> "notice"
+                        is ChatEntry.Compaction -> "compaction"
                     }
                 },
             ) { entry ->
@@ -734,6 +736,7 @@ private fun ChatThread(
                                     durationMs = it.durationMs,
                                     startedAt = it.startedAt,
                                     diffs = it.diffs.map { diff -> diff.toFocusDiff() },
+                                    media = it.media.mapNotNull { image -> image.toFocusTraceImage() },
                                 )
                             },
                             onOpen = { onAction(ChatAction.OpenSubAgent(it)) },
@@ -765,6 +768,12 @@ private fun ChatThread(
                             onRetry = { onAction(ChatAction.RetryLast) },
                         )
                         is ChatEntry.Notice -> ChatNoticeCard(text = entry.text)
+                        is ChatEntry.Compaction -> ChatCompactionCard(
+                            text = entry.summary,
+                            streaming = entry.streaming,
+                            tokensBefore = entry.tokensBefore,
+                            tokensAfter = entry.tokensAfter,
+                        )
                     }
                 }
             }

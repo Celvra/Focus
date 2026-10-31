@@ -30,6 +30,7 @@ data class TraceStep(
     val durationMs: Long = 0,
     val startedAt: Long = 0,
     val diffs: List<FileDiff> = emptyList(),
+    val media: List<AttachmentUi> = emptyList(),
 )
 
 enum class ApprovalPhase { Waiting, Running, Finished, Declined }
@@ -212,6 +213,14 @@ sealed interface ChatEntry {
     data class Failure(override val key: String, val message: String, val retryable: Boolean) : ChatEntry
 
     data class Notice(override val key: String, val text: String) : ChatEntry
+
+    data class Compaction(
+        override val key: String,
+        val summary: String,
+        val streaming: Boolean = false,
+        val tokensBefore: Int = 0,
+        val tokensAfter: Int = 0,
+    ) : ChatEntry
 }
 
 data class ProviderOption(
@@ -244,6 +253,7 @@ data class ChatUiState(
     val suggestions: List<SuggestionUi> = emptyList(),
     val input: String = "",
     val sending: Boolean = false,
+    val compacting: Boolean = false,
     val turn: Int = 0,
     val providers: List<ProviderOption> = emptyList(),
     val providerId: String = "",

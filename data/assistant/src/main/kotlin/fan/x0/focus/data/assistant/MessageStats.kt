@@ -14,6 +14,7 @@ data class MessageStats(
     val round: Int = 0,
     val step: Int = 0,
     val durationMs: Long = 0,
+    val lastContextTokens: Int = 0,
 ) {
     val hasUsage: Boolean
         get() = inputTokens > 0 || outputTokens > 0 || cachedTokens > 0 || totalTokens > 0
@@ -29,5 +30,6 @@ data class MessageStats(
         round = maxOf(round, other.round),
         step = maxOf(step, other.step),
         durationMs = durationMs + other.durationMs,
+        lastContextTokens = other.lastContextTokens.takeIf { it > 0 } ?: lastContextTokens,
     )
 }

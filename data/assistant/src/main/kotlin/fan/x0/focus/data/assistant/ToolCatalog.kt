@@ -81,16 +81,27 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "list_files",
-            description = "List files in the folder the user connected. Use before reading or writing a file.",
+            description = "List files in the folder the user connected. Omit uri for the connected folder root, or pass a folder uri from an earlier listing to open a subfolder. Use before reading or writing a file.",
             kind = ToolKind.Read,
-            parameters = schema {},
+            parameters = schema {
+                put("uri", string("Folder uri from list_files, omit for the connected folder root"))
+            },
         ),
         ToolSpec(
             name = "read_text_file",
-            description = "Read a text file from the connected folder.",
+            description = "Read a text file from the connected folder. For an image or video use read_media_file.",
             kind = ToolKind.Read,
             parameters = schema(required = listOf("uri")) {
                 put("uri", string("File uri from list_files"))
+            },
+        ),
+        ToolSpec(
+            name = "read_media_file",
+            description = "Read an image or video from the connected folder and attach it to the conversation. Images are attached directly. Videos are sampled into a few frames. Use list_files first to get the file uri.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("uri")) {
+                put("uri", string("File uri from list_files"))
+                put("frame_count", number("Video frames to sample, 1 to 6, default 4"))
             },
         ),
         ToolSpec(
@@ -523,12 +534,22 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "bridge_fs_read",
-            description = "Read a text file on a paired computer. Read-only.",
+            description = "Read a text file on a paired computer. For an image or video use bridge_fs_media. Read-only.",
             kind = ToolKind.Read,
             parameters = schema(required = listOf("path")) {
                 put("path", string("Absolute file path on the computer"))
                 put("offset", number("First line to read, 1-based, optional"))
                 put("limit", number("How many lines to read, optional"))
+                put("device_id", deviceId())
+            },
+        ),
+        ToolSpec(
+            name = "bridge_fs_media",
+            description = "Read an image or video on a paired computer and attach it to the conversation. Images are attached directly. Videos are sampled into a few frames. Use bridge_fs_list or bridge_fs_glob first to find the path.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("path")) {
+                put("path", string("Absolute file path on the computer"))
+                put("frame_count", number("Video frames to sample, 1 to 6, default 4"))
                 put("device_id", deviceId())
             },
         ),

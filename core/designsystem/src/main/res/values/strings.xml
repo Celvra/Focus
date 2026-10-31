@@ -23,6 +23,8 @@
     <string name="common_reasoning">Thinking process</string>
     <string name="common_reasoning_live">Thinking</string>
     <string name="common_tools_title">Tool calls</string>
+    <string name="common_image_preview">Preview %1$s</string>
+    <string name="common_image_close">Close image</string>
     <string name="common_seconds">%1$ss</string>
     <string name="common_diff_truncated">Diff truncated</string>
     <plurals name="common_tools_count">

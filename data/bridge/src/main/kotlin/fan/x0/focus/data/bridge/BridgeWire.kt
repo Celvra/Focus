@@ -135,6 +135,21 @@ data class BridgeReadResult(
 )
 
 @Serializable
+data class BridgeMediaRequest(
+    val path: String,
+    @SerialName("max_bytes") val maxBytes: Long? = null,
+)
+
+@Serializable
+data class BridgeMediaResult(
+    val path: String = "",
+    val name: String = "",
+    val mime: String = "",
+    val size: Long = 0,
+    val base64: String = "",
+)
+
+@Serializable
 data class BridgeWriteRequest(
     val path: String,
     val content: String,

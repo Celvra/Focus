@@ -1,5 +1,6 @@
 package fan.x0.focus.core.network
 
+import android.content.Context
 import fan.x0.focus.core.network.openai.OpenAiModelCatalog
 import fan.x0.focus.core.network.openai.ProviderBalanceClient
 import io.ktor.client.HttpClient
@@ -9,7 +10,7 @@ import org.koin.core.annotation.Single
 
 // Shared transport for model calls, feeds, and article extraction.
 @Single
-fun httpClient(): HttpClient = createHttpClient()
+fun httpClient(context: Context): HttpClient = createHttpClient(userAgent = defaultUserAgent(context))
 
 @Single
 fun openAiModelCatalog(http: HttpClient): OpenAiModelCatalog = OpenAiModelCatalog(http)

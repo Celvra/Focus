@@ -23,6 +23,8 @@
     <string name="common_reasoning">思考过程</string>
     <string name="common_reasoning_live">正在思考</string>
     <string name="common_tools_title">工具调用</string>
+    <string name="common_image_preview">预览 %1$s</string>
+    <string name="common_image_close">关闭图片</string>
     <string name="common_seconds">%1$s 秒</string>
     <string name="common_diff_truncated">差异已截断</string>
     <plurals name="common_tools_count">

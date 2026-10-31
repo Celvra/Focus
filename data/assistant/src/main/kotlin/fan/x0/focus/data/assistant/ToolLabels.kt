@@ -8,7 +8,7 @@ object ToolLabels {
         "list_feeds", "list_articles", "search_articles", "read_article",
         "mark_article_read", "add_feed", "delete_article", "remove_feed",
         -> "Feeds"
-        "list_files", "read_text_file", "write_text_file", "create_text_file", "delete_file",
+        "list_files", "read_text_file", "read_media_file", "write_text_file", "create_text_file", "delete_file",
         -> "Files"
         "read_web_article" -> "Web page"
         "list_goals", "create_goal", "update_goal", "delete_goal" -> "Goals"
@@ -26,7 +26,7 @@ object ToolLabels {
         "react_to_message" -> "Reaction"
         "bridge_list_devices", "bridge_list_sessions", "bridge_read_session" -> "Computer"
         "bridge_run_command", "bridge_session_open", "bridge_session_send", "bridge_close_session" -> "Computer shell"
-        "bridge_fs_read", "bridge_fs_list", "bridge_fs_glob", "bridge_fs_grep" -> "Computer files"
+        "bridge_fs_read", "bridge_fs_media", "bridge_fs_list", "bridge_fs_glob", "bridge_fs_grep" -> "Computer files"
         "bridge_fs_write", "bridge_fs_edit", "bridge_fs_delete", "bridge_set_workspace" -> "Computer files"
         ToolCatalog.SET_WORKING_TEXT -> "Status"
         "ask" -> "Question"

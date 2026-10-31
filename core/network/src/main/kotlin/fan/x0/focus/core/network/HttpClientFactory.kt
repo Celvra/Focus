@@ -3,16 +3,25 @@ package fan.x0.focus.core.network
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.UserAgent
 import io.ktor.client.plugins.timeout
 
 // One configured client for model calls, feeds, and article extraction.
-fun createHttpClient(engine: io.ktor.client.engine.HttpClientEngine = OkHttp.create()): HttpClient =
+fun createHttpClient(
+    engine: io.ktor.client.engine.HttpClientEngine = OkHttp.create(),
+    userAgent: String = "",
+): HttpClient =
     HttpClient(engine) {
         expectSuccess = false
         install(HttpTimeout) {
             requestTimeoutMillis = 120_000
             connectTimeoutMillis = 20_000
             socketTimeoutMillis = 120_000
+        }
+        if (userAgent.isNotBlank()) {
+            install(UserAgent) {
+                agent = userAgent
+            }
         }
     }
 

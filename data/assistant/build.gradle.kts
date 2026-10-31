@@ -13,6 +13,7 @@ dependencies {
     implementation(projects.core.network)
     implementation(projects.data.sources)
     implementation(projects.data.bridge)
+    implementation(libs.androidx.exifinterface)
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)
     implementation(libs.koin.android)

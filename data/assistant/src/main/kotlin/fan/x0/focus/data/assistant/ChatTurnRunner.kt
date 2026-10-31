@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -74,16 +75,38 @@ class ChatTurnRunner(
         options: TurnOptions,
         appendUser: Boolean = true,
     ) {
+        launch(conversationId, manualCompact = false, options = options) {
+            engine.send(conversationId, text, ChatMode.Chat, options, appendUser)
+        }
+    }
+
+    fun compact(conversationId: String, options: TurnOptions) {
+        launch(conversationId, manualCompact = true, options = options) {
+            engine.compact(conversationId, options)
+        }
+    }
+
+    private fun launch(
+        conversationId: String,
+        manualCompact: Boolean,
+        options: TurnOptions,
+        flow: () -> Flow<ChatEvent>,
+    ) {
         if (conversationId.isBlank() || isRunning(conversationId)) return
         val turnId = nextTurnId.incrementAndGet()
         _results.update { it - conversationId }
-        _states.update {
-            it + (conversationId to ChatTurnState(conversationId = conversationId, turnId = turnId, running = true))
-        }
+        val state = ChatTurnState(
+            conversationId = conversationId,
+            turnId = turnId,
+            running = true,
+            compacting = manualCompact,
+        )
+        _states.update { it + (conversationId to state) }
         keepAlive.start()
+        var compactionFailed = false
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
-                engine.send(conversationId, text, ChatMode.Chat, options, appendUser).collect { event ->
+                flow().collect { event ->
                     when (event) {
                         is ChatEvent.Delta -> updateEntries(conversationId, turnId) { entries ->
                             entries.appendAnswer(event.text, reasoning = false, now = System.currentTimeMillis())
@@ -117,6 +140,7 @@ class ChatTurnRunner(
                                     output = event.output,
                                     durationMs = event.durationMs,
                                     diffs = event.diffs,
+                                    media = event.media,
                                 )
                             }
                             if (event.tool == RENAME_TOOL) _titleUpdates.tryEmit(conversationId)
@@ -163,6 +187,37 @@ class ChatTurnRunner(
                         is ChatEvent.StatsUpdated -> updateState(conversationId, turnId) { state ->
                             state.copy(stats = event.stats)
                         }
+                        is ChatEvent.CompactionStarted -> {
+                            updateState(conversationId, turnId) { state ->
+                                state.copy(compacting = true)
+                            }
+                            updateEntries(conversationId, turnId) { entries ->
+                                entries + ChatTurnEntry.Compaction(summary = "", streaming = true)
+                            }
+                        }
+                        is ChatEvent.CompactionDelta -> updateEntries(conversationId, turnId) { entries ->
+                            val last = entries.lastOrNull() as? ChatTurnEntry.Compaction
+                                ?: return@updateEntries entries
+                            entries.dropLast(1) + last.copy(summary = last.summary + event.text)
+                        }
+                        is ChatEvent.CompactionFinished -> {
+                            updateState(conversationId, turnId) { state ->
+                                state.copy(compacting = false)
+                            }
+                            updateEntries(conversationId, turnId) { entries ->
+                                val last = entries.lastOrNull() as? ChatTurnEntry.Compaction
+                                when {
+                                    !event.ok -> entries.filterNot { it is ChatTurnEntry.Compaction }
+                                    last == null -> entries
+                                    else -> entries.dropLast(1) + last.copy(
+                                        streaming = false,
+                                        tokensBefore = event.tokensBefore,
+                                        tokensAfter = event.tokensAfter,
+                                    )
+                                }
+                            }
+                            if (manualCompact && !event.ok) compactionFailed = true
+                        }
                         is ChatEvent.RetryScheduled -> updateState(conversationId, turnId) { state ->
                             state.copy(retry = RetryState(event.attempt, event.max, event.reason))
                         }
@@ -172,23 +227,23 @@ class ChatTurnRunner(
                         }
                         ChatEvent.Completed -> {
                             updateState(conversationId, turnId) { state -> state.copy(retry = null) }
-                            finish(conversationId, turnId, null)
+                            finish(conversationId, turnId, null, compactionFailed)
                         }
                         is ChatEvent.Failed -> {
                             persistPartial(conversationId, turnId)
-                            finish(conversationId, turnId, event.error)
+                            finish(conversationId, turnId, event.error, compactionFailed)
                         }
                     }
                 }
             } catch (e: CancellationException) {
                 withContext(NonCancellable) {
                     persistPartial(conversationId, turnId)
-                    finish(conversationId, turnId, null)
+                    finish(conversationId, turnId, null, compactionFailed)
                 }
                 throw e
             } catch (e: Throwable) {
                 persistPartial(conversationId, turnId)
-                finish(conversationId, turnId, e.toAppError())
+                finish(conversationId, turnId, e.toAppError(), compactionFailed)
             } finally {
                 jobs.remove(conversationId)
             }
@@ -240,11 +295,13 @@ class ChatTurnRunner(
         }
     }
 
-    private fun finish(conversationId: String, turnId: Long, error: AppError?) {
+    private fun finish(conversationId: String, turnId: Long, error: AppError?, compactionFailed: Boolean) {
         val state = _states.value[conversationId] ?: return
         if (state.turnId != turnId) return
         _states.update { it - conversationId }
-        _results.update { it + (conversationId to ChatTurnResult(conversationId, turnId, error)) }
+        _results.update {
+            it + (conversationId to ChatTurnResult(conversationId, turnId, error, compactionFailed))
+        }
     }
 
     private suspend fun scheduleTitle(conversationId: String, turns: Int, options: TurnOptions) {

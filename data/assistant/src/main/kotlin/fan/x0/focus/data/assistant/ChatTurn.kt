@@ -15,6 +15,7 @@ data class ChatTurnStep(
     val durationMs: Long = 0,
     val startedAt: Long = 0,
     val diffs: List<FileDiff> = emptyList(),
+    val media: List<ChatAttachment> = emptyList(),
 )
 
 enum class ChatTurnApprovalPhase { Waiting, Running, Finished, Declined }
@@ -48,6 +49,12 @@ sealed interface ChatTurnEntry {
     data class Approval(val card: ChatTurnApproval) : ChatTurnEntry
     data class Plan(val plan: ProposedPlan, val card: ChatTurnApproval) : ChatTurnEntry
     data class Ask(val card: ChatTurnAsk) : ChatTurnEntry
+    data class Compaction(
+        val summary: String,
+        val streaming: Boolean,
+        val tokensBefore: Int = 0,
+        val tokensAfter: Int = 0,
+    ) : ChatTurnEntry
 }
 
 data class ChatTurnState(
@@ -61,6 +68,7 @@ data class ChatTurnState(
     val todos: List<ConversationTodo> = emptyList(),
     val plan: ProposedPlan? = null,
     val planRequestId: String = "",
+    val compacting: Boolean = false,
 )
 
 data class RetryState(
@@ -73,4 +81,5 @@ data class ChatTurnResult(
     val conversationId: String,
     val turnId: Long,
     val error: AppError? = null,
+    val compactionFailed: Boolean = false,
 )

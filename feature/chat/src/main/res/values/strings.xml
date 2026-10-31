@@ -3,6 +3,10 @@
     <string name="chat_title">Focus</string>
     <string name="chat_subtitle">Ask anything about your day</string>
     <string name="chat_working">Working</string>
+    <string name="chat_compacting">Compacting context</string>
+    <string name="chat_compaction_title">Earlier context summarized</string>
+    <string name="chat_compaction_tokens">%1$s → %2$s tokens</string>
+    <string name="chat_compact_empty">Nothing to summarize yet.</string>
     <string name="chat_input_hint">Message Focus</string>
     <string name="chat_input_hint_titled">Send a message in %1$s</string>
     <string name="chat_send">Send</string>
@@ -55,6 +59,7 @@
     <string name="chat_suggest_goals_prompt">What should I focus on to move my goals forward?</string>
     <string name="chat_attach">Attach file</string>
     <string name="chat_attach_remove">Remove attachment</string>
+    <string name="chat_attachment_preview">Preview %1$s</string>
     <string name="chat_attach_title">Add attachment</string>
     <string name="chat_attach_camera">Camera</string>
     <string name="chat_attach_photos">Photos</string>
@@ -164,6 +169,7 @@
     <string name="slash_undo_desc">Undo the last message and its reply.</string>
     <string name="slash_redo_desc">Send the last undone message again.</string>
     <string name="slash_btw_desc">Ask a side question without changing the main task.</string>
+    <string name="slash_compact_desc">Summarize earlier messages to free context.</string>
     <string name="slash_new_desc">Start a new conversation.</string>
     <string name="slash_resume_desc">Resume a conversation by id or title.</string>
     <string name="slash_sessions_desc">Browse conversations.</string>

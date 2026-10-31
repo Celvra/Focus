@@ -1,5 +1,7 @@
 package fan.x0.focus.core.designsystem.components
 
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
@@ -13,24 +15,30 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,9 +55,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import fan.x0.focus.core.designsystem.R
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 
 enum class FocusStepStatus { Pending, Running, Done, Failed, Skipped }
@@ -71,6 +84,7 @@ fun FocusTimelineStep(
     durationMs: Long = 0,
     startedAt: Long = 0,
     diffs: List<FocusDiff> = emptyList(),
+    media: List<FocusTraceImage> = emptyList(),
 ) {
     val motion = LocalFocusMotion.current
     val scheme = MaterialTheme.colorScheme
@@ -193,6 +207,26 @@ fun FocusTimelineStep(
                 )
             }
         }
+        if (media.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .drawBehind {
+                        if (!isLast) {
+                            val x = NodeColumnWidth.toPx() / 2f
+                            drawLine(
+                                lineColor,
+                                Offset(x, 0f),
+                                Offset(x, size.height),
+                                1.dp.toPx(),
+                            )
+                        }
+                    }
+                    .padding(start = NodeColumnWidth + 8.dp, top = 2.dp, bottom = 8.dp, end = 4.dp),
+            ) {
+                FocusTraceMedia(media = media)
+            }
+        }
         AnimatedVisibility(
             visible = expanded && hasSummary,
             enter = expandVertically(motion.spatialDefault()) + fadeIn(motion.effectsDefault()),
@@ -243,6 +277,78 @@ fun FocusTimelineStep(
         }
     }
 }
+
+@Composable
+private fun FocusTraceMedia(media: List<FocusTraceImage>) {
+    var preview by remember { mutableStateOf<FocusTraceImage?>(null) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        media.forEach { image ->
+            val bitmap = rememberTraceImage(image, TRACE_THUMB_EDGE)
+            Surface(
+                onClick = { preview = image },
+                enabled = bitmap != null,
+                modifier = Modifier.size(64.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            ) {
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = stringResource(R.string.common_image_preview, image.name),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = FocusIcons.Folder,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+    preview?.let { image ->
+        val bitmap = rememberTraceImage(image)
+        if (bitmap != null) {
+            FocusImageLightbox(
+                image = bitmap,
+                title = image.name,
+                onDismiss = { preview = null },
+            )
+        }
+    }
+}
+
+@Composable
+private fun rememberTraceImage(image: FocusTraceImage, maxEdge: Int = 0): ImageBitmap? =
+    remember(image.id, image.base64, maxEdge) {
+        val bytes = runCatching { Base64.decode(image.base64, Base64.DEFAULT) }.getOrNull()
+            ?: return@remember null
+        runCatching {
+            val options = BitmapFactory.Options()
+            if (maxEdge > 0) {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= maxEdge && bounds.outHeight / (sample * 2) >= maxEdge) {
+                    sample *= 2
+                }
+                options.inSampleSize = sample
+            }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
+        }.getOrNull()
+    }
+
+private const val TRACE_THUMB_EDGE = 192
 
 @Composable
 fun Modifier.shimmer(

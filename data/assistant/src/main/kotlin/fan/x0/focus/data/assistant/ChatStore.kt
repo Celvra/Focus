@@ -2,6 +2,7 @@ package fan.x0.focus.data.assistant
 
 import android.content.ContentValues
 import android.database.Cursor
+import android.database.sqlite.SQLiteDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
@@ -124,6 +125,7 @@ class ChatStore(private val database: AssistantDatabase) {
         try {
             db.delete("conversation_todos", "conversation_id = ?", arrayOf(id))
             db.delete("messages", "conversation_id = ?", arrayOf(id))
+            db.delete("compactions", "conversation_id = ?", arrayOf(id))
             db.delete("conversations", "id = ?", arrayOf(id))
             db.setTransactionSuccessful()
         } finally {
@@ -166,6 +168,85 @@ class ChatStore(private val database: AssistantDatabase) {
             }
         }
     }
+
+    suspend fun messagesSince(
+        conversationId: String,
+        afterId: Long,
+        limit: Int = Int.MAX_VALUE,
+    ): List<ChatMessage> = withContext(Dispatchers.IO) {
+        database.readableDatabase.rawQuery(
+            "SELECT $MESSAGE_COLUMNS FROM messages WHERE conversation_id = ? AND id > ? " +
+                "ORDER BY id DESC LIMIT ?",
+            arrayOf(conversationId, afterId.toString(), limit.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(cursor.toMessage())
+            }.reversed()
+        }
+    }
+
+    suspend fun context(conversationId: String, limit: Int = Int.MAX_VALUE): ChatContext =
+        withContext(Dispatchers.IO) {
+            val compaction = compaction(conversationId)
+            ChatContext(
+                summary = compaction?.summary.orEmpty(),
+                upToId = compaction?.upToId ?: 0,
+                messages = messagesSince(conversationId, compaction?.upToId ?: 0, limit),
+            )
+        }
+
+    suspend fun compaction(conversationId: String): ConversationCompaction? = withContext(Dispatchers.IO) {
+        database.readableDatabase.rawQuery(
+            "SELECT conversation_id, up_to_id, summary, tokens_before, tokens_after, created_at FROM compactions " +
+                "WHERE conversation_id = ? LIMIT 1",
+            arrayOf(conversationId),
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) return@withContext null
+            ConversationCompaction(
+                conversationId = cursor.getString(0),
+                upToId = cursor.getLong(1),
+                summary = cursor.getString(2).orEmpty(),
+                tokensBefore = cursor.getInt(3),
+                tokensAfter = cursor.getInt(4),
+                createdAt = cursor.getLong(5),
+            )
+        }
+    }
+
+    suspend fun saveCompaction(
+        conversationId: String,
+        upToId: Long,
+        summary: String,
+        tokensBefore: Int = 0,
+        tokensAfter: Int = 0,
+    ) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply {
+            put("conversation_id", conversationId)
+            put("up_to_id", upToId)
+            put("summary", summary)
+            put("tokens_before", tokensBefore)
+            put("tokens_after", tokensAfter)
+            put("created_at", System.currentTimeMillis())
+        }
+        database.writableDatabase.insertWithOnConflict(
+            "compactions",
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_REPLACE,
+        )
+    }
+
+    suspend fun lastAssistantStats(conversationId: String, afterId: Long = 0): MessageStats? =
+        withContext(Dispatchers.IO) {
+            database.readableDatabase.rawQuery(
+                "SELECT stats_json FROM messages WHERE conversation_id = ? AND role = 'assistant' " +
+                    "AND id > ? AND stats_json IS NOT NULL ORDER BY id DESC LIMIT 1",
+                arrayOf(conversationId, afterId.toString()),
+            ).use { cursor ->
+                if (!cursor.moveToFirst()) return@withContext null
+                runCatching { json.decodeFromString(MessageStats.serializer(), cursor.getString(0)) }.getOrNull()
+            }
+        }
 
     suspend fun append(
         conversationId: String,
@@ -254,6 +335,7 @@ class ChatStore(private val database: AssistantDatabase) {
         try {
             db.delete("conversation_todos", "conversation_id = ?", arrayOf(conversationId))
             db.delete("messages", "conversation_id = ?", arrayOf(conversationId))
+            db.delete("compactions", "conversation_id = ?", arrayOf(conversationId))
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

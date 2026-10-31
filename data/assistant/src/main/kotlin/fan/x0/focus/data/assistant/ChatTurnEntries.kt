@@ -85,6 +85,7 @@ internal fun List<ChatTurnEntry>.finishStep(
     output: String?,
     durationMs: Long = 0,
     diffs: List<FileDiff> = emptyList(),
+    media: List<ChatAttachment> = emptyList(),
 ): List<ChatTurnEntry> {
     val status = if (ok) ChatTurnStepStatus.Done else ChatTurnStepStatus.Failed
     val step = ChatTurnStep(
@@ -95,6 +96,7 @@ internal fun List<ChatTurnEntry>.finishStep(
         output = output?.take(4000),
         durationMs = durationMs,
         diffs = diffs,
+        media = media,
     )
     return map { entry ->
         when {
@@ -140,6 +142,7 @@ internal fun List<ChatTurnStep>.upsert(
             },
             durationMs = step.durationMs.takeIf { value -> value > 0 } ?: it[index].durationMs,
             diffs = if (step.diffs.isNotEmpty()) step.diffs else it[index].diffs,
+            media = if (step.media.isNotEmpty()) step.media else it[index].media,
         )
     }
 }

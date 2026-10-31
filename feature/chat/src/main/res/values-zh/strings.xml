@@ -3,6 +3,10 @@
     <string name="chat_title">Focus</string>
     <string name="chat_subtitle">问什么都行</string>
     <string name="chat_working">正在处理</string>
+    <string name="chat_compacting">正在压缩上下文</string>
+    <string name="chat_compaction_title">较早的上下文已压缩</string>
+    <string name="chat_compaction_tokens">%1$s → %2$s token</string>
+    <string name="chat_compact_empty">还没有可总结的内容。</string>
     <string name="chat_input_hint">给 Focus 发消息</string>
     <string name="chat_input_hint_titled">在 %1$s 中发送信息</string>
     <string name="chat_send">发送</string>
@@ -54,6 +58,7 @@
     <string name="chat_suggest_goals_prompt">为了推进目标，我现在应该专注什么？</string>
     <string name="chat_attach">添加附件</string>
     <string name="chat_attach_remove">移除附件</string>
+    <string name="chat_attachment_preview">预览 %1$s</string>
     <string name="chat_attach_title">添加附件</string>
     <string name="chat_attach_camera">拍照</string>
     <string name="chat_attach_photos">照片</string>
@@ -163,6 +168,7 @@
     <string name="slash_undo_desc">撤销最后一条消息和它的回复。</string>
     <string name="slash_redo_desc">重新发送刚撤销的消息。</string>
     <string name="slash_btw_desc">问一个旁支问题，不改变主任务。</string>
+    <string name="slash_compact_desc">把较早的消息总结成摘要，释放上下文。</string>
     <string name="slash_new_desc">开始新会话。</string>
     <string name="slash_resume_desc">按 id 或标题恢复会话。</string>
     <string name="slash_sessions_desc">浏览会话。</string>

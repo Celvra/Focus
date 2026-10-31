@@ -121,6 +121,11 @@ class BridgeRepository(
         return client.read(endpoint, token, BridgeReadRequest(path, offset, limit))
     }
 
+    suspend fun media(endpoint: BridgeEndpoint, path: String, maxBytes: Long? = null): BridgeMediaResult {
+        val token = requireToken(endpoint)
+        return client.media(endpoint, token, BridgeMediaRequest(path, maxBytes))
+    }
+
     suspend fun write(endpoint: BridgeEndpoint, path: String, content: String): BridgeOkResult {
         val token = requireToken(endpoint)
         return client.write(endpoint, token, BridgeWriteRequest(path, content))

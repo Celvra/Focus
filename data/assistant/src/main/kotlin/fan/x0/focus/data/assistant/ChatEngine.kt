@@ -65,6 +65,7 @@ sealed interface ChatEvent {
         val output: String? = null,
         val durationMs: Long = 0,
         val diffs: List<FileDiff> = emptyList(),
+        val media: List<ChatAttachment> = emptyList(),
     ) : ChatEvent
     data class WorkingTextChanged(val text: String) : ChatEvent
     data class ApprovalRequested(val request: ApprovalRequest) : ChatEvent
@@ -75,6 +76,14 @@ sealed interface ChatEvent {
     data class PlanResolved(val plan: ProposedPlan, val approved: Boolean) : ChatEvent
     data class TodoUpdated(val todos: List<ConversationTodo>) : ChatEvent
     data class StatsUpdated(val stats: MessageStats) : ChatEvent
+    data class CompactionStarted(val automatic: Boolean) : ChatEvent
+    data class CompactionDelta(val text: String) : ChatEvent
+    data class CompactionFinished(
+        val automatic: Boolean,
+        val ok: Boolean,
+        val tokensBefore: Int = 0,
+        val tokensAfter: Int = 0,
+    ) : ChatEvent
     data class RetryScheduled(val attempt: Int, val max: Int, val reason: String) : ChatEvent
     data object RetryReset : ChatEvent
     data object Completed : ChatEvent
@@ -92,6 +101,7 @@ class ChatEngine(
     private val approvals: ApprovalStore,
     private val agent: AgentSettings,
     private val subAgents: SubAgentRunner,
+    private val compactor: ChatCompactor,
 ) {
     private val waivers = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     private val askReplies = ConcurrentHashMap<String, CompletableDeferred<AskReply>>()
@@ -160,6 +170,8 @@ class ChatEngine(
         )
         var stepCount = 0
         var completesOnboarding = false
+        var pendingMedia: List<ChatAttachment> = emptyList()
+        var compactionTried = false
         val agentConfig = agent.configOnce()
         val retry = agentConfig.retry
 
@@ -179,26 +191,53 @@ class ChatEngine(
             val maxRounds = agentConfig.roundLimit
             repeat(maxRounds) { roundIndex ->
                 val round = roundIndex + 1
+                if (!compactionTried && mode == ChatMode.Chat &&
+                    compactor.shouldCompact(conversationId, providerId, model)
+                ) {
+                    compactionTried = true
+                    emit(ChatEvent.CompactionStarted(automatic = true))
+                    val compacted = compactor.compact(conversationId, providerId, model) { delta ->
+                        emit(ChatEvent.CompactionDelta(delta))
+                    }
+                    emit(
+                        ChatEvent.CompactionFinished(
+                            automatic = true,
+                            ok = compacted != null,
+                            tokensBefore = compacted?.tokensBefore ?: 0,
+                            tokensAfter = compacted?.tokensAfter ?: 0,
+                        ),
+                    )
+                }
                 val specs = when (mode) {
                     ChatMode.Chat -> tools.specsFor(agentMode)
                     ChatMode.Onboarding -> ToolCatalog.onboarding()
                 }.let { list ->
                     if (completesOnboarding) list.filterNot { it.name == "complete_onboarding" } else list
                 }
-                val history = chats.messages(conversationId)
+                val context = chats.context(conversationId)
                 val system = when (mode) {
                     ChatMode.Chat -> prompt.chatPrompt(
                         title = chats.conversation(conversationId)?.title.orEmpty(),
                         mode = agentMode,
                     )
                     ChatMode.Onboarding -> prompt.onboardingPrompt(
-                        turn = history.count { it.role == ChatRole.User },
+                        turn = context.messages.count { it.role == ChatRole.User },
                     )
-                }
+                }.withSummary(context.summary)
                 val messages = buildList {
                     add(ChatMessageDto(role = "system", content = system))
-                    addAll(history.toDtos())
-                    if (history.isEmpty()) {
+                    addAll(context.messages.toDtos())
+                    val media = pendingMedia.mapNotNull { it.dataUrl }
+                    pendingMedia = emptyList()
+                    if (media.isNotEmpty()) {
+                        add(
+                            ChatMessageDto(
+                                role = "user",
+                                content = MessageContent.of("Images returned by the tool calls above.", media),
+                            ),
+                        )
+                    }
+                    if (context.messages.isEmpty() && context.summary.isBlank()) {
                         add(ChatMessageDto(role = "user", content = "Begin the setup conversation now."))
                     }
                 }
@@ -263,6 +302,7 @@ class ChatEngine(
                     )
                 }
                 val results = executeTools(message.toolCalls, conversationId, agentMode, providerId, model)
+                pendingMedia = results.flatMap { it.media }
                 for ((call, result) in message.toolCalls.zip(results)) {
                     stepCount++
                     totalStats = totalStats.copy(step = stepCount, durationMs = System.currentTimeMillis() - startedAt)
@@ -355,6 +395,7 @@ class ChatEngine(
                                 output = result.content,
                                 durationMs = result.durationMs,
                                 diffs = result.diffs,
+                                media = result.previews,
                             ),
                         )
                         chats.append(
@@ -363,6 +404,7 @@ class ChatEngine(
                             content = result.content,
                             toolCallId = call.id,
                             name = call.name,
+                            attachments = result.previews,
                             label = label,
                             elapsedMs = result.durationMs,
                             diffs = result.diffs.takeIf { it.isNotEmpty() }?.let { listOf(it) }.orEmpty(),
@@ -430,6 +472,31 @@ class ChatEngine(
         } catch (e: Throwable) {
             emit(ChatEvent.Failed(mapError(e)))
         }
+    }
+
+    fun compact(
+        conversationId: String,
+        options: TurnOptions = TurnOptions(),
+    ): Flow<ChatEvent> = flow {
+        emit(ChatEvent.CompactionStarted(automatic = false))
+        val result = try {
+            compactor.compact(conversationId, options.providerId, options.model) { delta ->
+                emit(ChatEvent.CompactionDelta(delta))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            null
+        }
+        emit(
+            ChatEvent.CompactionFinished(
+                automatic = false,
+                ok = result != null,
+                tokensBefore = result?.tokensBefore ?: 0,
+                tokensAfter = result?.tokensAfter ?: 0,
+            ),
+        )
+        emit(ChatEvent.Completed)
     }
 
     private suspend fun executeTools(
@@ -577,6 +644,7 @@ class ChatEngine(
                                 cachedTokens = event.cached,
                                 totalTokens = event.total,
                                 durationMs = System.currentTimeMillis() - startedAt,
+                                lastContextTokens = event.prompt,
                             )
                             latest = totalStats.merge(roundStats).copy(
                                 round = round,
@@ -635,6 +703,16 @@ class ChatEngine(
         val reply = withTimeoutOrNull(APPROVAL_TIMEOUT_MS) { deferred.await() }
         askReplies.remove(askId)
         return reply ?: AskReply(id = askId, skipped = true)
+    }
+
+    private fun String.withSummary(summary: String): String {
+        if (summary.isBlank()) return this
+        return buildString {
+            append(this@withSummary)
+            appendLine()
+            appendLine("Summary of the earlier conversation:")
+            append(summary)
+        }
     }
 
     private suspend fun List<ChatMessage>.toDtos(): List<ChatMessageDto> {

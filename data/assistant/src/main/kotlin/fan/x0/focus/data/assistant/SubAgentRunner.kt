@@ -142,6 +142,7 @@ class SubAgentRunner(
                             )
                         },
                     )
+                    val media = mutableListOf<ChatAttachment>()
                     message.toolCalls.forEach { call ->
                         val spec = ToolCatalog.find(call.name)
                         val label = ToolLabels.of(call.name)
@@ -168,6 +169,7 @@ class SubAgentRunner(
                             output = result.content,
                             durationMs = durationMs,
                             diffs = result.diffs,
+                            media = result.previews,
                         )
                         steps += SubAgentStep(
                             label = label,
@@ -175,11 +177,22 @@ class SubAgentRunner(
                             detail = result.summary.take(200),
                         )
                         collectFiles(call.arguments, files)
+                        media += result.media
                         messages += ChatMessageDto(
                             role = "tool",
                             content = result.content.take(RESULT_LIMIT),
                             toolCallId = call.id,
                             name = call.name,
+                        )
+                    }
+                    val images = media.mapNotNull { it.dataUrl }
+                    if (images.isNotEmpty()) {
+                        messages += ChatMessageDto(
+                            role = "user",
+                            content = fan.x0.focus.core.network.openai.MessageContent.of(
+                                "Images returned by the tool calls above.",
+                                images,
+                            ),
                         )
                     }
                 }
