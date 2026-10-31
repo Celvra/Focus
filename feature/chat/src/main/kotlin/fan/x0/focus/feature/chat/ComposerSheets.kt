@@ -22,10 +22,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -49,6 +53,7 @@ import fan.x0.focus.core.designsystem.components.BrandIcons
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.rememberProviderImage
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
+import fan.x0.focus.data.assistant.AgentMode
 import fan.x0.focus.data.assistant.ReasoningLevel
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -308,6 +313,8 @@ internal fun ReasoningPickerSheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AttachmentSheet(
+    mode: AgentMode,
+    onModeSelect: (AgentMode) -> Unit,
     onTakePhoto: () -> Unit,
     onPickPhotos: () -> Unit,
     onPickFiles: () -> Unit,
@@ -357,6 +364,35 @@ internal fun AttachmentSheet(
                     modifier = Modifier.weight(1f),
                 )
             }
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 4.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            )
+            Text(
+                text = stringResource(R.string.chat_mode_section),
+                style = MaterialTheme.typography.titleSmallEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                AgentMode.entries.forEachIndexed { index, option ->
+                    SegmentedButton(
+                        selected = option == mode,
+                        onClick = { onModeSelect(option) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = AgentMode.entries.size,
+                        ),
+                        label = {
+                            Text(stringResource(option.labelRes()))
+                        },
+                    )
+                }
+            }
+            Text(
+                text = stringResource(mode.descriptionRes()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

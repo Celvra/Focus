@@ -692,14 +692,20 @@ class ChatViewModel(
     }
 
     private fun setMode(mode: AgentMode) {
-        val id = currentState.conversationId
-        updateState { copy(mode = mode) }
-        if (id.isNotBlank()) {
+        val state = currentState
+        val id = state.conversationId
+        if (mode == AgentMode.Build) {
+            val pending = state.planCard?.takeIf { it.card.phase == ApprovalPhase.Waiting }
+            if (pending != null) {
+                updateState { copy(picker = null) }
+                decidePlan(ChatAction.DecidePlan(pending.card.id, true, state.policy))
+                return
+            }
+        }
+        updateState { copy(mode = mode, picker = null) }
+        if (id.isNotBlank() && mode != state.mode) {
             viewModelScope.launch {
                 chats.setMode(id, mode)
-                if (mode == AgentMode.Build && currentState.planStatus == PlanStatus.Pending) {
-                    chats.setPlan(id, currentState.plan, PlanStatus.Approved)
-                }
             }
         }
     }

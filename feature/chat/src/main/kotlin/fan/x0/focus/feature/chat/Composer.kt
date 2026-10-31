@@ -200,6 +200,8 @@ internal fun Composer(
 
     if (attachSheet) {
         AttachmentSheet(
+            mode = state.mode,
+            onModeSelect = { onAction(ChatAction.SetMode(it)) },
             onTakePhoto = {
                 attachSheet = false
                 onTakePhoto()
