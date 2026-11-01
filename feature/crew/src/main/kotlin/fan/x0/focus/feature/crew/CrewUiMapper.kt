@@ -111,7 +111,9 @@ internal fun CrewRunEntry.toUi(
         avatarPalette = 0,
         avatarPath = null,
         text = text,
-        replyTo = messages[replyToId]?.toQuote(),
+        replyTo = replyToId?.let { id ->
+            messages[id]?.toQuote() ?: CrewQuoteUi(messageId = id, author = "", text = "", deleted = true)
+        },
         mentions = CrewMentions.names(text, members).map { CrewMentionChipUi(it) },
     )
     is CrewRunEntry.Agent -> {
@@ -155,7 +157,14 @@ internal fun CrewMessage.toQuote(): CrewQuoteUi = CrewQuoteUi(
 )
 
 private fun CrewMessage.replyTo(byId: Map<Long, CrewMessage>): CrewQuoteUi? =
-    replyToId?.let { byId[it] }?.toQuote()
+    replyToId?.let { id ->
+        byId[id]?.toQuote() ?: CrewQuoteUi(
+            messageId = id,
+            author = "",
+            text = "",
+            deleted = true,
+        )
+    }
 
 private fun CrewMessage.mentions(members: List<CrewMember>): List<CrewMentionChipUi> =
     CrewMentions.ids(content, members).mapNotNull { id ->

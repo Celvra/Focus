@@ -34,6 +34,7 @@ data class CrewQuoteUi(
     val messageId: Long,
     val author: String,
     val text: String,
+    val deleted: Boolean = false,
 )
 
 data class CrewMentionChipUi(
@@ -91,6 +92,16 @@ data class CrewMessageMenuUi(
     val author: String,
     val text: String,
     val reactions: List<String>,
+    val fromUser: Boolean = false,
+    val canEdit: Boolean = false,
+    val canDelete: Boolean = false,
+)
+
+data class CrewEditUi(
+    val messageId: Long,
+    val key: String,
+    val original: String,
+    val draft: String,
 )
 
 data class CrewMentionUi(
@@ -137,6 +148,9 @@ data class CrewUiState(
     val mention: CrewMentionUi = CrewMentionUi(),
     val reply: CrewQuoteUi? = null,
     val menu: CrewMessageMenuUi? = null,
+    val edit: CrewEditUi? = null,
+    val pendingDelete: CrewMessageMenuUi? = null,
+    val focusMessageId: Long? = null,
     val memberSheetOpen: Boolean = false,
     val groupDraft: GroupDraft? = null,
     val memberDraft: MemberDraft? = null,
@@ -203,9 +217,22 @@ sealed interface CrewAction : UiAction {
     data class React(val messageId: Long, val emoji: String) : CrewAction
     data class ReplyTo(val key: String) : CrewAction
     data object CancelReply : CrewAction
+    data class StartEdit(val key: String) : CrewAction
+    data class EditDraftChanged(val value: String) : CrewAction
+    data object SaveEdit : CrewAction
+    data object DismissEdit : CrewAction
+    data class AskDeleteMessage(val key: String) : CrewAction
+    data object ConfirmDeleteMessage : CrewAction
+    data object CancelDeleteMessage : CrewAction
+    data class JumpToMessage(val messageId: Long) : CrewAction
+    data object ClearFocus : CrewAction
     data class Approve(val approvalId: String, val approved: Boolean) : CrewAction
 }
 
 sealed interface CrewEffect : UiEffect {
     data object Copied : CrewEffect
+    data object MessageEdited : CrewEffect
+    data object MessageDeleted : CrewEffect
 }
+
+internal val CrewReactionChoices = listOf("👍", "❤️", "😂", "🎉", "👀")

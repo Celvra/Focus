@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
+import fan.x0.focus.core.mvi.CollectEffect
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -23,6 +24,15 @@ fun CrewRoute(viewModel: CrewViewModel = koinViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     HandleAppErrors(viewModel.errors, snackbar)
+    val edited = stringResource(R.string.crew_edit_saved)
+    val deleted = stringResource(R.string.crew_message_deleted)
+    CollectEffect(viewModel.effect) { effect ->
+        when (effect) {
+            CrewEffect.Copied -> Unit
+            CrewEffect.MessageEdited -> snackbar.showSnackbar(edited)
+            CrewEffect.MessageDeleted -> snackbar.showSnackbar(deleted)
+        }
+    }
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
@@ -100,6 +110,21 @@ fun CrewScreen(
             menu = menu,
             onAction = onAction,
             onCopy = copy,
+        )
+    }
+    state.edit?.let { edit ->
+        CrewMessageEditSheet(
+            edit = edit,
+            saving = state.saving,
+            onDraftChange = { onAction(CrewAction.EditDraftChanged(it)) },
+            onSave = { onAction(CrewAction.SaveEdit) },
+            onDismiss = { onAction(CrewAction.DismissEdit) },
+        )
+    }
+    state.pendingDelete?.let {
+        CrewMessageDeleteDialog(
+            onConfirm = { onAction(CrewAction.ConfirmDeleteMessage) },
+            onDismiss = { onAction(CrewAction.CancelDeleteMessage) },
         )
     }
 }

@@ -336,6 +336,26 @@ class CrewStore(private val database: AssistantDatabase) {
         touchGroup(groupId)
     }
 
+    suspend fun deleteMessage(id: Long, groupId: String) = withContext(Dispatchers.IO) {
+        database.writableDatabase.delete("crew_messages", "id = ?", arrayOf(id.toString()))
+        touchGroup(groupId)
+    }
+
+    suspend fun deleteMessagesAfter(groupId: String, afterId: Long) = withContext(Dispatchers.IO) {
+        database.writableDatabase.delete(
+            "crew_messages",
+            "group_id = ? AND id > ?",
+            arrayOf(groupId, afterId.toString()),
+        )
+        touchGroup(groupId)
+    }
+
+    suspend fun updateMessageContent(id: Long, groupId: String, content: String) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply { put("content", content) }
+        database.writableDatabase.update("crew_messages", values, "id = ?", arrayOf(id.toString()))
+        touchGroup(groupId)
+    }
+
     private fun readMembers(groupId: String, activeOnly: Boolean): List<CrewMember> {
         val filter = if (activeOnly) "AND active = 1" else ""
         return database.readableDatabase.rawQuery(

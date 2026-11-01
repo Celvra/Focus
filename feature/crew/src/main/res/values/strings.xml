@@ -68,4 +68,13 @@
     <string name="crew_show_active">Show active groups</string>
     <string name="crew_archived_empty_title">No archived groups</string>
     <string name="crew_archived_empty_body">Archived groups stay here until you restore or delete them.</string>
+    <string name="crew_edit_message">Edit</string>
+    <string name="crew_delete_message">Delete</string>
+    <string name="crew_message_deleted">Message deleted</string>
+    <string name="crew_edit_title">Edit message</string>
+    <string name="crew_edit_hint">Message text</string>
+    <string name="crew_edit_save">Save and resend</string>
+    <string name="crew_edit_saved">Message updated</string>
+    <string name="crew_delete_message_title">Delete this message?</string>
+    <string name="crew_delete_message_body">The message will be removed from this group.</string>
 </resources>

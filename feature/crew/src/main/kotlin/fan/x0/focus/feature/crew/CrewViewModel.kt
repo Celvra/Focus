@@ -173,6 +173,19 @@ class CrewViewModel(
             is CrewAction.React -> react(action.messageId, action.emoji)
             is CrewAction.ReplyTo -> replyTo(action.key)
             CrewAction.CancelReply -> updateState { copy(reply = null) }
+            is CrewAction.StartEdit -> startEdit(action.key)
+            is CrewAction.EditDraftChanged -> updateState {
+                copy(edit = edit?.copy(draft = action.value))
+            }
+            CrewAction.SaveEdit -> saveEdit()
+            CrewAction.DismissEdit -> updateState { copy(edit = null) }
+            is CrewAction.AskDeleteMessage -> askDeleteMessage(action.key)
+            CrewAction.ConfirmDeleteMessage -> confirmDeleteMessage()
+            CrewAction.CancelDeleteMessage -> updateState { copy(pendingDelete = null) }
+            is CrewAction.JumpToMessage -> updateState {
+                copy(focusMessageId = action.messageId, menu = null)
+            }
+            CrewAction.ClearFocus -> updateState { copy(focusMessageId = null) }
             is CrewAction.Approve -> runner.decide(action.approvalId, action.approved)
         }
     }
@@ -292,6 +305,9 @@ class CrewViewModel(
                 mention = CrewMentionUi(),
                 reply = null,
                 menu = null,
+                edit = null,
+                pendingDelete = null,
+                focusMessageId = null,
                 groupMenuId = null,
                 memberSheetOpen = false,
                 memberDraft = null,
@@ -731,8 +747,84 @@ class CrewViewModel(
                     author = entry.author,
                     text = entry.text,
                     reactions = entry.reactions,
+                    fromUser = entry.fromUser,
+                    canEdit = entry.fromUser && !running,
+                    canDelete = !running,
                 ),
             )
+        }
+    }
+
+    private fun startEdit(key: String) {
+        val entry = currentState.entries.firstOrNull { it.key == key } as? CrewEntryUi.Message ?: return
+        val messageId = entry.messageId ?: return
+        if (!entry.fromUser || currentState.running) return
+        updateState {
+            copy(
+                edit = CrewEditUi(
+                    messageId = messageId,
+                    key = key,
+                    original = entry.text,
+                    draft = entry.text,
+                ),
+                menu = null,
+            )
+        }
+    }
+
+    private fun saveEdit() {
+        val edit = currentState.edit ?: return
+        val group = currentState.group ?: return
+        val draft = edit.draft.trim()
+        if (draft.isBlank() || currentState.saving) return
+        if (draft == edit.original.trim()) {
+            updateState { copy(edit = null) }
+            return
+        }
+        updateState { copy(saving = true) }
+        viewModelScope.launch {
+            try {
+                store.updateMessageContent(edit.messageId, group.id, draft)
+                store.deleteMessagesAfter(group.id, edit.messageId)
+                updateState { copy(saving = false, edit = null) }
+                val members = store.members(group.id)
+                runner.start(group.id, CrewMentions.ids(draft, members).toSet())
+                reloadHistory(group.id)
+                sendEffect(CrewEffect.MessageEdited)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                updateState { copy(saving = false) }
+                emitError(e.toAppError())
+            }
+        }
+    }
+
+    private fun askDeleteMessage(key: String) {
+        val menu = currentState.menu?.takeIf { it.key == key } ?: run {
+            openMessageMenu(key)
+            currentState.menu
+        } ?: return
+        if (!menu.canDelete) return
+        updateState { copy(pendingDelete = menu, menu = null) }
+    }
+
+    private fun confirmDeleteMessage() {
+        val target = currentState.pendingDelete ?: return
+        val messageId = target.messageId ?: return
+        val group = currentState.group ?: return
+        viewModelScope.launch {
+            try {
+                store.deleteMessage(messageId, group.id)
+                messagesById = messagesById - messageId
+                updateState { copy(pendingDelete = null) }
+                reloadHistory(group.id)
+                sendEffect(CrewEffect.MessageDeleted)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                emitError(e.toAppError())
+            }
         }
     }
 
@@ -756,7 +848,7 @@ class CrewViewModel(
             it is CrewEntryUi.Message && it.messageId == messageId
         } as? CrewEntryUi.Message
         val current = messagesById[messageId]?.reactions ?: entry?.reactions.orEmpty()
-        val next = if (current.contains(emoji)) current - emoji else current + emoji
+        val next = if (current.contains(emoji)) current.filterNot { it == emoji } else current + emoji
         messagesById = messagesById[messageId]?.let { messagesById + (messageId to it.copy(reactions = next)) }
             ?: messagesById
         updateState {

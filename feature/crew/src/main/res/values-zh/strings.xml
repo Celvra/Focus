@@ -68,4 +68,13 @@
     <string name="crew_show_active">查看活跃群组</string>
     <string name="crew_archived_empty_title">没有已归档群组</string>
     <string name="crew_archived_empty_body">归档的群组会留在这里，直到你恢复或删除它们。</string>
+    <string name="crew_edit_message">编辑</string>
+    <string name="crew_delete_message">删除</string>
+    <string name="crew_message_deleted">消息已删除</string>
+    <string name="crew_edit_title">编辑消息</string>
+    <string name="crew_edit_hint">消息内容</string>
+    <string name="crew_edit_save">保存并重发</string>
+    <string name="crew_edit_saved">消息已更新</string>
+    <string name="crew_delete_message_title">删除这条消息？</string>
+    <string name="crew_delete_message_body">消息会从这个群组里移除。</string>
 </resources>

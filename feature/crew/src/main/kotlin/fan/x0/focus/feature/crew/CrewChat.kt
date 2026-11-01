@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.hazeSource
@@ -105,6 +106,18 @@ fun CrewChatScreen(
     LaunchedEffect(entries.size, liveTextLength) {
         if (follow && entries.isNotEmpty()) listState.scrollToItem(lastIndex)
     }
+    LaunchedEffect(state.focusMessageId) {
+        val id = state.focusMessageId ?: return@LaunchedEffect
+        val index = entries.indexOfFirst {
+            it is CrewEntryUi.Message && it.messageId == id
+        }
+        if (index >= 0) {
+            follow = false
+            listState.animateScrollToItem(index)
+        }
+        kotlinx.coroutines.delay(2000)
+        onAction(CrewAction.ClearFocus)
+    }
 
     BackHandler(enabled = state.mention.visible) { onAction(CrewAction.MentionDismiss) }
 
@@ -154,7 +167,10 @@ fun CrewChatScreen(
                             when (entry) {
                                 is CrewEntryUi.Message -> CrewMessageRow(
                                     entry = entry,
+                                    highlighted = entry.messageId != null &&
+                                        entry.messageId == state.focusMessageId,
                                     onOpenMenu = { onAction(CrewAction.OpenMessageMenu(entry.key)) },
+                                    onJump = { id -> onAction(CrewAction.JumpToMessage(id)) },
                                 )
                                 is CrewEntryUi.Notice -> CrewNoticeRow(entry.text)
                                 is CrewEntryUi.Approval -> CrewApprovalCard(
@@ -319,7 +335,9 @@ private fun CrewEmptyThread() {
 @Composable
 private fun CrewMessageRow(
     entry: CrewEntryUi.Message,
+    highlighted: Boolean,
     onOpenMenu: () -> Unit,
+    onJump: (Long) -> Unit,
 ) {
     val alignment = if (entry.fromUser) Alignment.End else Alignment.Start
     Row(
@@ -368,12 +386,13 @@ private fun CrewMessageRow(
                 FocusChatBubble(
                     text = entry.text,
                     fromUser = entry.fromUser,
+                    highlighted = highlighted,
                     modifier = Modifier.fillMaxWidth(),
                     streaming = entry.streaming,
                     reactions = entry.reactions,
                     onLongPress = entry.messageId?.let { { onOpenMenu() } },
                     header = entry.replyTo?.let { quote ->
-                        { CrewQuoteHeader(quote) }
+                        { CrewQuoteHeader(quote = quote, onJump = onJump) }
                     },
                 )
             }
@@ -431,10 +450,19 @@ private fun CrewTypingBubble(activity: String) {
 }
 
 @Composable
-private fun CrewQuoteHeader(quote: CrewQuoteUi) {
+private fun CrewQuoteHeader(quote: CrewQuoteUi, onJump: (Long) -> Unit) {
     Surface(
+        modifier = if (quote.deleted) {
+            Modifier
+        } else {
+            Modifier.clickable(onClick = hapticTap { onJump(quote.messageId) })
+        },
         shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = if (quote.deleted) {
+            MaterialTheme.colorScheme.surfaceContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
         Column(
@@ -447,11 +475,16 @@ private fun CrewQuoteHeader(quote: CrewQuoteUi) {
                     quote.author.ifBlank { stringResource(R.string.crew_you) },
                 ),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = if (quote.deleted) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
             )
             Text(
-                text = quote.text,
+                text = if (quote.deleted) stringResource(R.string.crew_message_deleted) else quote.text,
                 style = MaterialTheme.typography.bodySmall,
+                fontStyle = if (quote.deleted) FontStyle.Italic else FontStyle.Normal,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
