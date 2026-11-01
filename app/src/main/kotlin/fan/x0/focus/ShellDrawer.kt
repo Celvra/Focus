@@ -61,6 +61,9 @@ fun ShellDrawer(
         DrawerEntry(FocusIcons.Today, stringResource(R.string.tab_today), current == FocusRoute.Today) {
             onNavigate(FocusRoute.Today)
         }
+        DrawerEntry(FocusIcons.Groups, stringResource(R.string.tab_groups), current == FocusRoute.Crew) {
+            onNavigate(FocusRoute.Crew)
+        }
         DrawerEntry(FocusIcons.Goals, stringResource(R.string.tab_goals), current == FocusRoute.Goals) {
             onNavigate(FocusRoute.Goals)
         }

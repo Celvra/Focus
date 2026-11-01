@@ -53,6 +53,7 @@ class ChatTurnRunner(
     init {
         scope.launch {
             background.completed.collect { completion ->
+                if (chats.conversation(completion.conversationId) == null) return@collect
                 if (!isRunning(completion.conversationId)) {
                     start(
                         conversationId = completion.conversationId,

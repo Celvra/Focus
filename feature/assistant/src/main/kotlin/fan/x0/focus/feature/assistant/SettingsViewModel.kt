@@ -31,6 +31,7 @@ import fan.x0.focus.data.assistant.PolicySettings
 import fan.x0.focus.data.assistant.ProviderConfig
 import fan.x0.focus.data.assistant.ProviderIconStore
 import fan.x0.focus.data.assistant.SecretStore
+import fan.x0.focus.data.assistant.UpdateController
 import fan.x0.focus.data.assistant.requestConfig
 import fan.x0.focus.data.sources.FeedRefreshScheduler
 import fan.x0.focus.data.sources.SourcePreferences
@@ -59,6 +60,7 @@ class SettingsViewModel(
     private val contributors: ContributorsRepository,
     private val notificationSettings: NotificationSettings,
     private val notifier: MessageNotifier,
+    private val updates: UpdateController,
 ) : BaseViewModel<SettingsAction, SettingsUiState, SettingsEffect>(SettingsUiState()) {
 
     private var fetchJob: Job? = null
@@ -107,6 +109,19 @@ class SettingsViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            updates.state.collect { update ->
+                updateState {
+                    copy(
+                        updateChecking = update.checking,
+                        updateChecked = update.checked,
+                        updateAvailable = update.updateAvailable,
+                        updateVersion = update.release?.tagName.orEmpty(),
+                        updateError = update.error != null,
+                    )
+                }
+            }
+        }
     }
 
     private suspend fun loadBalances(providers: List<ProviderConfig>) {
@@ -133,6 +148,7 @@ class SettingsViewModel(
                 updateState { copy(language = action.tag) }
             }
             SettingsAction.RefreshData -> refreshData()
+            SettingsAction.CheckUpdate -> updates.check(userInitiated = true)
             SettingsAction.ToggleContributors -> toggleContributors()
             is SettingsAction.AskClearData -> updateState { copy(pendingClear = action.target) }
             SettingsAction.CancelClearData -> updateState { copy(pendingClear = null) }

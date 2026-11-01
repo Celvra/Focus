@@ -80,6 +80,13 @@
     <string name="settings_about_app">Focus</string>
     <string name="settings_about_tagline">Your next-generation personal LLM assistant.</string>
     <string name="settings_about_version">v%1$s</string>
+    <string name="settings_about_update_item">Check for updates</string>
+    <string name="settings_about_update_body">Fetch the latest release from GitHub.</string>
+    <string name="settings_about_update_checking">Checking for updates</string>
+    <string name="settings_about_update_available">Version %1$s is available.</string>
+    <string name="settings_about_update_latest">You are on the latest version.</string>
+    <string name="settings_about_update_no_release">No release found.</string>
+    <string name="settings_about_update_failed">Could not check for updates. Tap to retry.</string>
     <string name="settings_about_contributors_item">Contributors</string>
     <string name="settings_about_contributors_body">Live from GitHub. Tap to see everyone.</string>
     <string name="settings_about_contributors_loading">Loading contributors</string>

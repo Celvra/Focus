@@ -81,6 +81,7 @@ class ToolExecutor(
     private val indexer: WorkspaceIndexer,
     private val backgroundWatch: BackgroundCommandMonitor,
     private val media: MediaLoader,
+    private val crew: CrewToolHandler,
 ) {
     val specs: List<ToolSpec> = ToolCatalog.chat()
 
@@ -122,6 +123,7 @@ class ToolExecutor(
         if (mode == AgentMode.Plan && spec.kind !in setOf(ToolKind.Read, ToolKind.Ask, ToolKind.Plan)) {
             return fail("Plan mode only allows read-only tools. $name would change something. Ask the user to approve the plan first.")
         }
+        crew.handle(name, args)?.let { return it }
         when (spec.kind) {
             ToolKind.Read, ToolKind.Write -> return runTool(spec, args, conversationId)
             ToolKind.Gated -> {

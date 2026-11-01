@@ -38,6 +38,13 @@ object ToolLabels {
         "mcp_list_tools", "mcp_call_tool", "mcp_list_resources", "mcp_read_resource" -> "MCP"
         "index_workspace", "search_files", "workspace_files" -> "Workspace"
         "bridge_bg_start", "bridge_bg_logs", "bridge_bg_kill", "bridge_bg_list", "bridge_bg_clear" -> "Background command"
+        CrewToolCatalog.LIST_GROUPS, CrewToolCatalog.GET_GROUP -> "Agent groups"
+        CrewToolCatalog.CREATE_GROUP, CrewToolCatalog.UPDATE_GROUP, CrewToolCatalog.DELETE_GROUP -> "Agent group"
+        CrewToolCatalog.ADD_MEMBERS, CrewToolCatalog.UPDATE_MEMBER, CrewToolCatalog.REMOVE_MEMBER -> "Group members"
+        CrewToolCatalog.START_TASK -> "Group task"
+        CrewToolCatalog.REACT -> "Reaction"
+        CrewToolCatalog.MENTION -> "Mention"
+        CrewToolCatalog.FINISH -> "Finish"
         else -> name?.replace('_', ' ') ?: "Tool"
     }
 }

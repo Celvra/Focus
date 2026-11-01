@@ -885,7 +885,7 @@ object ToolCatalog {
                 put("device_id", deviceId())
             },
         ),
-    )
+    ) + CrewToolCatalog.assistantSpecs
 
     private val byName = all.associateBy { it.name }
 

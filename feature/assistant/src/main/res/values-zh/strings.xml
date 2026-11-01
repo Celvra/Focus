@@ -80,6 +80,13 @@
     <string name="settings_about_app">Focus</string>
     <string name="settings_about_tagline">您的下一代私人 LLM 助理。</string>
     <string name="settings_about_version">v%1$s</string>
+    <string name="settings_about_update_item">检查更新</string>
+    <string name="settings_about_update_body">从 GitHub 获取最新 Release。</string>
+    <string name="settings_about_update_checking">正在检查更新</string>
+    <string name="settings_about_update_available">发现新版本 %1$s。</string>
+    <string name="settings_about_update_latest">已是最新版本。</string>
+    <string name="settings_about_update_no_release">没有找到 Release。</string>
+    <string name="settings_about_update_failed">检查更新失败，点击重试。</string>
     <string name="settings_about_contributors_item">贡献者</string>
     <string name="settings_about_contributors_body">来自 GitHub 的实时名单，点击展开。</string>
     <string name="settings_about_contributors_loading">正在获取贡献者</string>

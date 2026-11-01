@@ -88,6 +88,7 @@ fun FocusChatBubble(
                     streaming = streaming,
                     highlighted = highlighted,
                     selectable = selectable,
+                    reactions = reactions,
                     onLongPress = onLongPress,
                     header = header,
                 )
@@ -174,6 +175,7 @@ private fun AssistantBubble(
     streaming: Boolean,
     highlighted: Boolean,
     selectable: Boolean,
+    reactions: List<String>,
     onLongPress: (() -> Unit)?,
     header: (@Composable () -> Unit)?,
 ) {
@@ -231,6 +233,11 @@ private fun AssistantBubble(
                     }
                 }
             }
+            BubbleReactions(
+                reactions = reactions,
+                fromUser = false,
+                modifier = Modifier.padding(start = 6.dp, end = 6.dp, bottom = 6.dp),
+            )
         }
     }
 }

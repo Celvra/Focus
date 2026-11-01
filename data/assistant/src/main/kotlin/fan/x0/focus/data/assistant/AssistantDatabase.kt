@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 13) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 14) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -187,6 +187,56 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             """.trimIndent(),
         )
         db.execSQL("CREATE INDEX idx_file_index_path ON file_index(path)")
+        db.execSQL(
+            """
+            CREATE TABLE agent_groups(
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                topic TEXT NOT NULL DEFAULT '',
+                avatar_preset INTEGER NOT NULL DEFAULT 0,
+                avatar_palette INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                last_message_at INTEGER NOT NULL DEFAULT 0,
+                archived INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE crew_members(
+                id TEXT PRIMARY KEY,
+                group_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                duty TEXT NOT NULL DEFAULT '',
+                avatar_preset INTEGER NOT NULL DEFAULT 0,
+                avatar_palette INTEGER NOT NULL DEFAULT 0,
+                avatar_image TEXT NOT NULL DEFAULT '',
+                position INTEGER NOT NULL DEFAULT 0,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX idx_crew_members_group ON crew_members(group_id, active, position)")
+        db.execSQL(
+            """
+            CREATE TABLE crew_messages(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id TEXT NOT NULL,
+                author_type TEXT NOT NULL,
+                author_id TEXT NOT NULL DEFAULT '',
+                author_name TEXT NOT NULL DEFAULT '',
+                content TEXT NOT NULL DEFAULT '',
+                reply_to_id INTEGER,
+                reactions TEXT,
+                kind TEXT NOT NULL DEFAULT 'text',
+                created_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX idx_crew_messages_group ON crew_messages(group_id, id)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -354,6 +404,58 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             if (!hasColumn(db, "compactions", "tokens_after")) {
                 db.execSQL("ALTER TABLE compactions ADD COLUMN tokens_after INTEGER NOT NULL DEFAULT 0")
             }
+        }
+        if (oldVersion < 14) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS agent_groups(
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    topic TEXT NOT NULL DEFAULT '',
+                    avatar_preset INTEGER NOT NULL DEFAULT 0,
+                    avatar_palette INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    last_message_at INTEGER NOT NULL DEFAULT 0,
+                    archived INTEGER NOT NULL DEFAULT 0
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS crew_members(
+                    id TEXT PRIMARY KEY,
+                    group_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    duty TEXT NOT NULL DEFAULT '',
+                    avatar_preset INTEGER NOT NULL DEFAULT 0,
+                    avatar_palette INTEGER NOT NULL DEFAULT 0,
+                    avatar_image TEXT NOT NULL DEFAULT '',
+                    position INTEGER NOT NULL DEFAULT 0,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_crew_members_group ON crew_members(group_id, active, position)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS crew_messages(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    group_id TEXT NOT NULL,
+                    author_type TEXT NOT NULL,
+                    author_id TEXT NOT NULL DEFAULT '',
+                    author_name TEXT NOT NULL DEFAULT '',
+                    content TEXT NOT NULL DEFAULT '',
+                    reply_to_id INTEGER,
+                    reactions TEXT,
+                    kind TEXT NOT NULL DEFAULT 'text',
+                    created_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_crew_messages_group ON crew_messages(group_id, id)")
         }
     }
 

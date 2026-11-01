@@ -10,6 +10,7 @@ import fan.x0.focus.app.AndroidMessageNotifier
 import fan.x0.focus.app.AndroidLocaleController
 import fan.x0.focus.core.designsystem.theme.FocusTheme
 import fan.x0.focus.data.assistant.ChatSwitcher
+import fan.x0.focus.data.assistant.CrewSwitcher
 import org.koin.mp.KoinPlatform
 
 class MainActivity : ComponentActivity() {
@@ -39,6 +40,11 @@ class MainActivity : ComponentActivity() {
     private fun openConversationFrom(intent: Intent?) {
         val id = intent?.getStringExtra(AndroidMessageNotifier.EXTRA_CONVERSATION_ID) ?: return
         intent.removeExtra(AndroidMessageNotifier.EXTRA_CONVERSATION_ID)
-        KoinPlatform.getKoin().get<ChatSwitcher>().open(id)
+        val koin = KoinPlatform.getKoin()
+        if (id.startsWith("crew:")) {
+            koin.get<CrewSwitcher>().open(id.removePrefix("crew:"))
+        } else {
+            koin.get<ChatSwitcher>().open(id)
+        }
     }
 }

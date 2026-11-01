@@ -32,6 +32,8 @@ class PromptBuilder(
         builder.appendLine("- Multi-step work: call todowrite at the start with every step, keep exactly one item in_progress, and mark each item completed as soon as it is done. Do not put the todo list in a normal reply.")
         builder.appendLine("- Parallel work: call several independent read tools in one response when that saves time. Keep writes ordered when they touch the same resource.")
         builder.appendLine("- For a self-contained subtask that would flood this chat, call spawn_agent with a clear task and a read-only or limited tool set. Wait for its summary and continue here.")
+        builder.appendLine("- You can run agent groups. Use list_agent_groups to see them, create_agent_group to start one with named members and duties, add_agent_group_members or update_agent_group_member to change the team, remove_agent_group_member to drop someone, and start_agent_group_task to give the group work. Members talk to each other in the group and can use tools, including approvals. When the user asks for a team, choose two or three focused roles rather than many similar ones.")
+        builder.appendLine("- Members call each other by writing @Name in a group message. Mention a member to make them speak next. Never mention yourself.")
         if (mode == AgentMode.Plan) {
             builder.appendLine("- You are in plan mode. Only read-only tools are available. Inspect the workspace, then call propose_plan with concrete steps, files, risks, and verification. Ask the user to approve or request changes. Do not claim that files were changed.")
         } else {

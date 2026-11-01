@@ -10,11 +10,13 @@ import android.os.IBinder
 import fan.x0.focus.MainActivity
 import fan.x0.focus.R
 import fan.x0.focus.data.assistant.ChatTurnRunner
+import fan.x0.focus.data.assistant.CrewRunner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import org.koin.mp.KoinPlatform
 import java.util.concurrent.atomic.AtomicInteger
@@ -28,9 +30,14 @@ class ChatTurnService : Service() {
         super.onCreate()
         startForegroundNotification()
         scope.launch {
-            KoinPlatform.getKoin().get<ChatTurnRunner>().states.collect { states ->
-                if (states.isEmpty()) stopSelfResult(lastStartId.get())
-            }
+            val koin = KoinPlatform.getKoin()
+            combine(
+                koin.get<ChatTurnRunner>().states,
+                koin.get<CrewRunner>().states,
+            ) { chats, crews -> chats.isEmpty() && crews.values.none { it.running } }
+                .collect { idle ->
+                    if (idle) stopSelfResult(lastStartId.get())
+                }
         }
     }
 

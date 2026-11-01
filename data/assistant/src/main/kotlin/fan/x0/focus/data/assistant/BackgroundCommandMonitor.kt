@@ -72,12 +72,14 @@ class BackgroundCommandMonitor(
             }
             val tail = logs.toString().takeLast(LOG_TAIL_CHARS)
             val content = if (tail.isBlank()) summary else "$summary\n\nLogs:\n$tail"
-            chats.append(
-                conversationId = conversationId,
-                role = ChatRole.System,
-                content = content,
-                label = "bg:$jobId",
-            )
+            if (chats.conversation(conversationId) != null) {
+                chats.append(
+                    conversationId = conversationId,
+                    role = ChatRole.System,
+                    content = content,
+                    label = "bg:$jobId",
+                )
+            }
             _completed.tryEmit(
                 BackgroundCompletion(
                     conversationId = conversationId,

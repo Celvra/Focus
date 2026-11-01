@@ -32,6 +32,11 @@ data class SettingsUiState(
     val contributorAvatarsLoading: Boolean = false,
     val contributorsError: Boolean = false,
     val contributorsExpanded: Boolean = false,
+    val updateChecking: Boolean = false,
+    val updateChecked: Boolean = false,
+    val updateAvailable: Boolean = false,
+    val updateVersion: String = "",
+    val updateError: Boolean = false,
     val pendingClear: DataClearTarget? = null,
     val editorOpen: Boolean = false,
     val editingProviderId: String? = null,
@@ -97,6 +102,7 @@ sealed interface SettingsAction : UiAction {
     data class NotificationsEnabledChanged(val value: Boolean) : SettingsAction
     data class LanguageChanged(val tag: String?) : SettingsAction
     data object RefreshData : SettingsAction
+    data object CheckUpdate : SettingsAction
     data object ToggleContributors : SettingsAction
     data class AskClearData(val target: DataClearTarget) : SettingsAction
     data object CancelClearData : SettingsAction

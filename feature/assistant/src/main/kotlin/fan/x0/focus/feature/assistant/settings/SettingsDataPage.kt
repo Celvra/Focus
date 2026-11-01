@@ -334,6 +334,47 @@ private fun AboutGroup(
             },
         )
         item(
+            headlineContent = { Text(stringResource(R.string.settings_about_update_item)) },
+            supportingContent = {
+                Text(
+                    text = when {
+                        state.updateChecking -> stringResource(R.string.settings_about_update_checking)
+                        state.updateError -> stringResource(R.string.settings_about_update_failed)
+                        state.updateAvailable -> {
+                            stringResource(R.string.settings_about_update_available, state.updateVersion)
+                        }
+                        state.updateChecked && state.updateVersion.isBlank() -> {
+                            stringResource(R.string.settings_about_update_no_release)
+                        }
+                        state.updateChecked -> stringResource(R.string.settings_about_update_latest)
+                        else -> stringResource(R.string.settings_about_update_body)
+                    },
+                )
+            },
+            leadingContent = {
+                FocusCardGroupIcon(
+                    icon = FocusIcons.Refresh,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            },
+            trailingContent = {
+                when {
+                    state.updateChecking -> CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    state.updateAvailable -> FocusCardGroupValue(state.updateVersion)
+                    else -> Icon(
+                        imageVector = FocusIcons.Chevron,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            onClick = { onAction(SettingsAction.CheckUpdate) },
+        )
+        item(
             headlineContent = { Text(stringResource(R.string.settings_about_contributors_item)) },
             supportingContent = { Text(stringResource(R.string.settings_about_contributors_body)) },
             leadingContent = {

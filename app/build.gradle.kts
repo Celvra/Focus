@@ -20,8 +20,8 @@ android {
         applicationId = "fan.x0.focus"
         minSdk = 26
         targetSdk = 37
-        versionCode = releaseVersionCode ?: 1
-        versionName = releaseVersionName ?: "1.0"
+        versionCode = releaseVersionCode ?: 2
+        versionName = releaseVersionName ?: "1.0.1"
     }
 
     signingConfigs {
@@ -61,11 +61,13 @@ dependencies {
     implementation(projects.data.bridge)
     implementation(projects.feature.onboarding)
     implementation(projects.feature.chat)
+    implementation(projects.feature.crew)
     implementation(projects.feature.today)
     implementation(projects.feature.goals)
     implementation(projects.feature.library)
     implementation(projects.feature.bridge)
     implementation(projects.feature.assistant)
+    implementation(projects.feature.update)
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)
     implementation(libs.koin.android)

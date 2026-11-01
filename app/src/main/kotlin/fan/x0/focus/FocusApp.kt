@@ -53,14 +53,17 @@ import fan.x0.focus.core.designsystem.theme.FocusMotionDefaults
 import fan.x0.focus.data.assistant.AssistantSettings
 import fan.x0.focus.data.assistant.ChatSwitcher
 import fan.x0.focus.data.assistant.ChatTurnRunner
+import fan.x0.focus.data.assistant.CrewSwitcher
 import fan.x0.focus.feature.assistant.AssistantRoute
 import fan.x0.focus.feature.assistant.SettingsRoute
 import fan.x0.focus.feature.bridge.BridgeRoute
 import fan.x0.focus.feature.chat.ChatRoute
+import fan.x0.focus.feature.crew.CrewRoute
 import fan.x0.focus.feature.goals.GoalsRoute
 import fan.x0.focus.feature.library.LibraryRoute
 import fan.x0.focus.feature.onboarding.OnboardingRoute
 import fan.x0.focus.feature.today.TodayRoute
+import fan.x0.focus.feature.update.UpdateHost
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -119,10 +122,12 @@ private fun MainShell() {
     val shellState = shell.state.collectAsStateWithLifecycle()
     val turns = koinInject<ChatTurnRunner>()
     val switcher = koinInject<ChatSwitcher>()
+    val crewSwitcher = koinInject<CrewSwitcher>()
     val working by remember(turns) {
         turns.states.map { it.isNotEmpty() }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
     val openRequest by switcher.openRequest.collectAsStateWithLifecycle()
+    val crewRequest by crewSwitcher.openRequest.collectAsStateWithLifecycle()
 
     val navigate: (FocusRoute) -> Unit = { route ->
         backStack.open(route)
@@ -137,6 +142,11 @@ private fun MainShell() {
         if (openRequest != null) {
             backStack.open(FocusRoute.Chat)
             switcher.consumeOpenRequest()
+        }
+    }
+    LaunchedEffect(crewRequest) {
+        if (crewRequest != null) {
+            backStack.open(FocusRoute.Crew)
         }
     }
 
@@ -180,6 +190,7 @@ private fun MainShell() {
                         onDeleteConversation = shell::deleteConversation,
                         onExit = { activity?.finish() },
                     )
+                    UpdateHost()
                 }
             }
         }
@@ -270,6 +281,7 @@ private fun ShellContent(
                 FocusRoute.Today -> NavEntry(route) {
                     TodayRoute(onOpenChat = { backStack.open(FocusRoute.Chat) })
                 }
+                FocusRoute.Crew -> NavEntry(route) { CrewRoute() }
                 FocusRoute.Goals -> NavEntry(route) { GoalsRoute() }
                 FocusRoute.Library -> NavEntry(route) { LibraryRoute() }
                 FocusRoute.Bridge -> NavEntry(route) { BridgeRoute() }

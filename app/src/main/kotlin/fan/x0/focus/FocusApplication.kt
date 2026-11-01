@@ -13,6 +13,7 @@ import fan.x0.focus.core.notify.NotifyModule
 import fan.x0.focus.data.assistant.ApprovalStatus
 import fan.x0.focus.data.assistant.ApprovalStore
 import fan.x0.focus.data.assistant.AssistantModule
+import fan.x0.focus.data.assistant.CrewRunner
 import fan.x0.focus.data.assistant.ReminderWorker
 import fan.x0.focus.data.sources.FeedRefreshScheduler
 import fan.x0.focus.data.sources.SourcePreferences
@@ -21,6 +22,7 @@ import fan.x0.focus.data.bridge.BridgeModule as BridgeDataModule
 import fan.x0.focus.feature.assistant.AssistantFeatureModule
 import fan.x0.focus.feature.bridge.BridgeModule as BridgeFeatureModule
 import fan.x0.focus.feature.chat.ChatModule
+import fan.x0.focus.feature.crew.CrewModule
 import fan.x0.focus.feature.goals.GoalsModule
 import fan.x0.focus.feature.library.LibraryModule
 import fan.x0.focus.feature.onboarding.OnboardingModule
@@ -45,6 +47,7 @@ import org.koin.plugin.module.dsl.startKoin
         AppModule::class,
         OnboardingModule::class,
         ChatModule::class,
+        CrewModule::class,
         TodayModule::class,
         GoalsModule::class,
         LibraryModule::class,
@@ -97,6 +100,7 @@ class FocusApplication : Application() {
 
     private suspend fun bootstrap() {
         val koin = KoinPlatform.getKoin()
+        koin.get<CrewRunner>()
         val approvals = koin.get<ApprovalStore>()
         approvals.pending().forEach { approvals.decide(it.id, ApprovalStatus.Expired, null) }
         val hours = koin.get<SourcePreferences>().settings.first().refreshIntervalHours

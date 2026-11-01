@@ -7,6 +7,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 enum class FocusRoute {
     Chat,
     Today,
+    Crew,
     Goals,
     Library,
     Bridge,

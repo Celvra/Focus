@@ -25,4 +25,5 @@ dependencies {
     implementation(libs.work.runtime)
     implementation(libs.jsoup)
     testImplementation(libs.junit)
+    testImplementation(libs.ktor.client.okhttp)
 }
