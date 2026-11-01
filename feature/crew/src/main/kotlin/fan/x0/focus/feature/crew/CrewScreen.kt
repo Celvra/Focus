@@ -69,7 +69,7 @@ fun CrewScreen(
     }
 
     BackHandler(enabled = state.group != null && !state.memberSheetOpen && state.groupDraft == null &&
-        state.menu == null && state.deleteGroup == null && state.removeMember == null) {
+        state.menu == null && state.deleteGroup == null) {
         onAction(CrewAction.CloseGroup)
     }
 
@@ -96,13 +96,6 @@ fun CrewScreen(
             group = group,
             onConfirm = { onAction(CrewAction.ConfirmDeleteGroup) },
             onDismiss = { onAction(CrewAction.CancelDeleteGroup) },
-        )
-    }
-    state.removeMember?.let { member ->
-        CrewRemoveMemberDialog(
-            member = member,
-            onConfirm = { onAction(CrewAction.ConfirmRemoveMember) },
-            onDismiss = { onAction(CrewAction.CancelRemoveMember) },
         )
     }
     state.menu?.let { menu ->

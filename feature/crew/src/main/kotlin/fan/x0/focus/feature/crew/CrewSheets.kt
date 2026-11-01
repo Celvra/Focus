@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetState
@@ -45,8 +46,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import fan.x0.focus.core.designsystem.components.AvatarState
 import fan.x0.focus.core.designsystem.components.AvatarStyle
 import fan.x0.focus.core.designsystem.components.FocusAvatar
 import fan.x0.focus.core.designsystem.components.FocusIcons
@@ -349,11 +353,70 @@ private fun MemberList(state: CrewUiState, onAction: (CrewAction) -> Unit) {
                                     )
                                 }
                             }
-                            IconButton(onClick = hapticTap { onAction(CrewAction.AskRemoveMember(member.id)) }) {
-                                Icon(
-                                    FocusIcons.Delete,
-                                    contentDescription = stringResource(R.string.crew_remove_member),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            Switch(
+                                checked = member.active,
+                                onCheckedChange = { checked ->
+                                    onAction(CrewAction.SetMemberActive(member.id, checked))
+                                },
+                                modifier = Modifier.semantics {
+                                    contentDescription = member.name
+                                },
+                            )
+                        }
+                    }
+                }
+                if (state.removedMembers.isNotEmpty()) {
+                    item(key = "removed-header", contentType = "header") {
+                        Text(
+                            text = stringResource(R.string.crew_removed_members),
+                            style = MaterialTheme.typography.titleSmallEmphasized,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+                        )
+                    }
+                    items(
+                        items = state.removedMembers,
+                        key = { "removed-${it.id}" },
+                        contentType = { "removed" },
+                    ) { member ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = FocusShapeTokens.card,
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                CrewAvatar(
+                                    preset = member.avatarPreset,
+                                    palette = member.avatarPalette,
+                                    path = member.avatarPath,
+                                    size = 36.dp,
+                                    state = AvatarState.Sleep,
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = member.name,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (member.duty.isNotBlank()) {
+                                        Text(
+                                            text = member.duty,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                                FocusTextButton(
+                                    text = stringResource(R.string.crew_restore_member),
+                                    onClick = {
+                                        onAction(CrewAction.SetMemberActive(member.id, true))
+                                    },
                                 )
                             }
                         }
@@ -446,29 +509,6 @@ fun CrewDeleteGroupDialog(
         confirmButton = {
             TextButton(onClick = hapticTap(onConfirm)) {
                 Text(stringResource(R.string.crew_delete))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = hapticTap(onDismiss)) {
-                Text(stringResource(R.string.crew_cancel))
-            }
-        },
-    )
-}
-
-@Composable
-fun CrewRemoveMemberDialog(
-    member: CrewMemberUi,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.crew_remove_member_title)) },
-        text = { Text(stringResource(R.string.crew_remove_member_body, member.name)) },
-        confirmButton = {
-            TextButton(onClick = hapticTap(onConfirm)) {
-                Text(stringResource(R.string.crew_remove_member))
             }
         },
         dismissButton = {

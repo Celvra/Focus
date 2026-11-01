@@ -209,6 +209,19 @@ class CrewStore(private val database: AssistantDatabase) {
         touchGroup(member.groupId)
     }
 
+    suspend fun setMemberActive(id: String, active: Boolean) = withContext(Dispatchers.IO) {
+        val groupId = database.readableDatabase.rawQuery(
+            "SELECT group_id FROM crew_members WHERE id = ? LIMIT 1",
+            arrayOf(id),
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null } ?: return@withContext
+        val values = ContentValues().apply {
+            put("active", if (active) 1 else 0)
+            put("updated_at", System.currentTimeMillis())
+        }
+        database.writableDatabase.update("crew_members", values, "id = ?", arrayOf(id))
+        touchGroup(groupId)
+    }
+
     suspend fun removeMember(id: String) = withContext(Dispatchers.IO) {
         val member = database.readableDatabase.rawQuery(
             "SELECT group_id FROM crew_members WHERE id = ? LIMIT 1",

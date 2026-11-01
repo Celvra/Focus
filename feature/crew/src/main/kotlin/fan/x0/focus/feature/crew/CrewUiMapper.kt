@@ -16,6 +16,7 @@ internal fun CrewMember.toUi(avatars: CrewAvatarStore): CrewMemberUi = CrewMembe
     avatarPreset = avatarPreset,
     avatarPalette = avatarPalette,
     avatarPath = avatars.path(avatarImage),
+    active = active,
 )
 
 internal fun AgentGroup.toUi(

@@ -28,6 +28,7 @@ data class CrewMemberUi(
     val avatarPreset: Int,
     val avatarPalette: Int,
     val avatarPath: String?,
+    val active: Boolean = true,
 )
 
 data class CrewQuoteUi(
@@ -141,6 +142,7 @@ data class CrewUiState(
     val showArchived: Boolean = false,
     val groupMenuId: String? = null,
     val members: List<CrewMemberUi> = emptyList(),
+    val removedMembers: List<CrewMemberUi> = emptyList(),
     val history: List<CrewEntryUi> = emptyList(),
     val live: List<CrewEntryUi> = emptyList(),
     val running: Boolean = false,
@@ -157,7 +159,6 @@ data class CrewUiState(
     val groupDraft: GroupDraft? = null,
     val memberDraft: MemberDraft? = null,
     val deleteGroup: CrewGroupUi? = null,
-    val removeMember: CrewMemberUi? = null,
     val saving: Boolean = false,
 ) : UiState {
     val entries: List<CrewEntryUi>
@@ -206,9 +207,7 @@ sealed interface CrewAction : UiAction {
     data class MemberPhotoPicked(val uri: String) : CrewAction
     data object MemberPhotoCleared : CrewAction
     data object SaveMember : CrewAction
-    data class AskRemoveMember(val id: String) : CrewAction
-    data object ConfirmRemoveMember : CrewAction
-    data object CancelRemoveMember : CrewAction
+    data class SetMemberActive(val id: String, val active: Boolean) : CrewAction
     data class InputChanged(val value: String) : CrewAction
     data class MentionPick(val id: String) : CrewAction
     data object MentionDismiss : CrewAction

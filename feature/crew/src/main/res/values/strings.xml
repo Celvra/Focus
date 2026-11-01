@@ -21,8 +21,6 @@
     <string name="crew_members">Members</string>
     <string name="crew_add_member">Add agent</string>
     <string name="crew_remove_member">Remove</string>
-    <string name="crew_remove_member_title">Remove this agent?</string>
-    <string name="crew_remove_member_body">%1$s will stop speaking in this group. Earlier messages stay.</string>
     <string name="crew_lead">Lead</string>
     <string name="crew_no_members">No members yet.</string>
     <string name="crew_member_new">New agent</string>
@@ -81,4 +79,6 @@
     <string name="crew_tool_output">Output</string>
     <string name="crew_tool_expand">Show details</string>
     <string name="crew_tool_collapse">Hide details</string>
+    <string name="crew_removed_members">Removed agents</string>
+    <string name="crew_restore_member">Restore</string>
 </resources>

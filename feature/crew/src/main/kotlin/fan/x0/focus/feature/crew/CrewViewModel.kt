@@ -158,11 +158,7 @@ class CrewViewModel(
                 copy(memberDraft = memberDraft?.copy(avatarImage = "", avatarPath = null))
             }
             CrewAction.SaveMember -> saveMember()
-            is CrewAction.AskRemoveMember -> updateState {
-                copy(removeMember = members.firstOrNull { it.id == action.id })
-            }
-            CrewAction.ConfirmRemoveMember -> confirmRemoveMember()
-            CrewAction.CancelRemoveMember -> updateState { copy(removeMember = null) }
+            is CrewAction.SetMemberActive -> setMemberActive(action.id, action.active)
             is CrewAction.InputChanged -> inputChanged(action.value)
             is CrewAction.MentionPick -> pickMention(action.id)
             CrewAction.MentionDismiss -> updateState { copy(mention = CrewMentionUi()) }
@@ -271,6 +267,7 @@ class CrewViewModel(
                             avatars,
                         ),
                         members = detail.members.map { it.toUi(avatars) },
+                        removedMembers = allMembers.filterNot { it.active }.map { it.toUi(avatars) },
                         history = messages.toEntries(allMembers, avatars),
                         live = live,
                         running = running,
@@ -313,7 +310,7 @@ class CrewViewModel(
                 memberDraft = null,
                 groupDraft = null,
                 deleteGroup = null,
-                removeMember = null,
+                removedMembers = emptyList(),
             )
         }
     }
@@ -375,6 +372,7 @@ class CrewViewModel(
                 updateState {
                     copy(
                         members = detail?.members?.map { it.toUi(avatars) } ?: members,
+                        removedMembers = allMembers.filterNot { it.active }.map { it.toUi(avatars) },
                         group = detail?.group?.toUi(
                             detail.members,
                             messages.lastOrNull(),
@@ -672,14 +670,14 @@ class CrewViewModel(
         }
     }
 
-    private fun confirmRemoveMember() {
-        val target = currentState.removeMember ?: return
+    private fun setMemberActive(id: String, active: Boolean) {
         val group = currentState.group ?: return
+        val member = allMembers.firstOrNull { it.id == id } ?: return
+        if (member.active == active) return
         viewModelScope.launch {
             try {
-                store.removeMember(target.id)
-                runner.announce(group.id, "- ${target.name}")
-                updateState { copy(removeMember = null) }
+                store.setMemberActive(id, active)
+                runner.announce(group.id, "${if (active) "+" else "-"} ${member.name}")
                 loadGroup(group.id, showLoading = false)
                 refreshGroups()
             } catch (e: CancellationException) {

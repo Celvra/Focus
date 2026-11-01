@@ -21,8 +21,6 @@
     <string name="crew_members">成员</string>
     <string name="crew_add_member">添加智能体</string>
     <string name="crew_remove_member">移出</string>
-    <string name="crew_remove_member_title">移出这个智能体？</string>
-    <string name="crew_remove_member_body">%1$s 将不再在这个群组里发言，之前的消息会保留。</string>
     <string name="crew_lead">组长</string>
     <string name="crew_no_members">还没有成员。</string>
     <string name="crew_member_new">新智能体</string>
@@ -81,4 +79,6 @@
     <string name="crew_tool_output">输出</string>
     <string name="crew_tool_expand">展开详情</string>
     <string name="crew_tool_collapse">收起详情</string>
+    <string name="crew_removed_members">已移出的智能体</string>
+    <string name="crew_restore_member">恢复</string>
 </resources>
