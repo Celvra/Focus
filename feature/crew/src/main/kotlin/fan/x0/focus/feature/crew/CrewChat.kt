@@ -2,6 +2,9 @@ package fan.x0.focus.feature.crew
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -27,6 +30,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,14 +51,17 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,6 +78,7 @@ import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
+import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.data.assistant.CrewApprovalPhase
 import fan.x0.focus.data.assistant.CrewToolStatus
@@ -494,50 +503,147 @@ private fun CrewQuoteHeader(quote: CrewQuoteUi, onJump: (Long) -> Unit) {
 
 @Composable
 private fun CrewToolTraces(tools: List<CrewToolUi>) {
-    Row(
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        tools.forEach { tool ->
+            key(tool.id) {
+                CrewToolCard(tool)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CrewToolCard(tool: CrewToolUi) {
+    var expanded by rememberSaveable(tool.id) { mutableStateOf(false) }
+    val motion = LocalFocusMotion.current
+    val scheme = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        targetValue = when (tool.status) {
+            CrewToolStatus.Failed -> scheme.errorContainer
+            CrewToolStatus.Running -> scheme.secondaryContainer
+            CrewToolStatus.Done -> scheme.surfaceContainer
+        },
+        animationSpec = motion.effectsDefault(),
+        label = "crewToolContainer",
+    )
+    val content = when (tool.status) {
+        CrewToolStatus.Failed -> scheme.onErrorContainer
+        CrewToolStatus.Running -> scheme.onSecondaryContainer
+        CrewToolStatus.Done -> scheme.onSurfaceVariant
+    }
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = motion.spatialDefault(),
+        label = "crewToolChevron",
+    )
+    val expandable = tool.arguments.isNotBlank() || tool.detail.isNotBlank()
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .animateContentSize(motion.spatialDefault()),
+        shape = MaterialTheme.shapes.large,
+        color = container,
+        contentColor = content,
+        onClick = hapticTap { if (expandable) expanded = !expanded },
     ) {
-        tools.takeLast(3).forEach { tool ->
-            key(tool.id) {
-                Surface(
-                    shape = CircleShape,
-                    color = when (tool.status) {
-                        CrewToolStatus.Failed -> MaterialTheme.colorScheme.errorContainer
-                        CrewToolStatus.Running -> MaterialTheme.colorScheme.secondaryContainer
-                        CrewToolStatus.Done -> MaterialTheme.colorScheme.surfaceContainerHigh
-                    },
-                    contentColor = when (tool.status) {
-                        CrewToolStatus.Failed -> MaterialTheme.colorScheme.onErrorContainer
-                        CrewToolStatus.Running -> MaterialTheme.colorScheme.onSecondaryContainer
-                        CrewToolStatus.Done -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        if (tool.status == CrewToolStatus.Running) {
-                            FocusLoadingBlob(size = 10.dp)
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (tool.status == CrewToolStatus.Running) {
+                    FocusLoadingBlob(size = 12.dp)
+                } else {
+                    Icon(
+                        imageVector = if (tool.status == CrewToolStatus.Done) {
+                            FocusIcons.Check
                         } else {
-                            Icon(
-                                imageVector = if (tool.status == CrewToolStatus.Done) {
-                                    FocusIcons.Check
-                                } else {
-                                    FocusIcons.Warning
-                                },
-                                contentDescription = null,
-                                modifier = Modifier.size(10.dp),
+                            FocusIcons.Warning
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+                Text(
+                    text = tool.label,
+                    style = MaterialTheme.typography.labelLargeEmphasized,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (tool.summary.isNotBlank()) {
+                    Text(
+                        text = tool.summary,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                if (expandable) {
+                    Icon(
+                        imageVector = FocusIcons.ArrowDown,
+                        contentDescription = stringResource(
+                            if (expanded) R.string.crew_tool_collapse else R.string.crew_tool_expand,
+                        ),
+                        modifier = Modifier
+                            .size(18.dp)
+                            .graphicsLayer { rotationZ = rotation },
+                    )
+                }
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (tool.arguments.isNotBlank()) {
+                        Text(
+                            text = stringResource(R.string.crew_tool_input),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (tool.status == CrewToolStatus.Failed) {
+                                scheme.onErrorContainer
+                            } else {
+                                scheme.onSurfaceVariant
+                            },
+                        )
+                        SelectionContainer {
+                            Text(
+                                text = tool.arguments,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 160.dp)
+                                    .verticalScroll(rememberScrollState()),
                             )
                         }
+                    }
+                    if (tool.detail.isNotBlank()) {
                         Text(
-                            text = tool.label,
+                            text = stringResource(R.string.crew_tool_output),
                             style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
+                            color = if (tool.status == CrewToolStatus.Failed) {
+                                scheme.onErrorContainer
+                            } else {
+                                scheme.onSurfaceVariant
+                            },
                         )
+                        SelectionContainer {
+                            Text(
+                                text = tool.detail,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 240.dp)
+                                    .verticalScroll(rememberScrollState()),
+                            )
+                        }
                     }
                 }
             }

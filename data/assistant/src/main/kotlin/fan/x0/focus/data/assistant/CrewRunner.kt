@@ -255,7 +255,13 @@ class CrewRunner(
                             key,
                             "Retry ${event.attempt}/${event.max}: ${event.reason}",
                         )
-                        is CrewSpeechEvent.ToolStarted -> runs.startTool(groupId, key, event.id, event.label)
+                        is CrewSpeechEvent.ToolStarted -> runs.startTool(
+                            groupId,
+                            key,
+                            event.id,
+                            event.label,
+                            event.arguments,
+                        )
                         is CrewSpeechEvent.ToolFinished -> runs.finishTool(
                             groupId,
                             key,
@@ -263,6 +269,8 @@ class CrewRunner(
                             event.label,
                             event.ok,
                             event.summary,
+                            event.arguments,
+                            event.detail,
                         )
                         is CrewSpeechEvent.ApprovalRequested -> {
                             runs.approvalRequested(groupId, event.request)

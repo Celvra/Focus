@@ -16,6 +16,8 @@ data class CrewToolTrace(
     val label: String,
     val status: CrewToolStatus,
     val summary: String = "",
+    val arguments: String = "",
+    val detail: String = "",
 )
 
 data class CrewApprovalCard(
@@ -159,9 +161,16 @@ class CrewRunStore {
         updateAgent(groupId, key) { it.copy(activity = text.take(120)) }
     }
 
-    fun startTool(groupId: String, key: String, id: String, label: String) {
+    fun startTool(groupId: String, key: String, id: String, label: String, arguments: String = "") {
         updateAgent(groupId, key) {
-            it.copy(tools = it.tools + CrewToolTrace(id = id, label = label, status = CrewToolStatus.Running))
+            it.copy(
+                tools = it.tools + CrewToolTrace(
+                    id = id,
+                    label = label,
+                    status = CrewToolStatus.Running,
+                    arguments = arguments,
+                ),
+            )
         }
     }
 
@@ -172,13 +181,17 @@ class CrewRunStore {
         label: String,
         ok: Boolean,
         summary: String,
+        arguments: String = "",
+        detail: String = "",
     ) {
         updateAgent(groupId, key) { agent ->
             val trace = CrewToolTrace(
                 id = id,
                 label = label,
                 status = if (ok) CrewToolStatus.Done else CrewToolStatus.Failed,
-                summary = summary.take(120),
+                summary = summary.take(200),
+                arguments = arguments,
+                detail = detail,
             )
             agent.copy(tools = agent.tools.filterNot { it.id == id } + trace)
         }

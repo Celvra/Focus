@@ -77,4 +77,8 @@
     <string name="crew_edit_saved">消息已更新</string>
     <string name="crew_delete_message_title">删除这条消息？</string>
     <string name="crew_delete_message_body">消息会从这个群组里移除。</string>
+    <string name="crew_tool_input">输入</string>
+    <string name="crew_tool_output">输出</string>
+    <string name="crew_tool_expand">展开详情</string>
+    <string name="crew_tool_collapse">收起详情</string>
 </resources>

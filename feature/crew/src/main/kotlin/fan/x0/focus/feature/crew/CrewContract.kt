@@ -46,6 +46,8 @@ data class CrewToolUi(
     val label: String,
     val status: CrewToolStatus,
     val summary: String,
+    val arguments: String = "",
+    val detail: String = "",
 )
 
 sealed interface CrewEntryUi {

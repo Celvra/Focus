@@ -134,7 +134,9 @@ internal fun CrewRunEntry.toUi(
                 streaming = streaming,
                 activity = activity,
                 mentions = CrewMentions.names(text, members).map { CrewMentionChipUi(it) },
-                tools = tools.map { CrewToolUi(it.id, it.label, it.status, it.summary) },
+                tools = tools.map {
+                    CrewToolUi(it.id, it.label, it.status, it.summary, it.arguments, it.detail)
+                },
                 error = error,
             )
         }

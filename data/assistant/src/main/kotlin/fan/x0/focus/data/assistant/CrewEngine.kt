@@ -30,12 +30,14 @@ sealed interface CrewSpeechEvent {
     data class TextReset(val text: String) : CrewSpeechEvent
     data class Activity(val text: String) : CrewSpeechEvent
     data class Retry(val attempt: Int, val max: Int, val reason: String) : CrewSpeechEvent
-    data class ToolStarted(val id: String, val label: String) : CrewSpeechEvent
+    data class ToolStarted(val id: String, val label: String, val arguments: String = "") : CrewSpeechEvent
     data class ToolFinished(
         val id: String,
         val label: String,
         val ok: Boolean,
         val summary: String,
+        val arguments: String = "",
+        val detail: String = "",
     ) : CrewSpeechEvent
     data class ApprovalRequested(val request: ApprovalRequest) : CrewSpeechEvent
     data class ApprovalResolved(val request: ApprovalRequest, val approved: Boolean) : CrewSpeechEvent
@@ -194,7 +196,13 @@ class CrewEngine(
                 )
                 val results = result.toolCalls.map { call ->
                     if (call.name in CrewToolCatalog.agentNames) hasCrewAction = true
-                    emit(CrewSpeechEvent.ToolStarted(call.id, ToolLabels.of(call.name)))
+                    emit(
+                        CrewSpeechEvent.ToolStarted(
+                            id = call.id,
+                            label = ToolLabels.of(call.name),
+                            arguments = call.arguments.take(ARGUMENT_LIMIT),
+                        ),
+                    )
                     val outcome = executeTool(call, group, member, members, emitEvent)
                     if (outcome.handoff != null) handoff = outcome.handoff
                     if (outcome.finish) finish = true
@@ -208,6 +216,8 @@ class CrewEngine(
                             label = ToolLabels.of(call.name),
                             ok = outcome.result.ok,
                             summary = outcome.result.summary,
+                            arguments = call.arguments.take(ARGUMENT_LIMIT),
+                            detail = outcome.result.content.take(DETAIL_LIMIT),
                         ),
                     )
                     call to outcome
@@ -474,6 +484,8 @@ class CrewEngine(
         private const val CONTEXT_MESSAGES = 60
         private const val MESSAGE_LIMIT = 4_000
         private const val RESULT_LIMIT = 12_000
+        private const val ARGUMENT_LIMIT = 2_000
+        private const val DETAIL_LIMIT = 6_000
         private const val APPROVAL_TIMEOUT_MS = 15 * 60 * 1000L
         private val EXCLUDED = setOf(
             "ask",

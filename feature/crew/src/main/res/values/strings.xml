@@ -77,4 +77,8 @@
     <string name="crew_edit_saved">Message updated</string>
     <string name="crew_delete_message_title">Delete this message?</string>
     <string name="crew_delete_message_body">The message will be removed from this group.</string>
+    <string name="crew_tool_input">Input</string>
+    <string name="crew_tool_output">Output</string>
+    <string name="crew_tool_expand">Show details</string>
+    <string name="crew_tool_collapse">Hide details</string>
 </resources>
