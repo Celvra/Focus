@@ -358,6 +358,7 @@ private fun MemberList(state: CrewUiState, onAction: (CrewAction) -> Unit) {
                                 onCheckedChange = { checked ->
                                     onAction(CrewAction.SetMemberActive(member.id, checked))
                                 },
+                                enabled = !(member.active && state.members.size == 1),
                                 modifier = Modifier.semantics {
                                     contentDescription = member.name
                                 },

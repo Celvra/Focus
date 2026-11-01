@@ -724,6 +724,7 @@ class CrewViewModel(
             try {
                 val started = runner.send(group.id, text, replyTo)
                 if (started) reloadHistory(group.id)
+                refreshGroups()
                 updateState { copy(sending = false) }
             } catch (e: CancellationException) {
                 throw e
@@ -784,10 +785,12 @@ class CrewViewModel(
             try {
                 store.updateMessageContent(edit.messageId, group.id, draft)
                 store.deleteMessagesAfter(group.id, edit.messageId)
+                if (group.archived) store.setArchived(group.id, false)
                 updateState { copy(saving = false, edit = null) }
                 val members = store.members(group.id)
                 runner.start(group.id, CrewMentions.ids(draft, members).toSet())
                 reloadHistory(group.id)
+                refreshGroups()
                 sendEffect(CrewEffect.MessageEdited)
             } catch (e: CancellationException) {
                 throw e
