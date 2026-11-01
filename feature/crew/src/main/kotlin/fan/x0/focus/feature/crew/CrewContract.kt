@@ -18,6 +18,7 @@ data class CrewGroupUi(
     val previewAuthor: String,
     val updatedAt: Long,
     val running: Boolean,
+    val archived: Boolean = false,
 )
 
 data class CrewMemberUi(
@@ -124,6 +125,8 @@ data class CrewUiState(
     val groupLoading: Boolean = false,
     val groups: List<CrewGroupUi> = emptyList(),
     val group: CrewGroupUi? = null,
+    val showArchived: Boolean = false,
+    val groupMenuId: String? = null,
     val members: List<CrewMemberUi> = emptyList(),
     val history: List<CrewEntryUi> = emptyList(),
     val live: List<CrewEntryUi> = emptyList(),
@@ -157,6 +160,12 @@ sealed interface CrewAction : UiAction {
     data object CloseGroup : CrewAction
     data object NewGroup : CrewAction
     data object EditGroup : CrewAction
+    data class EditGroupById(val id: String) : CrewAction
+    data object ToggleArchivedView : CrewAction
+    data class OpenGroupMenu(val id: String) : CrewAction
+    data object CloseGroupMenu : CrewAction
+    data class SetArchived(val id: String, val archived: Boolean) : CrewAction
+    data class AskDeleteGroupById(val id: String) : CrewAction
     data object DismissGroupEditor : CrewAction
     data class GroupNameChanged(val value: String) : CrewAction
     data class GroupTopicChanged(val value: String) : CrewAction

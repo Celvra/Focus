@@ -275,7 +275,25 @@ private fun CrewChatTopBar(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.crew_delete_group)) },
+                        text = {
+                            Text(
+                                stringResource(
+                                    if (group.archived) R.string.crew_unarchive else R.string.crew_archive,
+                                ),
+                            )
+                        },
+                        onClick = {
+                            menuOpen = false
+                            onAction(CrewAction.SetArchived(group.id, !group.archived))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.crew_delete_group),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        },
                         onClick = {
                             menuOpen = false
                             onAction(CrewAction.AskDeleteGroup)

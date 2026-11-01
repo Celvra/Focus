@@ -60,4 +60,12 @@
     <string name="crew_copy">复制</string>
     <string name="crew_you">你</string>
     <string name="crew_copied">已复制</string>
+    <string name="crew_archived_title">已归档群组</string>
+    <string name="crew_archived_badge">已归档</string>
+    <string name="crew_archive">归档</string>
+    <string name="crew_unarchive">恢复</string>
+    <string name="crew_show_archived">查看已归档群组</string>
+    <string name="crew_show_active">查看活跃群组</string>
+    <string name="crew_archived_empty_title">没有已归档群组</string>
+    <string name="crew_archived_empty_body">归档的群组会留在这里，直到你恢复或删除它们。</string>
 </resources>

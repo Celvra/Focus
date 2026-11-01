@@ -20,15 +20,24 @@ class CrewStore(private val database: AssistantDatabase) {
     private val _deleted = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val deleted: SharedFlow<String> = _deleted.asSharedFlow()
 
-    suspend fun groups(): List<AgentGroup> = withContext(Dispatchers.IO) {
+    suspend fun groups(includeArchived: Boolean = false): List<AgentGroup> = withContext(Dispatchers.IO) {
+        val filter = if (includeArchived) "" else "WHERE archived = 0"
         database.readableDatabase.rawQuery(
-            "SELECT $GROUP_COLUMNS FROM agent_groups ORDER BY updated_at DESC",
+            "SELECT $GROUP_COLUMNS FROM agent_groups $filter ORDER BY updated_at DESC",
             null,
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) add(cursor.toGroup())
             }
         }
+    }
+
+    suspend fun setArchived(id: String, archived: Boolean) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply {
+            put("archived", if (archived) 1 else 0)
+            put("updated_at", System.currentTimeMillis())
+        }
+        database.writableDatabase.update("agent_groups", values, "id = ?", arrayOf(id))
     }
 
     suspend fun group(id: String): AgentGroup? = withContext(Dispatchers.IO) {

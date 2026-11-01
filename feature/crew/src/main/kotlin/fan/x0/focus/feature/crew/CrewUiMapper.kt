@@ -40,6 +40,7 @@ internal fun AgentGroup.toUi(
     },
     updatedAt = if (last != null) last.createdAt else updatedAt,
     running = running,
+    archived = archived,
 )
 
 internal fun List<CrewMessage>.toEntries(

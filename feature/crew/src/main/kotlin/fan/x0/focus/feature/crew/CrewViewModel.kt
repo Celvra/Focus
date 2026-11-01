@@ -98,6 +98,14 @@ class CrewViewModel(
             CrewAction.CloseGroup -> closeGroup()
             CrewAction.NewGroup -> newGroup()
             CrewAction.EditGroup -> editGroup()
+            is CrewAction.EditGroupById -> editGroupById(action.id)
+            CrewAction.ToggleArchivedView -> updateState { copy(showArchived = !showArchived, groupMenuId = null) }
+            is CrewAction.OpenGroupMenu -> updateState { copy(groupMenuId = action.id) }
+            CrewAction.CloseGroupMenu -> updateState { copy(groupMenuId = null) }
+            is CrewAction.SetArchived -> setArchived(action.id, action.archived)
+            is CrewAction.AskDeleteGroupById -> updateState {
+                copy(groupMenuId = null, deleteGroup = groups.firstOrNull { it.id == action.id })
+            }
             CrewAction.DismissGroupEditor -> updateState { copy(groupDraft = null) }
             is CrewAction.GroupNameChanged -> updateState {
                 copy(groupDraft = groupDraft?.copy(name = action.value))
@@ -181,7 +189,7 @@ class CrewViewModel(
         }
         loadJob = viewModelScope.launch {
             try {
-                val rows = store.groups().map { group ->
+                val rows = store.groups(includeArchived = true).map { group ->
                     Triple(group, store.members(group.id), store.lastMessage(group.id))
                 }
                 val running = runner.states.value.values.filter { it.running }.mapTo(mutableSetOf()) { it.groupId }
@@ -284,6 +292,7 @@ class CrewViewModel(
                 mention = CrewMentionUi(),
                 reply = null,
                 menu = null,
+                groupMenuId = null,
                 memberSheetOpen = false,
                 memberDraft = null,
                 groupDraft = null,
@@ -416,6 +425,41 @@ class CrewViewModel(
         }
     }
 
+    private fun editGroupById(id: String) {
+        viewModelScope.launch {
+            try {
+                val group = store.group(id) ?: return@launch
+                val draft = GroupDraft(
+                    id = group.id,
+                    name = group.name,
+                    topic = group.topic,
+                    avatarPreset = group.avatarPreset,
+                    avatarPalette = group.avatarPalette,
+                )
+                updateState { copy(groupDraft = draft, groupMenuId = null) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                emitError(e.toAppError())
+            }
+        }
+    }
+
+    private fun setArchived(id: String, archived: Boolean) {
+        viewModelScope.launch {
+            try {
+                store.setArchived(id, archived)
+                updateState { copy(groupMenuId = null) }
+                if (archived && currentState.group?.id == id) closeGroup()
+                refreshGroups()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                emitError(e.toAppError())
+            }
+        }
+    }
+
     private fun addDraftMember() {
         val draft = currentState.groupDraft ?: return
         val seed = abs(draft.members.size + draft.name.hashCode())
@@ -477,7 +521,9 @@ class CrewViewModel(
                         avatarPalette = draft.avatarPalette,
                     )
                     updateState { copy(saving = false, groupDraft = null) }
-                    loadGroup(draft.id, showLoading = false)
+                    if (currentState.group?.id == draft.id) {
+                        loadGroup(draft.id, showLoading = false)
+                    }
                     refreshGroups()
                 }
             } catch (e: CancellationException) {

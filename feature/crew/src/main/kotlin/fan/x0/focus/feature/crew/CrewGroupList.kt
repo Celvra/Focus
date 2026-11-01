@@ -2,6 +2,7 @@ package fan.x0.focus.feature.crew
 
 import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,21 +51,37 @@ fun CrewGroupListScreen(
     snackbar: SnackbarHostState,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val groups = state.groups.filter { it.archived == state.showArchived }
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             FocusLargeTopBar(
-                title = stringResource(R.string.crew_title),
+                title = stringResource(
+                    if (state.showArchived) R.string.crew_archived_title else R.string.crew_title,
+                ),
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    IconButton(onClick = hapticTap { onAction(CrewAction.NewGroup) }) {
+                    IconButton(
+                        onClick = hapticTap { onAction(CrewAction.ToggleArchivedView) },
+                    ) {
                         Icon(
-                            FocusIcons.Add,
-                            contentDescription = stringResource(R.string.crew_new_group),
+                            if (state.showArchived) FocusIcons.Unarchive else FocusIcons.Archive,
+                            contentDescription = stringResource(
+                                if (state.showArchived) R.string.crew_show_active else R.string.crew_show_archived,
+                            ),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                    if (!state.showArchived) {
+                        IconButton(onClick = hapticTap { onAction(CrewAction.NewGroup) }) {
+                            Icon(
+                                FocusIcons.Add,
+                                contentDescription = stringResource(R.string.crew_new_group),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 },
             )
@@ -82,7 +101,16 @@ fun CrewGroupListScreen(
                 state.loading -> item(key = "loading", contentType = "loading") {
                     FocusLoadingBlock()
                 }
-                state.groups.isEmpty() -> item(key = "empty", contentType = "empty") {
+                groups.isEmpty() && state.showArchived -> item(key = "empty-archived", contentType = "empty") {
+                    FocusEmptyState(
+                        icon = FocusIcons.Archive,
+                        title = stringResource(R.string.crew_archived_empty_title),
+                        body = stringResource(R.string.crew_archived_empty_body),
+                        actionLabel = stringResource(R.string.crew_show_active),
+                        onAction = { onAction(CrewAction.ToggleArchivedView) },
+                    )
+                }
+                groups.isEmpty() -> item(key = "empty", contentType = "empty") {
                     FocusEmptyState(
                         icon = FocusIcons.Groups,
                         title = stringResource(R.string.crew_empty_title),
@@ -92,14 +120,18 @@ fun CrewGroupListScreen(
                     )
                 }
                 else -> items(
-                    items = state.groups,
+                    items = groups,
                     key = { it.id },
                     contentType = { "group" },
                 ) { group ->
-                    androidx.compose.foundation.layout.Box(modifier = Modifier.animateItem()) {
+                    Box(modifier = Modifier.animateItem()) {
                         CrewGroupCard(
                             group = group,
+                            menuOpen = state.groupMenuId == group.id,
                             onClick = { onAction(CrewAction.OpenGroup(group.id)) },
+                            onOpenMenu = { onAction(CrewAction.OpenGroupMenu(group.id)) },
+                            onCloseMenu = { onAction(CrewAction.CloseGroupMenu) },
+                            onAction = onAction,
                         )
                     }
                 }
@@ -109,7 +141,14 @@ fun CrewGroupListScreen(
 }
 
 @Composable
-private fun CrewGroupCard(group: CrewGroupUi, onClick: () -> Unit) {
+private fun CrewGroupCard(
+    group: CrewGroupUi,
+    menuOpen: Boolean,
+    onClick: () -> Unit,
+    onOpenMenu: () -> Unit,
+    onCloseMenu: () -> Unit,
+    onAction: (CrewAction) -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = FocusShapeTokens.card,
@@ -117,7 +156,7 @@ private fun CrewGroupCard(group: CrewGroupUi, onClick: () -> Unit) {
         onClick = hapticTap(onClick),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -147,6 +186,12 @@ private fun CrewGroupCard(group: CrewGroupUi, onClick: () -> Unit) {
                         FocusStatusPill(
                             text = stringResource(R.string.crew_running),
                             tone = StatusTone.Active,
+                        )
+                    }
+                    if (group.archived) {
+                        FocusStatusPill(
+                            text = stringResource(R.string.crew_archived_badge),
+                            tone = StatusTone.Neutral,
                         )
                     }
                 }
@@ -210,12 +255,49 @@ private fun CrewGroupCard(group: CrewGroupUi, onClick: () -> Unit) {
                     }
                 }
             }
-            Icon(
-                imageVector = FocusIcons.Chevron,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
+            Box {
+                IconButton(onClick = hapticTap(onOpenMenu)) {
+                    Icon(
+                        imageVector = FocusIcons.More,
+                        contentDescription = stringResource(R.string.crew_more),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = onCloseMenu) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.crew_edit_group)) },
+                        onClick = {
+                            onCloseMenu()
+                            onAction(CrewAction.EditGroupById(group.id))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                stringResource(
+                                    if (group.archived) R.string.crew_unarchive else R.string.crew_archive,
+                                ),
+                            )
+                        },
+                        onClick = {
+                            onCloseMenu()
+                            onAction(CrewAction.SetArchived(group.id, !group.archived))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.crew_delete_group),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        onClick = {
+                            onCloseMenu()
+                            onAction(CrewAction.AskDeleteGroupById(group.id))
+                        },
+                    )
+                }
+            }
         }
     }
 }

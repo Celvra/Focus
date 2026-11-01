@@ -60,4 +60,12 @@
     <string name="crew_copy">Copy</string>
     <string name="crew_you">You</string>
     <string name="crew_copied">Copied</string>
+    <string name="crew_archived_title">Archived groups</string>
+    <string name="crew_archived_badge">Archived</string>
+    <string name="crew_archive">Archive</string>
+    <string name="crew_unarchive">Restore</string>
+    <string name="crew_show_archived">Show archived groups</string>
+    <string name="crew_show_active">Show active groups</string>
+    <string name="crew_archived_empty_title">No archived groups</string>
+    <string name="crew_archived_empty_body">Archived groups stay here until you restore or delete them.</string>
 </resources>

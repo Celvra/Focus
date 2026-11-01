@@ -90,7 +90,8 @@ class CrewRunner(
     ): Boolean {
         val content = text.trim()
         if (content.isBlank() || groupId in discarded) return false
-        if (store.group(groupId) == null) return false
+        val group = store.group(groupId) ?: return false
+        if (group.archived) store.setArchived(groupId, false)
         val members = store.members(groupId)
         val message = append(
             groupId = groupId,

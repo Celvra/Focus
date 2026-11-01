@@ -52,6 +52,7 @@ import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.ThumbDown
 import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Unarchive
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Warning
@@ -91,6 +92,7 @@ object FocusIcons {
     val Chevron: ImageVector = Icons.Rounded.ChevronRight
     val ArrowDown: ImageVector = Icons.Rounded.KeyboardArrowDown
     val Archive: ImageVector = Icons.Rounded.Archive
+    val Unarchive: ImageVector = Icons.Rounded.Unarchive
     val Play: ImageVector = Icons.Rounded.PlayArrow
     val Copy: ImageVector = Icons.Rounded.ContentCopy
     val Notification: ImageVector = Icons.Rounded.Notifications
