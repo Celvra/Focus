@@ -6,7 +6,8 @@ object CrewMentions {
         if (all) {
             return members.map { it.id }
         }
-        val result = mutableListOf<String>()
+        val found = mutableListOf<Pair<Int, String>>()
+        val claimed = mutableListOf<IntRange>()
         members
             .filter { it.name.isNotBlank() }
             .sortedByDescending { it.name.length }
@@ -19,16 +20,19 @@ object CrewMentions {
                     val before = text.getOrNull(index - 1)
                     val end = index + needle.length
                     val next = text.getOrNull(end)
-                    if ((before == null || !before.isLetterOrDigit()) &&
+                    val bounded = (before == null || !before.isLetterOrDigit()) &&
                         (next == null || (!next.isLetterOrDigit() && next != '_'))
-                    ) {
-                        result += member.id
+                    val range = index until end
+                    val free = claimed.none { it.first <= range.last && range.first <= it.last }
+                    if (bounded && free) {
+                        found += index to member.id
+                        claimed += range
                         break
                     }
                     from = index + 1
                 }
             }
-        return result
+        return found.sortedBy { it.first }.map { it.second }
     }
 
     fun names(text: String, members: List<CrewMember>): List<String> {
