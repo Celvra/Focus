@@ -34,6 +34,7 @@ class CrewRunner(
     private val background: BackgroundCommandMonitor,
     private val notifier: MessageNotifier,
     private val keepAlive: ChatTurnKeepAlive,
+    private val locale: LocaleController,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, Job>()
@@ -53,6 +54,9 @@ class CrewRunner(
         }
         scope.launch {
             store.deleted.collect { groupId -> discard(groupId) }
+        }
+        scope.launch {
+            recoverRuns()
         }
         scope.launch {
             background.completed.collect { completion ->
@@ -82,6 +86,56 @@ class CrewRunner(
     }
 
     fun isRunning(groupId: String): Boolean = jobs[groupId]?.isActive == true
+
+    private suspend fun recoverRuns() {
+        val persisted = try {
+            store.runningRuns()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            return
+        }
+        persisted.forEach { run ->
+            store.clearRun(run.groupId)
+            if (isRunning(run.groupId) || run.groupId in discarded) return@forEach
+            val group = store.group(run.groupId) ?: return@forEach
+            if (group.archived) return@forEach
+            val after = store.messagesAfter(run.groupId, run.lastUserMessageId)
+            val agentReplied = after.any { it.authorType == CrewAuthorType.Agent }
+            if (agentReplied) {
+                appendNotice(
+                    run.groupId,
+                    localized(
+                        "上次讨论被中断了。发一条消息即可继续。",
+                        "The previous discussion was interrupted. Send a message to continue.",
+                    ),
+                )
+            } else {
+                appendNotice(
+                    run.groupId,
+                    localized(
+                        "应用重启后继续上次的讨论。",
+                        "Resumed the previous discussion after the app restarted.",
+                    ),
+                )
+                start(run.groupId, run.focusMemberIds)
+            }
+        }
+    }
+
+    private suspend fun appendNotice(groupId: String, text: String) {
+        append(
+            groupId = groupId,
+            authorType = CrewAuthorType.System,
+            authorId = SYSTEM_ID,
+            authorName = SYSTEM_NAME,
+            content = text,
+            kind = CrewMessageKind.Notice,
+        )
+    }
+
+    private fun localized(zh: String, en: String): String =
+        if (locale.current()?.startsWith("zh") == true) zh else en
 
     suspend fun send(
         groupId: String,
@@ -115,6 +169,14 @@ class CrewRunner(
         if (isRunning(groupId)) return
         keepAlive.start()
         val job = scope.launch(start = CoroutineStart.LAZY) {
+            val lastUserMessageId = store.messages(groupId, LAST_MESSAGES)
+                .lastOrNull { it.authorType == CrewAuthorType.User }?.id ?: 0
+            store.saveRun(
+                groupId = groupId,
+                startedAt = System.currentTimeMillis(),
+                lastUserMessageId = lastUserMessageId,
+                focusMemberIds = focusMemberIds,
+            )
             runGroup(groupId, focusMemberIds)
         }
         jobs[groupId] = job
@@ -178,7 +240,9 @@ class CrewRunner(
         var failed = false
         var stopped = false
         var lastPreview = ""
-        var checkedUserMessageId = store.messages(groupId, 200).lastOrNull()?.id ?: 0
+        var checkedUserMessageId = store.messages(groupId, LAST_MESSAGES)
+            .lastOrNull { it.authorType == CrewAuthorType.User }?.id ?: 0
+        store.checkpointRun(groupId, checkedUserMessageId)
         val liveUsers = mutableSetOf<Long>()
         val spoken = mutableMapOf<String, Int>()
         val queue = ArrayDeque<String>()
@@ -224,6 +288,7 @@ class CrewRunner(
                                 if ((spoken[mentioned] ?: 0) < MAX_TURNS_PER_MEMBER) queue.addFirst(mentioned)
                             }
                         }
+                        store.checkpointRun(groupId, message.id)
                     }
                 }
                 val nextId = nextSpeaker(queue, members, spoken, focus.isEmpty(), turns)
@@ -402,6 +467,9 @@ class CrewRunner(
             }
         } finally {
             jobs.remove(groupId)
+            withContext(NonCancellable) {
+                runCatching { store.clearRun(groupId) }
+            }
             if (restart.remove(groupId) && groupId !in discarded) {
                 start(groupId)
             }
@@ -447,5 +515,6 @@ class CrewRunner(
         private const val MAX_SPEAKERS = 10
         private const val MAX_TURNS_PER_MEMBER = 3
         private const val SPEAKER_PAUSE_MS = 450L
+        private const val LAST_MESSAGES = 200
     }
 }

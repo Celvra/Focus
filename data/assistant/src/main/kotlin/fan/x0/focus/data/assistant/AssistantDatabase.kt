@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 14) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 15) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -237,6 +237,17 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             """.trimIndent(),
         )
         db.execSQL("CREATE INDEX idx_crew_messages_group ON crew_messages(group_id, id)")
+        db.execSQL(
+            """
+            CREATE TABLE crew_runs(
+                group_id TEXT PRIMARY KEY,
+                started_at INTEGER NOT NULL,
+                last_user_message_id INTEGER NOT NULL DEFAULT 0,
+                focus TEXT NOT NULL DEFAULT '',
+                updated_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -456,6 +467,19 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 """.trimIndent(),
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_crew_messages_group ON crew_messages(group_id, id)")
+        }
+        if (oldVersion < 15) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS crew_runs(
+                    group_id TEXT PRIMARY KEY,
+                    started_at INTEGER NOT NULL,
+                    last_user_message_id INTEGER NOT NULL DEFAULT 0,
+                    focus TEXT NOT NULL DEFAULT '',
+                    updated_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
         }
     }
 

@@ -53,6 +53,13 @@ data class CrewAvatarChoice(
     val palette: Int,
 )
 
+data class PersistedCrewRun(
+    val groupId: String,
+    val startedAt: Long,
+    val lastUserMessageId: Long,
+    val focusMemberIds: Set<String>,
+)
+
 object CrewAvatars {
     const val PRESET_COUNT = 8
     const val PALETTE_COUNT = 6

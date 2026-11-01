@@ -119,6 +119,7 @@ class CrewStore(private val database: AssistantDatabase) {
         try {
             db.delete("crew_messages", "group_id = ?", arrayOf(id))
             db.delete("crew_members", "group_id = ?", arrayOf(id))
+            db.delete("crew_runs", "group_id = ?", arrayOf(id))
             db.delete("conversation_todos", "conversation_id = ?", arrayOf(id))
             db.delete("messages", "conversation_id = ?", arrayOf(id))
             db.delete("agent_groups", "id = ?", arrayOf(id))
@@ -354,6 +355,62 @@ class CrewStore(private val database: AssistantDatabase) {
         val values = ContentValues().apply { put("content", content) }
         database.writableDatabase.update("crew_messages", values, "id = ?", arrayOf(id.toString()))
         touchGroup(groupId)
+    }
+
+    suspend fun saveRun(
+        groupId: String,
+        startedAt: Long,
+        lastUserMessageId: Long,
+        focusMemberIds: Set<String>,
+    ) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply {
+            put("group_id", groupId)
+            put("started_at", startedAt)
+            put("last_user_message_id", lastUserMessageId)
+            put("focus", focusMemberIds.joinToString(","))
+            put("updated_at", System.currentTimeMillis())
+        }
+        database.writableDatabase.insertWithOnConflict(
+            "crew_runs",
+            null,
+            values,
+            android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE,
+        )
+    }
+
+    suspend fun checkpointRun(groupId: String, lastUserMessageId: Long) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply {
+            put("last_user_message_id", lastUserMessageId)
+            put("updated_at", System.currentTimeMillis())
+        }
+        database.writableDatabase.update("crew_runs", values, "group_id = ?", arrayOf(groupId))
+    }
+
+    suspend fun clearRun(groupId: String) = withContext(Dispatchers.IO) {
+        database.writableDatabase.delete("crew_runs", "group_id = ?", arrayOf(groupId))
+    }
+
+    suspend fun runningRuns(): List<PersistedCrewRun> = withContext(Dispatchers.IO) {
+        database.readableDatabase.rawQuery(
+            "SELECT group_id, started_at, last_user_message_id, focus FROM crew_runs ORDER BY started_at",
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        PersistedCrewRun(
+                            groupId = cursor.getString(0),
+                            startedAt = cursor.getLong(1),
+                            lastUserMessageId = cursor.getLong(2),
+                            focusMemberIds = cursor.getString(3).orEmpty()
+                                .split(',')
+                                .filter { it.isNotBlank() }
+                                .toSet(),
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     private fun readMembers(groupId: String, activeOnly: Boolean): List<CrewMember> {
