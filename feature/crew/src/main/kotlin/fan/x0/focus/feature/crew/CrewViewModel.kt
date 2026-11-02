@@ -30,10 +30,18 @@ import fan.x0.focus.data.assistant.SecretStore
 import fan.x0.focus.data.assistant.requestConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.annotation.KoinViewModel
 import java.util.UUID
 import kotlin.math.abs
+
+private const val REVEAL_FRAME_MS = 33L
+private const val REVEAL_CATCHUP_FRAMES = 18
+private const val REVEAL_MIN_GROUP = 3
+private const val REVEAL_HANDOFF_MS = 280L
+private const val REVEAL_JOIN_TIMEOUT_MS = 4_000L
 
 @KoinViewModel
 class CrewViewModel(
@@ -59,6 +67,11 @@ class CrewViewModel(
     private var wasRunning = false
     private var lastRunningIds: Set<String> = emptySet()
     private var refreshPending = false
+    private var revealJob: Job? = null
+    private var revealGroupId = ""
+    private var revealKey = ""
+    private var revealTarget = ""
+    private var revealText = ""
 
     init {
         refreshGroups()
@@ -313,6 +326,7 @@ class CrewViewModel(
         notifier.cancel(conversationId(id))
         presence.setVisibleConversation(conversationId(id))
         wasRunning = false
+        resetReveal(id)
         groupJob?.cancel()
         loadGroup(id, showLoading = true)
     }
@@ -341,9 +355,7 @@ class CrewViewModel(
                 val run = runner.states.value[id]
                 val running = run?.running == true
                 wasRunning = running
-                val live = run?.entries.orEmpty().mapNotNull {
-                    it.toUi(allMembers, messagesById, avatars)
-                }
+                val live = liveUi(id, run)
                 val todos = run?.todos ?: store.todos(id)
                 updateState {
                     copy(
@@ -376,6 +388,7 @@ class CrewViewModel(
     private fun closeGroup() {
         presence.setVisibleConversation(null)
         groupJob?.cancel()
+        resetReveal()
         allMembers = emptyList()
         messagesById = emptyMap()
         wasRunning = false
@@ -431,9 +444,7 @@ class CrewViewModel(
         val run = runs[openId]
         if (run == null && !changed && !wasRunning) return
         val running = run?.running == true
-        val live = run?.entries.orEmpty().mapNotNull {
-            it.toUi(allMembers, messagesById, avatars)
-        }
+        val live = liveUi(openId, run)
         updateState {
             copy(
                 groups = groups.map { it.copy(running = it.id in ids) },
@@ -447,15 +458,16 @@ class CrewViewModel(
         }
         if (wasRunning && !running) {
             wasRunning = false
-            reloadHistory(openId)
+            reloadHistory(openId, settleReveal = true)
         } else {
             wasRunning = running
         }
         if (stopped.isNotEmpty()) refreshGroups()
     }
 
-    private fun reloadHistory(groupId: String) {
+    private fun reloadHistory(groupId: String, settleReveal: Boolean = false) {
         viewModelScope.launch {
+            if (settleReveal) settleReveal(groupId)
             try {
                 allMembers = store.allMembers(groupId)
                 val messages = store.messages(groupId, MESSAGE_LIMIT)
@@ -463,9 +475,7 @@ class CrewViewModel(
                 val detail = store.groupDetail(groupId)
                 val run = runner.states.value[groupId]
                 val running = run?.running == true
-                val live = run?.entries.orEmpty().mapNotNull {
-                    it.toUi(allMembers, messagesById, avatars)
-                }
+                val live = liveUi(groupId, run)
                 val todos = run?.todos ?: store.todos(groupId)
                 updateState {
                     copy(
@@ -490,6 +500,77 @@ class CrewViewModel(
             } catch (e: Throwable) {
                 emitError(e.toAppError())
             }
+        }
+    }
+
+    private fun liveUi(groupId: String, run: CrewRunState?): List<CrewEntryUi> {
+        val entries = run?.entries.orEmpty()
+        val agent = entries.lastOrNull { it is CrewRunEntry.Agent } as? CrewRunEntry.Agent
+        val shown = if (agent != null) updateReveal(groupId, agent) else null
+        return entries.mapNotNull { entry ->
+            val mapped = if (shown != null && entry is CrewRunEntry.Agent && entry.key == agent?.key) {
+                entry.copy(text = shown)
+            } else {
+                entry
+            }
+            mapped.toUi(allMembers, messagesById, avatars)
+        }
+    }
+
+    private suspend fun settleReveal(groupId: String) {
+        if (revealGroupId != groupId) return
+        withTimeoutOrNull(REVEAL_JOIN_TIMEOUT_MS) { revealJob?.join() }
+        if (revealTarget.isNotEmpty()) delay(REVEAL_HANDOFF_MS)
+    }
+
+    private fun updateReveal(groupId: String, agent: CrewRunEntry.Agent): String {
+        if (revealGroupId != groupId || revealKey != agent.key) {
+            resetReveal(groupId, agent.key)
+        }
+        if (agent.text.length < revealTarget.length || !agent.text.startsWith(revealTarget)) {
+            revealText = ""
+        }
+        revealTarget = agent.text
+        if (revealText.length > revealTarget.length) {
+            revealText = revealText.take(revealTarget.length)
+        }
+        if (revealText.length < revealTarget.length) ensureRevealJob()
+        return revealTarget.take(revealText.length)
+    }
+
+    private fun resetReveal(groupId: String = "", key: String = "") {
+        revealJob?.cancel()
+        revealJob = null
+        revealGroupId = groupId
+        revealKey = key
+        revealTarget = ""
+        revealText = ""
+    }
+
+    private fun ensureRevealJob() {
+        if (revealJob?.isActive == true) return
+        revealJob = viewModelScope.launch {
+            while (revealText.length < revealTarget.length) {
+                val backlog = revealTarget.length - revealText.length
+                val step = ((backlog + REVEAL_CATCHUP_FRAMES - 1) / REVEAL_CATCHUP_FRAMES)
+                    .coerceAtLeast(REVEAL_MIN_GROUP)
+                delay(REVEAL_FRAME_MS)
+                if (revealText.length >= revealTarget.length) break
+                revealText = revealTarget.take((revealText.length + step).coerceAtMost(revealTarget.length))
+                showRevealText()
+            }
+        }
+    }
+
+    private fun showRevealText() {
+        if (currentState.group?.id != revealGroupId) return
+        val shown = revealTarget.take(revealText.length)
+        updateState {
+            val index = live.indexOfLast { it is CrewEntryUi.Message && it.key == revealKey }
+            if (index < 0) return@updateState this
+            val entry = live[index] as CrewEntryUi.Message
+            if (entry.text == shown) return@updateState this
+            copy(live = live.toMutableList().also { it[index] = entry.copy(text = shown) })
         }
     }
 
