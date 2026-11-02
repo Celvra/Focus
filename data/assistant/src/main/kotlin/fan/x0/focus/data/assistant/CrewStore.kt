@@ -21,6 +21,8 @@ class CrewStore(private val database: AssistantDatabase) {
     private val attachmentsSerializer = ListSerializer(ChatAttachment.serializer())
     private val _deleted = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val deleted: SharedFlow<String> = _deleted.asSharedFlow()
+    private val _changes = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    val changes: SharedFlow<String> = _changes.asSharedFlow()
 
     suspend fun groups(includeArchived: Boolean = false): List<AgentGroup> = withContext(Dispatchers.IO) {
         val filter = if (includeArchived) "" else "WHERE archived = 0"
@@ -40,6 +42,7 @@ class CrewStore(private val database: AssistantDatabase) {
             put("updated_at", System.currentTimeMillis())
         }
         database.writableDatabase.update("agent_groups", values, "id = ?", arrayOf(id))
+        _changes.tryEmit(id)
     }
 
     suspend fun group(id: String): AgentGroup? = withContext(Dispatchers.IO) {
@@ -95,6 +98,7 @@ class CrewStore(private val database: AssistantDatabase) {
             put("updated_at", group.updatedAt)
         }
         database.writableDatabase.insertOrThrow("agent_groups", null, values)
+        _changes.tryEmit(group.id)
         group
     }
 
@@ -113,6 +117,7 @@ class CrewStore(private val database: AssistantDatabase) {
             put("updated_at", System.currentTimeMillis())
         }
         database.writableDatabase.update("agent_groups", values, "id = ?", arrayOf(id))
+        _changes.tryEmit(id)
     }
 
     suspend fun deleteGroup(id: String) = withContext(Dispatchers.IO) {
@@ -130,6 +135,7 @@ class CrewStore(private val database: AssistantDatabase) {
             db.endTransaction()
         }
         _deleted.tryEmit(id)
+        _changes.tryEmit(id)
     }
 
     suspend fun members(groupId: String, activeOnly: Boolean = true): List<CrewMember> =
@@ -335,6 +341,7 @@ class CrewStore(private val database: AssistantDatabase) {
             put("last_message_at", now)
         }
         database.writableDatabase.update("agent_groups", touch, "id = ?", arrayOf(groupId))
+        _changes.tryEmit(groupId)
         CrewMessage(
             id = id,
             groupId = groupId,
@@ -508,6 +515,7 @@ class CrewStore(private val database: AssistantDatabase) {
     private fun touchGroup(groupId: String) {
         val values = ContentValues().apply { put("updated_at", System.currentTimeMillis()) }
         database.writableDatabase.update("agent_groups", values, "id = ?", arrayOf(groupId))
+        _changes.tryEmit(groupId)
     }
 
     private fun Cursor.toGroup(): AgentGroup = AgentGroup(

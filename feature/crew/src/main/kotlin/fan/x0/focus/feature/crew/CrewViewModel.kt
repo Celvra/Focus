@@ -127,6 +127,9 @@ class CrewViewModel(
                 refreshGroups()
             }
         }
+        viewModelScope.launch {
+            store.changes.collect { refreshGroups() }
+        }
     }
 
     override fun onAction(action: CrewAction) {
