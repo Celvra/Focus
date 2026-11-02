@@ -66,6 +66,7 @@ import fan.x0.focus.core.designsystem.theme.FocusRadii
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 import fan.x0.focus.data.assistant.CrewAvatars
+import fan.x0.focus.data.assistant.ReasoningLevel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -261,6 +262,7 @@ fun CrewMemberSheet(
             MemberEditor(
                 draft = draft,
                 saving = state.saving,
+                providers = state.providers,
                 onAction = onAction,
                 onPickPhoto = onPickPhoto,
             )
@@ -432,6 +434,7 @@ private fun MemberList(state: CrewUiState, onAction: (CrewAction) -> Unit) {
 private fun MemberEditor(
     draft: MemberDraft,
     saving: Boolean,
+    providers: List<CrewProviderUi>,
     onAction: (CrewAction) -> Unit,
     onPickPhoto: () -> Unit,
 ) {
@@ -479,6 +482,53 @@ private fun MemberEditor(
             onClearPhoto = { onAction(CrewAction.MemberPhotoCleared) },
             enabled = !saving,
         )
+        Text(
+            text = stringResource(R.string.crew_member_provider),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChip(
+                selected = draft.providerId.isBlank(),
+                onClick = { onAction(CrewAction.MemberProviderChanged("")) },
+                label = { Text(stringResource(R.string.crew_member_default_provider)) },
+            )
+            providers.forEach { provider ->
+                FilterChip(
+                    selected = draft.providerId == provider.id,
+                    onClick = { onAction(CrewAction.MemberProviderChanged(provider.id)) },
+                    label = { Text(provider.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                )
+            }
+        }
+        OutlinedTextField(
+            value = draft.model,
+            onValueChange = { onAction(CrewAction.MemberModelChanged(it)) },
+            label = { Text(stringResource(R.string.crew_member_model)) },
+            placeholder = { Text(stringResource(R.string.crew_member_model_hint)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = stringResource(R.string.crew_member_reasoning),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ReasoningLevel.entries.forEach { level ->
+                FilterChip(
+                    selected = ReasoningLevel.fromName(draft.reasoning) == level,
+                    onClick = { onAction(CrewAction.MemberReasoningChanged(level.name)) },
+                    label = { Text(stringResource(level.labelRes())) },
+                )
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FocusPrimaryButton(
                 text = stringResource(R.string.crew_save),
@@ -495,6 +545,16 @@ private fun MemberEditor(
             )
         }
     }
+}
+
+private fun ReasoningLevel.labelRes(): Int = when (this) {
+    ReasoningLevel.Off -> R.string.crew_reasoning_off
+    ReasoningLevel.Auto -> R.string.crew_reasoning_auto
+    ReasoningLevel.Low -> R.string.crew_reasoning_low
+    ReasoningLevel.Medium -> R.string.crew_reasoning_medium
+    ReasoningLevel.High -> R.string.crew_reasoning_high
+    ReasoningLevel.XHigh -> R.string.crew_reasoning_xhigh
+    ReasoningLevel.Max -> R.string.crew_reasoning_max
 }
 
 @Composable

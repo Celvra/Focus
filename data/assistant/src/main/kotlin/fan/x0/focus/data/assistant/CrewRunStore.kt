@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.serialization.Serializable
 import org.koin.core.annotation.Single
 import java.util.concurrent.atomic.AtomicLong
 
@@ -11,6 +12,9 @@ enum class CrewToolStatus { Running, Done, Failed }
 
 enum class CrewApprovalPhase { Waiting, Running, Finished, Declined }
 
+enum class CrewAskPhase { Waiting, Answered, Skipped }
+
+@Serializable
 data class CrewToolTrace(
     val id: String,
     val label: String,
@@ -28,6 +32,14 @@ data class CrewApprovalCard(
     val phase: CrewApprovalPhase,
 )
 
+data class CrewAskCard(
+    val id: String,
+    val intro: String,
+    val questions: List<AskQuestion>,
+    val phase: CrewAskPhase,
+    val answers: List<AskAnswer> = emptyList(),
+)
+
 sealed interface CrewRunEntry {
     val key: String
 
@@ -36,6 +48,8 @@ sealed interface CrewRunEntry {
         val messageId: Long,
         val text: String,
         val replyToId: Long?,
+        val createdAt: Long = 0,
+        val attachments: List<ChatAttachment> = emptyList(),
     ) : CrewRunEntry
 
     data class Agent(
@@ -47,11 +61,20 @@ sealed interface CrewRunEntry {
         val tools: List<CrewToolTrace> = emptyList(),
         val streaming: Boolean = true,
         val error: String? = null,
+        val reasoning: String = "",
+        val reasoningMs: Long = 0,
+        val reasoningStartedAt: Long = 0,
+        val reasoningRunning: Boolean = false,
     ) : CrewRunEntry
 
     data class Approval(
         override val key: String,
         val card: CrewApprovalCard,
+    ) : CrewRunEntry
+
+    data class Ask(
+        override val key: String,
+        val card: CrewAskCard,
     ) : CrewRunEntry
 
     data class Notice(
@@ -66,6 +89,7 @@ data class CrewRunState(
     val working: String = "",
     val speaker: CrewMember? = null,
     val entries: List<CrewRunEntry> = emptyList(),
+    val todos: List<ConversationTodo> = emptyList(),
     val error: String? = null,
     val startedAt: Long = System.currentTimeMillis(),
     val finishedAt: Long? = null,
@@ -95,6 +119,8 @@ class CrewRunStore {
             messageId = message.id,
             text = message.content,
             replyToId = message.replyToId,
+            createdAt = message.createdAt,
+            attachments = message.attachments,
         )
         update(groupId) { state ->
             if (state.entries.any { it is CrewRunEntry.User && it.messageId == message.id }) {
@@ -160,6 +186,70 @@ class CrewRunStore {
     fun setAgentActivity(groupId: String, key: String, text: String) {
         updateAgent(groupId, key) { it.copy(activity = text.take(120)) }
     }
+
+    fun appendAgentReasoning(groupId: String, key: String, text: String) {
+        if (text.isEmpty()) return
+        updateAgent(groupId, key) {
+            it.copy(
+                reasoning = it.reasoning + text,
+                reasoningStartedAt = it.reasoningStartedAt.takeIf { value -> value > 0 }
+                    ?: System.currentTimeMillis(),
+                reasoningRunning = true,
+            )
+        }
+    }
+
+    fun setAgentReasoningDuration(groupId: String, key: String, durationMs: Long) {
+        updateAgent(groupId, key) {
+            it.copy(
+                reasoningMs = durationMs.coerceAtLeast(0),
+                reasoningRunning = false,
+            )
+        }
+    }
+
+    fun setAgentReasoningRunning(groupId: String, key: String, running: Boolean) {
+        updateAgent(groupId, key) { it.copy(reasoningRunning = running) }
+    }
+
+    fun setTodos(groupId: String, todos: List<ConversationTodo>) {
+        update(groupId) { it.copy(todos = todos) }
+    }
+
+    fun askRequested(groupId: String, request: AskRequest) {
+        val card = CrewAskCard(
+            id = request.id,
+            intro = request.intro,
+            questions = request.questions,
+            phase = CrewAskPhase.Waiting,
+        )
+        val entry = CrewRunEntry.Ask("ask-${request.id}", card)
+        update(groupId) { it.copy(entries = it.entries + entry) }
+    }
+
+    fun askResolved(groupId: String, request: AskRequest, reply: AskReply) {
+        update(groupId) { state ->
+            state.copy(
+                entries = state.entries.map { entry ->
+                    if (entry is CrewRunEntry.Ask && entry.card.id == request.id) {
+                        entry.copy(
+                            card = entry.card.copy(
+                                phase = if (reply.skipped) CrewAskPhase.Skipped else CrewAskPhase.Answered,
+                                answers = reply.answers,
+                            ),
+                        )
+                    } else {
+                        entry
+                    }
+                },
+            )
+        }
+    }
+
+    fun agent(groupId: String, key: String): CrewRunEntry.Agent? =
+        _runs.value[groupId]?.entries?.firstOrNull {
+            it is CrewRunEntry.Agent && it.key == key
+        } as? CrewRunEntry.Agent
 
     fun startTool(groupId: String, key: String, id: String, label: String, arguments: String = "") {
         updateAgent(groupId, key) {
@@ -242,7 +332,9 @@ class CrewRunStore {
     }
 
     fun finishAgent(groupId: String, key: String, error: String? = null) {
-        updateAgent(groupId, key) { it.copy(streaming = false, error = error) }
+        updateAgent(groupId, key) {
+            it.copy(streaming = false, reasoningRunning = false, error = error)
+        }
     }
 
     fun finish(groupId: String, error: String? = null) {
@@ -253,7 +345,15 @@ class CrewRunStore {
                 working = "",
                 speaker = null,
                 entries = run.entries.map { entry ->
-                    if (entry is CrewRunEntry.Agent) entry.copy(streaming = false) else entry
+                    when (entry) {
+                        is CrewRunEntry.Agent -> entry.copy(streaming = false, reasoningRunning = false)
+                        is CrewRunEntry.Ask -> if (entry.card.phase == CrewAskPhase.Waiting) {
+                            entry.copy(card = entry.card.copy(phase = CrewAskPhase.Skipped))
+                        } else {
+                            entry
+                        }
+                        else -> entry
+                    }
                 },
                 error = error,
                 finishedAt = System.currentTimeMillis(),

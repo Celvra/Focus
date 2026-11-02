@@ -141,9 +141,10 @@ class CrewRunner(
         groupId: String,
         text: String,
         replyToId: Long? = null,
+        attachments: List<ChatAttachment> = emptyList(),
     ): Boolean {
         val content = text.trim()
-        if (content.isBlank() || groupId in discarded) return false
+        if ((content.isBlank() && attachments.isEmpty()) || groupId in discarded) return false
         val group = store.group(groupId) ?: return false
         if (group.archived) store.setArchived(groupId, false)
         val members = store.members(groupId)
@@ -154,6 +155,7 @@ class CrewRunner(
             authorName = USER_NAME,
             content = content,
             replyToId = replyToId,
+            attachments = attachments,
         ) ?: return false
         if (isRunning(groupId)) {
             runs.addUserMessage(groupId, message)
@@ -197,6 +199,10 @@ class CrewRunner(
         engine.decide(approvalId, approved)
     }
 
+    fun answerAsk(askId: String, answers: List<AskAnswer>, skipped: Boolean = false) {
+        engine.answerAsk(askId, answers, skipped)
+    }
+
     suspend fun announce(groupId: String, text: String) {
         if (text.isBlank()) return
         append(
@@ -218,6 +224,10 @@ class CrewRunner(
         content: String,
         replyToId: Long? = null,
         kind: CrewMessageKind = CrewMessageKind.Text,
+        reasoning: String = "",
+        elapsedMs: Long = 0,
+        tools: List<CrewToolTrace> = emptyList(),
+        attachments: List<ChatAttachment> = emptyList(),
     ): CrewMessage? {
         if (groupId in discarded) return null
         return store.appendMessage(
@@ -228,6 +238,10 @@ class CrewRunner(
             content = content,
             replyToId = replyToId,
             kind = kind,
+            reasoning = reasoning,
+            elapsedMs = elapsedMs,
+            tools = tools,
+            attachments = attachments,
         )
     }
 
@@ -237,6 +251,7 @@ class CrewRunner(
             return
         }
         runs.start(groupId)
+        runs.setTodos(groupId, store.todos(groupId))
         var failed = false
         var stopped = false
         var lastPreview = ""
@@ -247,6 +262,7 @@ class CrewRunner(
         val spoken = mutableMapOf<String, Int>()
         val queue = ArrayDeque<String>()
         var activeMember: CrewMember? = null
+        var activeKey: String? = null
         var activeText = ""
         var activePersisted = false
         var turns = 0
@@ -301,6 +317,7 @@ class CrewRunner(
                 activePersisted = false
                 runs.setSpeaker(groupId, member)
                 val key = runs.startAgent(groupId, member)
+                activeKey = key
                 var handoff: String? = null
                 var finishDiscussion = false
                 var speechError: String? = null
@@ -315,6 +332,16 @@ class CrewRunner(
                             runs.resetAgentText(groupId, key, event.text)
                         }
                         is CrewSpeechEvent.Activity -> runs.setAgentActivity(groupId, key, event.text)
+                        is CrewSpeechEvent.ReasoningDelta -> runs.appendAgentReasoning(
+                            groupId,
+                            key,
+                            event.text,
+                        )
+                        is CrewSpeechEvent.ReasoningTimed -> runs.setAgentReasoningDuration(
+                            groupId,
+                            key,
+                            event.durationMs,
+                        )
                         is CrewSpeechEvent.Retry -> runs.setAgentActivity(
                             groupId,
                             key,
@@ -350,6 +377,19 @@ class CrewRunner(
                             notifier.cancel(conversationId(groupId))
                         }
                         is CrewSpeechEvent.ApprovalFinished -> runs.approvalFinished(groupId, event.id)
+                        is CrewSpeechEvent.AskRequested -> {
+                            runs.askRequested(groupId, event.request)
+                            notifier.notifyAction(
+                                conversationId = conversationId(groupId),
+                                title = group.name,
+                                kind = NotifyActionKind.Approval,
+                            )
+                        }
+                        is CrewSpeechEvent.AskResolved -> {
+                            runs.askResolved(groupId, event.request, event.reply)
+                            notifier.cancel(conversationId(groupId))
+                        }
+                        is CrewSpeechEvent.TodoUpdated -> runs.setTodos(groupId, event.todos)
                         is CrewSpeechEvent.ReactionAdded -> _reactionUpdates.emit(
                             CrewReactionUpdate(groupId, event.messageId, event.emoji),
                         )
@@ -368,6 +408,7 @@ class CrewRunner(
                     }
                 }
                 runs.finishAgent(groupId, key, speechError)
+                val snapshot = runs.agent(groupId, key)
                 val text = activeText.trim()
                 if (text.isNotBlank()) {
                     val stored = append(
@@ -376,6 +417,9 @@ class CrewRunner(
                         authorId = member.id,
                         authorName = member.name,
                         content = text,
+                        reasoning = snapshot?.reasoning.orEmpty(),
+                        elapsedMs = snapshot?.reasoningMs ?: 0,
+                        tools = snapshot?.tools.orEmpty(),
                     )
                     if (stored != null) {
                         lastPreview = text
@@ -430,12 +474,16 @@ class CrewRunner(
                 val member = activeMember
                 val text = activeText.trim()
                 if (!activePersisted && member != null && text.isNotBlank()) {
+                    val snapshot = activeKey?.let { runs.agent(groupId, it) }
                     append(
                         groupId = groupId,
                         authorType = CrewAuthorType.Agent,
                         authorId = member.id,
                         authorName = member.name,
                         content = text,
+                        reasoning = snapshot?.reasoning.orEmpty(),
+                        elapsedMs = snapshot?.reasoningMs ?: 0,
+                        tools = snapshot?.tools.orEmpty(),
                     )
                 }
                 append(

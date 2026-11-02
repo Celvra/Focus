@@ -5,8 +5,14 @@ import fan.x0.focus.core.error.toAppError
 import fan.x0.focus.core.mvi.BaseViewModel
 import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.MessageNotifier
+import fan.x0.focus.data.assistant.AskAnswer
+import fan.x0.focus.data.assistant.AskKind
+import fan.x0.focus.data.assistant.AssistantSettings
+import fan.x0.focus.data.assistant.AttachmentLoader
+import fan.x0.focus.data.assistant.ChatAttachment
 import fan.x0.focus.data.assistant.CrewAvatarStore
 import fan.x0.focus.data.assistant.CrewAvatars
+import fan.x0.focus.data.assistant.CrewAskPhase
 import fan.x0.focus.data.assistant.CrewDefaults
 import fan.x0.focus.data.assistant.CrewMember
 import fan.x0.focus.data.assistant.CrewMentions
@@ -27,6 +33,8 @@ class CrewViewModel(
     private val runner: CrewRunner,
     private val switcher: CrewSwitcher,
     private val avatars: CrewAvatarStore,
+    private val loader: AttachmentLoader,
+    private val settings: AssistantSettings,
     private val notifier: MessageNotifier,
     private val presence: AppPresence,
 ) : BaseViewModel<CrewAction, CrewUiState, CrewEffect>(CrewUiState()) {
@@ -41,6 +49,16 @@ class CrewViewModel(
 
     init {
         refreshGroups()
+        viewModelScope.launch {
+            val config = runCatching { settings.configOnce() }.getOrNull() ?: return@launch
+            updateState {
+                copy(
+                    providers = config.providers.map {
+                        CrewProviderUi(it.id, it.name, it.model)
+                    },
+                )
+            }
+        }
         viewModelScope.launch {
             runner.states.collect { runs -> applyRuns(runs) }
         }
@@ -157,13 +175,36 @@ class CrewViewModel(
             CrewAction.MemberPhotoCleared -> updateState {
                 copy(memberDraft = memberDraft?.copy(avatarImage = "", avatarPath = null))
             }
+            is CrewAction.MemberProviderChanged -> updateState {
+                val draft = memberDraft
+                if (draft == null || draft.providerId == action.id) {
+                    this
+                } else {
+                    copy(memberDraft = draft.copy(providerId = action.id, model = ""))
+                }
+            }
+            is CrewAction.MemberModelChanged -> updateState {
+                copy(memberDraft = memberDraft?.copy(model = action.value))
+            }
+            is CrewAction.MemberReasoningChanged -> updateState {
+                copy(memberDraft = memberDraft?.copy(reasoning = action.value))
+            }
             CrewAction.SaveMember -> saveMember()
             is CrewAction.SetMemberActive -> setMemberActive(action.id, action.active)
             is CrewAction.InputChanged -> inputChanged(action.value)
+            is CrewAction.AttachPicked -> attachPicked(action.uris)
+            is CrewAction.RemoveAttachment -> updateState {
+                copy(attachments = attachments.filterNot { it.id == action.id })
+            }
             is CrewAction.MentionPick -> pickMention(action.id)
             CrewAction.MentionDismiss -> updateState { copy(mention = CrewMentionUi()) }
             CrewAction.Send -> send()
             CrewAction.Stop -> runner.stop(currentState.group?.id.orEmpty())
+            is CrewAction.AskSelect -> askSelect(action.askId, action.questionId, action.choice)
+            is CrewAction.AskConfirm -> askConfirm(action.askId, action.questionId, action.value)
+            is CrewAction.AskEdit -> askEdit(action.askId, action.questionId, action.other, action.value)
+            is CrewAction.AskSubmit -> askSubmit(action.askId)
+            is CrewAction.AskSkip -> askSkip(action.askId)
             is CrewAction.OpenMessageMenu -> openMessageMenu(action.key)
             CrewAction.CloseMessageMenu -> updateState { copy(menu = null) }
             is CrewAction.React -> react(action.messageId, action.emoji)
@@ -252,11 +293,10 @@ class CrewViewModel(
                 val run = runner.states.value[id]
                 val running = run?.running == true
                 wasRunning = running
-                val live = if (running) {
-                    run.entries.mapNotNull { it.toUi(allMembers, messagesById, avatars) }
-                } else {
-                    emptyList()
+                val live = run?.entries.orEmpty().mapNotNull {
+                    it.toUi(allMembers, messagesById, avatars)
                 }
+                val todos = run?.todos ?: store.todos(id)
                 updateState {
                     copy(
                         groupLoading = false,
@@ -270,6 +310,7 @@ class CrewViewModel(
                         removedMembers = allMembers.filterNot { it.active }.map { it.toUi(avatars) },
                         history = messages.toEntries(allMembers, avatars),
                         live = live,
+                        todos = todos,
                         running = running,
                         working = run?.working.orEmpty(),
                     )
@@ -295,6 +336,9 @@ class CrewViewModel(
                 members = emptyList(),
                 history = emptyList(),
                 live = emptyList(),
+                todos = emptyList(),
+                askDrafts = emptyMap(),
+                attachments = emptyList(),
                 groupLoading = false,
                 running = false,
                 working = "",
@@ -332,10 +376,8 @@ class CrewViewModel(
         val run = runs[openId]
         if (run == null && !changed && !wasRunning) return
         val running = run?.running == true
-        val live = if (running) {
-            run.entries.mapNotNull { it.toUi(allMembers, messagesById, avatars) }
-        } else {
-            emptyList()
+        val live = run?.entries.orEmpty().mapNotNull {
+            it.toUi(allMembers, messagesById, avatars)
         }
         updateState {
             copy(
@@ -344,6 +386,7 @@ class CrewViewModel(
                 running = running,
                 working = run?.working.orEmpty(),
                 live = live,
+                todos = run?.todos ?: todos,
             )
         }
         if (wasRunning && !running) {
@@ -364,11 +407,10 @@ class CrewViewModel(
                 val detail = store.groupDetail(groupId)
                 val run = runner.states.value[groupId]
                 val running = run?.running == true
-                val live = if (running) {
-                    run.entries.mapNotNull { it.toUi(allMembers, messagesById, avatars) }
-                } else {
-                    emptyList()
+                val live = run?.entries.orEmpty().mapNotNull {
+                    it.toUi(allMembers, messagesById, avatars)
                 }
+                val todos = run?.todos ?: store.todos(groupId)
                 updateState {
                     copy(
                         members = detail?.members?.map { it.toUi(avatars) } ?: members,
@@ -381,6 +423,7 @@ class CrewViewModel(
                         ) ?: group,
                         history = messages.toEntries(allMembers, avatars),
                         live = live,
+                        todos = todos,
                         running = running,
                         working = run?.working.orEmpty(),
                     )
@@ -595,6 +638,9 @@ class CrewViewModel(
                     avatarPalette = member.avatarPalette,
                     avatarPath = member.avatarPath,
                     avatarImage = allMembers.firstOrNull { it.id == id }?.avatarImage.orEmpty(),
+                    providerId = allMembers.firstOrNull { it.id == id }?.providerId.orEmpty(),
+                    model = allMembers.firstOrNull { it.id == id }?.model.orEmpty(),
+                    reasoning = allMembers.firstOrNull { it.id == id }?.reasoning.orEmpty(),
                 ),
             )
         }
@@ -640,6 +686,9 @@ class CrewViewModel(
                         avatarPreset = draft.avatarPreset,
                         avatarPalette = draft.avatarPalette,
                         avatarImage = draft.avatarImage,
+                        providerId = draft.providerId,
+                        model = draft.model.trim(),
+                        reasoning = draft.reasoning,
                     )
                     runner.announce(group.id, "+ ${member.name}")
                 } else {
@@ -652,6 +701,9 @@ class CrewViewModel(
                             avatarPreset = draft.avatarPreset,
                             avatarPalette = draft.avatarPalette,
                             avatarImage = draft.avatarImage,
+                            providerId = draft.providerId,
+                            model = draft.model.trim(),
+                            reasoning = draft.reasoning,
                         ),
                     )
                     if (existing.avatarImage.isNotBlank() && existing.avatarImage != draft.avatarImage) {
@@ -688,6 +740,99 @@ class CrewViewModel(
         }
     }
 
+    private fun attachPicked(uris: List<String>) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val loaded = uris.mapNotNull { loader.load(it) }
+                if (loaded.isNotEmpty()) {
+                    updateState { copy(attachments = attachments + loaded) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                emitError(e.toAppError())
+            }
+        }
+    }
+
+    private fun askSelect(askId: String, questionId: String, choice: String) {
+        val entry = currentState.entries.firstOrNull { it is CrewEntryUi.Ask && it.id == askId }
+            as? CrewEntryUi.Ask ?: return
+        val question = entry.questions.firstOrNull { it.id == questionId } ?: return
+        updateAskDraft(askId, questionId) { draft ->
+            if (question.kind == AskKind.Multi) {
+                draft.copy(
+                    selections = if (choice in draft.selections) {
+                        draft.selections - choice
+                    } else {
+                        draft.selections + choice
+                    },
+                )
+            } else {
+                draft.copy(selections = listOf(choice))
+            }
+        }
+    }
+
+    private fun askConfirm(askId: String, questionId: String, value: Boolean) {
+        updateAskDraft(askId, questionId) { it.copy(confirmed = value) }
+    }
+
+    private fun askEdit(askId: String, questionId: String, other: Boolean, value: String) {
+        updateAskDraft(askId, questionId) {
+            if (other) it.copy(other = value) else it.copy(text = value)
+        }
+    }
+
+    private fun updateAskDraft(
+        askId: String,
+        questionId: String,
+        reduce: (CrewAskDraft) -> CrewAskDraft,
+    ) {
+        updateState {
+            val drafts = askDrafts[askId].orEmpty()
+            val next = drafts + (questionId to reduce(drafts[questionId] ?: CrewAskDraft()))
+            copy(askDrafts = askDrafts + (askId to next))
+        }
+    }
+
+    private fun askSubmit(askId: String) {
+        val entry = currentState.entries.firstOrNull { it is CrewEntryUi.Ask && it.id == askId }
+            as? CrewEntryUi.Ask ?: return
+        if (entry.phase != CrewAskPhase.Waiting) return
+        val drafts = currentState.askDrafts[askId].orEmpty()
+        if (!entry.isReady(drafts)) return
+        val answers = entry.questions.map { question ->
+            val draft = drafts[question.id] ?: CrewAskDraft()
+            when (question.kind) {
+                AskKind.Single -> AskAnswer(
+                    questionId = question.id,
+                    choices = draft.selections.take(1),
+                    text = draft.other.trim(),
+                )
+                AskKind.Multi -> AskAnswer(
+                    questionId = question.id,
+                    choices = draft.selections,
+                    text = draft.other.trim(),
+                )
+                AskKind.Text -> AskAnswer(questionId = question.id, text = draft.text.trim())
+                AskKind.Number -> AskAnswer(
+                    questionId = question.id,
+                    number = draft.text.trim().toDoubleOrNull(),
+                )
+                AskKind.Confirm -> AskAnswer(questionId = question.id, confirmed = draft.confirmed)
+            }
+        }
+        runner.answerAsk(askId, answers)
+        updateState { copy(askDrafts = askDrafts - askId) }
+    }
+
+    private fun askSkip(askId: String) {
+        runner.answerAsk(askId, emptyList(), skipped = true)
+        updateState { copy(askDrafts = askDrafts - askId) }
+    }
+
     private fun inputChanged(value: String) {
         updateState { copy(input = value, mention = mentionFor(value)) }
     }
@@ -715,21 +860,38 @@ class CrewViewModel(
     private fun send() {
         val group = currentState.group ?: return
         val text = currentState.input.trim()
-        if (text.isBlank() || currentState.sending) return
+        val attachments = currentState.attachments
+        if ((text.isBlank() && attachments.isEmpty()) || currentState.sending) return
         val replyTo = currentState.reply?.messageId
         val restore = currentState.input
+        val restoreAttachments = attachments
         val restoreReply = currentState.reply
-        updateState { copy(input = "", mention = CrewMentionUi(), reply = null, sending = true) }
+        updateState {
+            copy(
+                input = "",
+                attachments = emptyList(),
+                mention = CrewMentionUi(),
+                reply = null,
+                sending = true,
+            )
+        }
         viewModelScope.launch {
             try {
-                val started = runner.send(group.id, text, replyTo)
+                val started = runner.send(group.id, text, replyTo, attachments)
                 if (started) reloadHistory(group.id)
                 refreshGroups()
                 updateState { copy(sending = false) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                updateState { copy(sending = false, input = restore, reply = restoreReply) }
+                updateState {
+                    copy(
+                        sending = false,
+                        input = restore,
+                        attachments = restoreAttachments,
+                        reply = restoreReply,
+                    )
+                }
                 emitError(e.toAppError())
             }
         }

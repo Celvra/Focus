@@ -38,6 +38,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -70,27 +71,35 @@ import dev.chrisbanes.haze.rememberHazeState
 import fan.x0.focus.core.designsystem.components.FocusChatBubble
 import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
 import fan.x0.focus.core.designsystem.components.FocusComposer
-import fan.x0.focus.core.designsystem.components.FocusComposerPill
+import fan.x0.focus.core.designsystem.components.FocusBubbleEnter
 import fan.x0.focus.core.designsystem.components.FocusEmptyState
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
+import fan.x0.focus.core.designsystem.components.FocusReasoningCard
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.data.assistant.CrewApprovalPhase
+import fan.x0.focus.data.assistant.AttachmentKind
+import fan.x0.focus.data.assistant.ChatAttachment
 import fan.x0.focus.data.assistant.CrewToolStatus
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CrewChatScreen(
     state: CrewUiState,
     onAction: (CrewAction) -> Unit,
     snackbar: SnackbarHostState,
     onPickMemberPhoto: () -> Unit,
+    onPickFiles: () -> Unit,
+    onPickPhotos: () -> Unit,
+    onTakePhoto: () -> Unit,
 ) {
     val group = state.group ?: return
+    var attachSheet by remember { mutableStateOf(false) }
     val entries = state.entries
     val listState = rememberLazyListState()
     val hazeState = rememberHazeState()
@@ -98,7 +107,8 @@ fun CrewChatScreen(
     var follow by remember { mutableStateOf(true) }
     val lastIndex by rememberUpdatedState(entries.lastIndex)
     val bottomPadding = with(LocalDensity.current) { composerHeight.toDp() } + 16.dp
-    val panelOffset = with(LocalDensity.current) { composerHeight.toDp() } + 8.dp
+    val panelOffset = with(LocalDensity.current) { composerHeight.toDp() } + 18.dp
+    val played = remember(group.id) { mutableSetOf<String>() }
 
     LaunchedEffect(group.id) { follow = true }
     LaunchedEffect(listState) {
@@ -170,22 +180,43 @@ fun CrewChatScreen(
                                     is CrewEntryUi.Message -> if (entry.fromUser) "user" else "agent"
                                     is CrewEntryUi.Notice -> "notice"
                                     is CrewEntryUi.Approval -> "approval"
+                                    is CrewEntryUi.Ask -> "ask"
                                 }
                             },
                         ) { entry ->
-                            when (entry) {
-                                is CrewEntryUi.Message -> CrewMessageRow(
-                                    entry = entry,
-                                    highlighted = entry.messageId != null &&
-                                        entry.messageId == state.focusMessageId,
-                                    onOpenMenu = { onAction(CrewAction.OpenMessageMenu(entry.key)) },
-                                    onJump = { id -> onAction(CrewAction.JumpToMessage(id)) },
-                                )
-                                is CrewEntryUi.Notice -> CrewNoticeRow(entry.text)
-                                is CrewEntryUi.Approval -> CrewApprovalCard(
-                                    entry = entry,
-                                    onDecide = { approved -> onAction(CrewAction.Approve(entry.id, approved)) },
-                                )
+                            val fromUser = entry is CrewEntryUi.Message && entry.fromUser
+                            val play = entry.isFresh() && entry.key !in played
+                            FocusBubbleEnter(
+                                play = play,
+                                fromUser = fromUser,
+                                onPlayed = { played += entry.key },
+                            ) {
+                                when (entry) {
+                                    is CrewEntryUi.Message -> CrewMessageRow(
+                                        entry = entry,
+                                        highlighted = entry.messageId != null &&
+                                            entry.messageId == state.focusMessageId,
+                                        onOpenMenu = { onAction(CrewAction.OpenMessageMenu(entry.key)) },
+                                        onJump = { id -> onAction(CrewAction.JumpToMessage(id)) },
+                                    )
+                                    is CrewEntryUi.Notice -> CrewNoticeRow(entry.text)
+                                    is CrewEntryUi.Approval -> CrewApprovalCard(
+                                        entry = entry,
+                                        onDecide = { approved ->
+                                            onAction(CrewAction.Approve(entry.id, approved))
+                                        },
+                                    )
+                                    is CrewEntryUi.Ask -> CrewAskCard(
+                                        entry = entry,
+                                        drafts = state.askDrafts[entry.id].orEmpty(),
+                                        onAction = onAction,
+                                    )
+                                }
+                            }
+                        }
+                        if (state.todos.isNotEmpty()) {
+                            item(key = "todos", contentType = "todos") {
+                                CrewTodoCard(state.todos)
                             }
                         }
                     }
@@ -208,37 +239,29 @@ fun CrewChatScreen(
                 input = state.input,
                 onInputChange = { onAction(CrewAction.InputChanged(it)) },
                 placeholder = stringResource(R.string.crew_input_hint),
-                canSend = state.input.isNotBlank() && !state.sending,
-                sending = false,
+                canSend = (state.input.isNotBlank() || state.attachments.isNotEmpty()) &&
+                    !state.sending && !state.running,
+                sending = state.sending || state.running,
                 onSend = {
                     follow = true
                     onAction(CrewAction.Send)
                 },
-                onStop = {},
+                onStop = { onAction(CrewAction.Stop) },
                 hazeState = hazeState,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 0.dp),
                 onHeightChange = { composerHeight = it },
+                onAdd = { attachSheet = true },
+                addContentDescription = stringResource(R.string.crew_attach),
                 attachments = {
-                    state.reply?.let { reply ->
-                        CrewReplyPreview(reply = reply, onCancel = { onAction(CrewAction.CancelReply) })
-                    }
-                },
-                pills = {
-                    FocusComposerPill(
-                        onClick = {
-                            val prefix = if (state.input.isEmpty() || state.input.last().isWhitespace()) "" else " "
-                            onAction(CrewAction.InputChanged(state.input + prefix + "@"))
-                        },
-                        label = "@",
-                    )
-                    if (state.running) {
-                        FocusComposerPill(
-                            onClick = { onAction(CrewAction.Stop) },
-                            icon = FocusIcons.Stop,
-                            label = stringResource(R.string.crew_stop),
-                            selected = true,
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        state.reply?.let { reply ->
+                            CrewReplyPreview(reply = reply, onCancel = { onAction(CrewAction.CancelReply) })
+                        }
+                        CrewComposerAttachments(
+                            attachments = state.attachments,
+                            onRemove = { onAction(CrewAction.RemoveAttachment(it)) },
                         )
                     }
                 },
@@ -251,6 +274,72 @@ fun CrewChatScreen(
             onAction = onAction,
             onPickPhoto = onPickMemberPhoto,
         )
+    }
+    if (attachSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { attachSheet = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.crew_attach_title),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                CrewAttachOption(
+                    icon = FocusIcons.Photo,
+                    label = stringResource(R.string.crew_attach_photos),
+                    onClick = {
+                        attachSheet = false
+                        onPickPhotos()
+                    },
+                )
+                CrewAttachOption(
+                    icon = FocusIcons.File,
+                    label = stringResource(R.string.crew_attach_files),
+                    onClick = {
+                        attachSheet = false
+                        onPickFiles()
+                    },
+                )
+                CrewAttachOption(
+                    icon = FocusIcons.Photo,
+                    label = stringResource(R.string.crew_attach_camera),
+                    onClick = {
+                        attachSheet = false
+                        onTakePhoto()
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CrewAttachOption(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = FocusShapeTokens.card,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        onClick = hapticTap(onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(text = label, style = MaterialTheme.typography.titleSmall)
+        }
     }
 }
 
@@ -389,6 +478,14 @@ private fun CrewMessageRow(
                     CrewMentionChips(entry.mentions)
                 }
             }
+            if (!entry.fromUser && entry.reasoning.isNotBlank()) {
+                FocusReasoningCard(
+                    text = entry.reasoning,
+                    running = entry.reasoningRunning,
+                    durationMs = entry.reasoningMs,
+                    startedAt = entry.reasoningStartedAt,
+                )
+            }
             if (entry.streaming && entry.text.isBlank()) {
                 CrewTypingBubble(activity = entry.activity)
             } else if (entry.text.isNotBlank()) {
@@ -404,6 +501,9 @@ private fun CrewMessageRow(
                         { CrewQuoteHeader(quote = quote, onJump = onJump) }
                     },
                 )
+            }
+            if (entry.attachments.isNotEmpty()) {
+                CrewAttachmentStrip(entry.attachments)
             }
             if (entry.fromUser && entry.mentions.isNotEmpty()) {
                 CrewMentionChips(entry.mentions)
@@ -783,6 +883,67 @@ private fun CrewReplyPreview(reply: CrewQuoteUi, onCancel: () -> Unit) {
             )
         }
     }
+}
+
+@Composable
+private fun CrewComposerAttachments(
+    attachments: List<ChatAttachment>,
+    onRemove: (String) -> Unit,
+) {
+    if (attachments.isEmpty()) return
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        attachments.forEach { attachment ->
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = if (attachment.kind == AttachmentKind.Image) {
+                            FocusIcons.Photo
+                        } else {
+                            FocusIcons.File
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = attachment.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    IconButton(
+                        onClick = hapticTap { onRemove(attachment.id) },
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Icon(
+                            FocusIcons.Close,
+                            contentDescription = stringResource(R.string.crew_remove_attachment),
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun CrewEntryUi.isFresh(): Boolean = when (this) {
+    is CrewEntryUi.Approval -> true
+    is CrewEntryUi.Ask -> true
+    is CrewEntryUi.Message -> key.startsWith("user-") || key.startsWith("agent-")
+    is CrewEntryUi.Notice -> false
 }
 
 @Composable

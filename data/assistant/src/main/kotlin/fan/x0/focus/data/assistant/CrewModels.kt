@@ -28,6 +28,9 @@ data class CrewMember(
     val avatarImage: String,
     val position: Int,
     val active: Boolean,
+    val providerId: String = "",
+    val model: String = "",
+    val reasoning: String = "",
 )
 
 data class CrewMessage(
@@ -41,6 +44,10 @@ data class CrewMessage(
     val reactions: List<String> = emptyList(),
     val kind: CrewMessageKind = CrewMessageKind.Text,
     val createdAt: Long = 0,
+    val reasoning: String = "",
+    val elapsedMs: Long = 0,
+    val tools: List<CrewToolTrace> = emptyList(),
+    val attachments: List<ChatAttachment> = emptyList(),
 )
 
 data class CrewGroupDetail(

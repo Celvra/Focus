@@ -32,7 +32,10 @@ internal fun AgentGroup.toUi(
     avatarPalette = avatarPalette,
     memberCount = members.size,
     members = members.map { it.toUi(avatars) },
-    preview = last?.content?.replace(Regex("\\s+"), " ")?.trim().orEmpty(),
+    preview = last?.let { message ->
+        message.content.replace(Regex("\\s+"), " ").trim().takeIf { it.isNotBlank() }
+            ?: message.attachments.firstOrNull()?.name
+    }.orEmpty(),
     previewAuthor = when (last?.authorType) {
         CrewAuthorType.User -> ""
         CrewAuthorType.Agent -> last.authorName
@@ -69,6 +72,7 @@ internal fun List<CrewMessage>.toEntries(
                 replyTo = message.replyTo(byId),
                 reactions = message.reactions,
                 mentions = message.mentions(members),
+                attachments = message.attachments,
             )
             message.authorType == CrewAuthorType.Agent -> {
                 val member = members.firstOrNull { it.id == message.authorId }
@@ -86,6 +90,12 @@ internal fun List<CrewMessage>.toEntries(
                     replyTo = message.replyTo(byId),
                     reactions = message.reactions,
                     mentions = message.mentions(members),
+                    tools = message.tools.map {
+                        CrewToolUi(it.id, it.label, it.status, it.summary, it.arguments, it.detail)
+                    },
+                    attachments = message.attachments,
+                    reasoning = message.reasoning,
+                    reasoningMs = message.elapsedMs,
                 )
             }
             else -> CrewEntryUi.Notice(
@@ -116,9 +126,10 @@ internal fun CrewRunEntry.toUi(
             messages[id]?.toQuote() ?: CrewQuoteUi(messageId = id, author = "", text = "", deleted = true)
         },
         mentions = CrewMentions.names(text, members).map { CrewMentionChipUi(it) },
+        attachments = attachments,
     )
     is CrewRunEntry.Agent -> {
-        if (!streaming && text.isBlank() && tools.isEmpty() && error == null) {
+        if (!streaming && text.isBlank() && tools.isEmpty() && reasoning.isBlank() && error == null) {
             null
         } else {
             CrewEntryUi.Message(
@@ -138,10 +149,22 @@ internal fun CrewRunEntry.toUi(
                 tools = tools.map {
                     CrewToolUi(it.id, it.label, it.status, it.summary, it.arguments, it.detail)
                 },
+                reasoning = reasoning,
+                reasoningMs = reasoningMs,
+                reasoningStartedAt = reasoningStartedAt,
+                reasoningRunning = reasoningRunning,
                 error = error,
             )
         }
     }
+    is CrewRunEntry.Ask -> CrewEntryUi.Ask(
+        key = key,
+        id = card.id,
+        intro = card.intro,
+        questions = card.questions,
+        phase = card.phase,
+        answers = card.answers,
+    )
     is CrewRunEntry.Approval -> CrewEntryUi.Approval(
         key = key,
         id = card.id,

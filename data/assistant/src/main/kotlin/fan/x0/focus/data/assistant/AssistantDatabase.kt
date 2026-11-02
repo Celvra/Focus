@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 15) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 16) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -214,6 +214,9 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 avatar_image TEXT NOT NULL DEFAULT '',
                 position INTEGER NOT NULL DEFAULT 0,
                 active INTEGER NOT NULL DEFAULT 1,
+                provider_id TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                reasoning TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             )
@@ -232,7 +235,11 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 reply_to_id INTEGER,
                 reactions TEXT,
                 kind TEXT NOT NULL DEFAULT 'text',
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                reasoning TEXT NOT NULL DEFAULT '',
+                elapsed_ms INTEGER NOT NULL DEFAULT 0,
+                tools TEXT,
+                attachments TEXT
             )
             """.trimIndent(),
         )
@@ -480,6 +487,15 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 )
                 """.trimIndent(),
             )
+        }
+        if (oldVersion < 16) {
+            db.execSQL("ALTER TABLE crew_members ADD COLUMN provider_id TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE crew_members ADD COLUMN model TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE crew_members ADD COLUMN reasoning TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE crew_messages ADD COLUMN reasoning TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE crew_messages ADD COLUMN elapsed_ms INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE crew_messages ADD COLUMN tools TEXT")
+            db.execSQL("ALTER TABLE crew_messages ADD COLUMN attachments TEXT")
         }
     }
 

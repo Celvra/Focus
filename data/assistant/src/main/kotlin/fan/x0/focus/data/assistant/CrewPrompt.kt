@@ -29,7 +29,7 @@ class CrewPrompt(private val locale: LocaleController) {
         builder.appendLine("- You may use tools. Use a tool before claiming a fact about files, feeds, calendar, goals, reminders, or the paired computer.")
         builder.appendLine("- Tool actions that need approval show a card to the user. Wait for the result before claiming the action happened.")
         builder.appendLine("- Before a slow tool, call set_working_text with a short line in the user's language so the group sees what you are doing.")
-        builder.appendLine("- The ask tool is not available. If you need a decision, ask plainly in your reply and stop.")
+        builder.appendLine("- Use the ask tool when a decision blocks the group. The user answers in a card, then the group continues.")
         builder.appendLine("- You may react to a message with react_to_group_message when an emoji fits.")
         builder.appendLine("- When the group has a clear answer, call finish_group_discussion.")
         builder.appendLine("- ${language()}")
@@ -54,6 +54,13 @@ class CrewPrompt(private val locale: LocaleController) {
             }
         }
         builder.append(message.content)
+        message.attachments.filter { it.kind == AttachmentKind.Text }.forEach { attachment ->
+            val body = attachment.text ?: return@forEach
+            if (body.isBlank()) return@forEach
+            builder.append("\n\n<<file: ").append(attachment.name).append(">>\n")
+            builder.append(body)
+            builder.append("\n<<end file>>")
+        }
         return builder.toString().trim()
     }
 

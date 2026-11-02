@@ -29,6 +29,8 @@ sealed interface CrewSpeechEvent {
     data class Delta(val text: String) : CrewSpeechEvent
     data class TextReset(val text: String) : CrewSpeechEvent
     data class Activity(val text: String) : CrewSpeechEvent
+    data class ReasoningDelta(val text: String) : CrewSpeechEvent
+    data class ReasoningTimed(val durationMs: Long) : CrewSpeechEvent
     data class Retry(val attempt: Int, val max: Int, val reason: String) : CrewSpeechEvent
     data class ToolStarted(val id: String, val label: String, val arguments: String = "") : CrewSpeechEvent
     data class ToolFinished(
@@ -42,6 +44,9 @@ sealed interface CrewSpeechEvent {
     data class ApprovalRequested(val request: ApprovalRequest) : CrewSpeechEvent
     data class ApprovalResolved(val request: ApprovalRequest, val approved: Boolean) : CrewSpeechEvent
     data class ApprovalFinished(val id: String) : CrewSpeechEvent
+    data class AskRequested(val request: AskRequest) : CrewSpeechEvent
+    data class AskResolved(val request: AskRequest, val reply: AskReply) : CrewSpeechEvent
+    data class TodoUpdated(val todos: List<ConversationTodo>) : CrewSpeechEvent
     data class ReactionAdded(val messageId: Long, val emoji: String) : CrewSpeechEvent
     data class Handoff(val memberId: String) : CrewSpeechEvent
     data class Completed(val speech: CrewSpeech) : CrewSpeechEvent
@@ -66,6 +71,7 @@ class CrewEngine(
     private val agent: AgentSettings,
 ) {
     private val waivers = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+    private val askReplies = ConcurrentHashMap<String, CompletableDeferred<AskReply>>()
 
     private val specs: List<ToolSpec> = ToolCatalog.chat()
         .filterNot { it.name in EXCLUDED }
@@ -79,13 +85,18 @@ class CrewEngine(
         waivers.computeIfAbsent(approvalId) { CompletableDeferred() }.complete(approved)
     }
 
+    fun answerAsk(askId: String, answers: List<AskAnswer>, skipped: Boolean = false) {
+        askReplies.computeIfAbsent(askId) { CompletableDeferred() }
+            .complete(AskReply(id = askId, answers = answers, skipped = skipped))
+    }
+
     fun speak(
         group: AgentGroup,
         member: CrewMember,
         members: List<CrewMember>,
     ): Flow<CrewSpeechEvent> = flow {
         val config = settings.configOnce()
-        val provider = config.activeProvider
+        val provider = config.providers.firstOrNull { it.id == member.providerId } ?: config.activeProvider
         if (provider == null) {
             emit(CrewSpeechEvent.Completed(CrewSpeech(error = "No model provider is configured.")))
             return@flow
@@ -95,12 +106,14 @@ class CrewEngine(
             emit(CrewSpeechEvent.Completed(CrewSpeech(error = "No API key for ${provider.name}.")))
             return@flow
         }
-        val endpoint = ModelEndpoint(provider.baseUrl, provider.model)
+        val model = member.model.trim().ifBlank { provider.model }
+        val endpoint = ModelEndpoint(provider.baseUrl, model)
         if (!endpoint.isUsable) {
             emit(CrewSpeechEvent.Completed(CrewSpeech(error = "The model connection is not usable.")))
             return@flow
         }
         val requestConfig = provider.requestConfig(apiKey)
+        val reasoning = ReasoningLevel.fromName(member.reasoning)
         val retry = agent.configOnce().retry
         val history = store.messages(group.id, CONTEXT_MESSAGES)
         val quotes = mutableMapOf<Long, CrewMessage>()
@@ -130,8 +143,11 @@ class CrewEngine(
                         lastSeenId = fresh.last().id
                         fresh.forEach { message ->
                             val text = prompt.transcriptMessage(message, member.id, quotes[message.replyToId])
-                            if (text.isNotBlank()) {
-                                conversation += ChatMessageDto(role = "user", content = text)
+                            if (hasContent(message, text)) {
+                                conversation += ChatMessageDto(
+                                    role = "user",
+                                    content = messageContent(message, text.take(MESSAGE_LIMIT)),
+                                )
                             }
                         }
                     }
@@ -155,10 +171,15 @@ class CrewEngine(
                     config = requestConfig,
                     messages = conversation,
                     retry = retry,
+                    reasoningEffort = reasoning.wire,
                     onDelta = { delta ->
                         roundText.append(delta)
                         activeRoundText = roundText.toString()
                         emit(CrewSpeechEvent.Delta(delta))
+                    },
+                    onReasoning = { delta -> emit(CrewSpeechEvent.ReasoningDelta(delta)) },
+                    onReasoningTimed = { durationMs ->
+                        emit(CrewSpeechEvent.ReasoningTimed(durationMs))
                     },
                     onRetry = { attempt, max, reason ->
                         emit(CrewSpeechEvent.Retry(attempt, max, reason))
@@ -294,6 +315,21 @@ class CrewEngine(
                     )
                 }
                 val result = tools.execute(call, conversationId = group.id, mode = AgentMode.Build)
+                if (result.todos != null) {
+                    emitEvent(CrewSpeechEvent.TodoUpdated(result.todos))
+                }
+                val request = result.ask
+                if (request != null) {
+                    emitEvent(CrewSpeechEvent.AskRequested(request))
+                    val reply = awaitReply(request.id)
+                    emitEvent(CrewSpeechEvent.AskResolved(request, reply))
+                    return ToolOutcome(
+                        result = result.copy(
+                            content = request.answerContent(reply),
+                            summary = request.questionLabels(),
+                        ),
+                    )
+                }
                 handleApproval(group, result, emitEvent)
             }
         }
@@ -394,18 +430,33 @@ class CrewEngine(
         val result = mutableListOf<ChatMessageDto>()
         messages.forEach { message ->
             val text = prompt.transcriptMessage(message, selfId, quotes[message.replyToId])
-            if (text.isBlank()) return@forEach
+            if (!hasContent(message, text)) return@forEach
             val role = if (message.authorType == CrewAuthorType.Agent && message.authorId == selfId) {
                 "assistant"
             } else {
                 "user"
             }
-            result += ChatMessageDto(role = role, content = text.take(MESSAGE_LIMIT))
+            val content: MessageContent = if (role == "assistant") {
+                MessageContent.Text(text.take(MESSAGE_LIMIT))
+            } else {
+                messageContent(message, text.take(MESSAGE_LIMIT))
+            }
+            result += ChatMessageDto(role = role, content = content)
         }
         if (result.firstOrNull()?.role == "assistant") {
             result.add(0, ChatMessageDto(role = "user", content = "The group transcript starts here."))
         }
         return result
+    }
+
+    private fun hasContent(message: CrewMessage, text: String): Boolean =
+        text.isNotBlank() || message.attachments.any { it.kind == AttachmentKind.Image && it.dataUrl != null }
+
+    private fun messageContent(message: CrewMessage, text: String): MessageContent {
+        val images = message.attachments
+            .filter { it.kind == AttachmentKind.Image }
+            .mapNotNull { it.dataUrl }
+        return if (images.isEmpty()) MessageContent.Text(text) else MessageContent.of(text, images)
     }
 
     private suspend fun streamRound(
@@ -414,12 +465,17 @@ class CrewEngine(
         config: ProviderRequestConfig,
         messages: List<ChatMessageDto>,
         retry: RetryConfig,
+        reasoningEffort: String?,
         onDelta: suspend (String) -> Unit,
+        onReasoning: suspend (String) -> Unit,
+        onReasoningTimed: suspend (Long) -> Unit,
         onRetry: suspend (Int, Int, String) -> Unit,
     ): CompletedMessage {
         var attempt = 0
         while (true) {
             var visible = false
+            var reasoningStartedAt = 0L
+            var reasoningEndedAt = 0L
             val accumulator = StreamAccumulator()
             try {
                 client.stream(
@@ -433,18 +489,37 @@ class CrewEngine(
                         tools = specs.map { it.toDto() },
                         toolChoice = "auto",
                         temperature = 0.5,
+                        reasoningEffort = reasoningEffort,
                     ),
                 ).collect { event ->
                     if (event is ChatStreamEvent.Text && event.delta.isNotBlank()) visible = true
                     accumulator.apply(event)
-                    if (event is ChatStreamEvent.Text && event.delta.isNotEmpty()) {
-                        onDelta(event.delta)
+                    when (event) {
+                        is ChatStreamEvent.Text -> {
+                            if (event.delta.isEmpty()) return@collect
+                            if (reasoningStartedAt > 0 && reasoningEndedAt == 0L) {
+                                reasoningEndedAt = System.currentTimeMillis()
+                            }
+                            onDelta(event.delta)
+                        }
+                        is ChatStreamEvent.Reasoning -> {
+                            if (event.delta.isEmpty()) return@collect
+                            if (reasoningStartedAt == 0L) reasoningStartedAt = System.currentTimeMillis()
+                            onReasoning(event.delta)
+                        }
+                        else -> Unit
                     }
                 }
                 val result = accumulator.result()
                 if (result.text.isBlank() && result.toolCalls.isEmpty() && result.reasoning.isBlank()) {
                     throw ModelProtocolException("the model returned an empty reply")
                 }
+                val reasoningMs = when {
+                    reasoningStartedAt == 0L -> 0L
+                    reasoningEndedAt > 0 -> reasoningEndedAt - reasoningStartedAt
+                    else -> System.currentTimeMillis() - reasoningStartedAt
+                }
+                if (reasoningMs > 0) onReasoningTimed(reasoningMs)
                 return result
             } catch (e: CancellationException) {
                 throw e
@@ -462,6 +537,13 @@ class CrewEngine(
         val decision = withTimeoutOrNull(APPROVAL_TIMEOUT_MS) { deferred.await() }
         waivers.remove(approvalId)
         return decision ?: false
+    }
+
+    private suspend fun awaitReply(askId: String): AskReply {
+        val deferred = askReplies.computeIfAbsent(askId) { CompletableDeferred() }
+        val reply = withTimeoutOrNull(APPROVAL_TIMEOUT_MS) { deferred.await() }
+        askReplies.remove(askId)
+        return reply ?: AskReply(id = askId, skipped = true)
     }
 
     private fun parseArguments(raw: String): JsonObject? =
@@ -488,7 +570,6 @@ class CrewEngine(
         private const val DETAIL_LIMIT = 6_000
         private const val APPROVAL_TIMEOUT_MS = 15 * 60 * 1000L
         private val EXCLUDED = setOf(
-            "ask",
             "create_plan",
             "propose_plan",
             "react_to_message",

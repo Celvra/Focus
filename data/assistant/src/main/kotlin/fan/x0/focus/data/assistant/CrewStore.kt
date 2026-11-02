@@ -17,6 +17,8 @@ import java.util.UUID
 class CrewStore(private val database: AssistantDatabase) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
     private val reactionsSerializer = ListSerializer(String.serializer())
+    private val toolsSerializer = ListSerializer(CrewToolTrace.serializer())
+    private val attachmentsSerializer = ListSerializer(ChatAttachment.serializer())
     private val _deleted = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val deleted: SharedFlow<String> = _deleted.asSharedFlow()
 
@@ -162,6 +164,9 @@ class CrewStore(private val database: AssistantDatabase) {
         avatarPreset: Int,
         avatarPalette: Int,
         avatarImage: String = "",
+        providerId: String = "",
+        model: String = "",
+        reasoning: String = "",
     ): CrewMember = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val position = nextPosition(groupId)
@@ -175,6 +180,9 @@ class CrewStore(private val database: AssistantDatabase) {
             avatarImage = avatarImage,
             position = position,
             active = true,
+            providerId = providerId,
+            model = model,
+            reasoning = reasoning,
         )
         val values = ContentValues().apply {
             put("id", member.id)
@@ -186,6 +194,9 @@ class CrewStore(private val database: AssistantDatabase) {
             put("avatar_image", member.avatarImage)
             put("position", member.position)
             put("active", 1)
+            put("provider_id", member.providerId)
+            put("model", member.model)
+            put("reasoning", member.reasoning)
             put("created_at", now)
             put("updated_at", now)
         }
@@ -203,6 +214,9 @@ class CrewStore(private val database: AssistantDatabase) {
             put("avatar_image", member.avatarImage)
             put("position", member.position)
             put("active", if (member.active) 1 else 0)
+            put("provider_id", member.providerId)
+            put("model", member.model)
+            put("reasoning", member.reasoning)
             put("updated_at", System.currentTimeMillis())
         }
         database.writableDatabase.update("crew_members", values, "id = ?", arrayOf(member.id))
@@ -283,6 +297,10 @@ class CrewStore(private val database: AssistantDatabase) {
         replyToId: Long? = null,
         reactions: List<String> = emptyList(),
         kind: CrewMessageKind = CrewMessageKind.Text,
+        reasoning: String = "",
+        elapsedMs: Long = 0,
+        tools: List<CrewToolTrace> = emptyList(),
+        attachments: List<ChatAttachment> = emptyList(),
     ): CrewMessage = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val values = ContentValues().apply {
@@ -298,6 +316,16 @@ class CrewStore(private val database: AssistantDatabase) {
             )
             put("kind", kind.name.lowercase())
             put("created_at", now)
+            put("reasoning", reasoning)
+            put("elapsed_ms", elapsedMs)
+            put(
+                "tools",
+                if (tools.isEmpty()) null else json.encodeToString(toolsSerializer, tools),
+            )
+            put(
+                "attachments",
+                if (attachments.isEmpty()) null else json.encodeToString(attachmentsSerializer, attachments),
+            )
         }
         val id = database.writableDatabase.insertOrThrow("crew_messages", null, values)
         val touch = ContentValues().apply {
@@ -316,7 +344,36 @@ class CrewStore(private val database: AssistantDatabase) {
             reactions = reactions,
             kind = kind,
             createdAt = now,
+            reasoning = reasoning,
+            elapsedMs = elapsedMs,
+            tools = tools,
+            attachments = attachments,
         )
+    }
+
+    suspend fun todos(groupId: String): List<ConversationTodo> = withContext(Dispatchers.IO) {
+        database.readableDatabase.rawQuery(
+            "SELECT id, content, status, priority, position, created_at, updated_at " +
+                "FROM conversation_todos WHERE conversation_id = ? ORDER BY position, id",
+            arrayOf(groupId),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        ConversationTodo(
+                            id = cursor.getLong(0),
+                            conversationId = groupId,
+                            content = cursor.getString(1),
+                            status = TodoStatus.fromWire(cursor.getString(2)),
+                            priority = TodoPriority.fromWire(cursor.getString(3)),
+                            position = cursor.getInt(4),
+                            createdAt = cursor.getLong(5),
+                            updatedAt = cursor.getLong(6),
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     suspend fun setReactions(id: Long, reactions: List<String>) = withContext(Dispatchers.IO) {
@@ -472,6 +529,9 @@ class CrewStore(private val database: AssistantDatabase) {
         avatarImage = getString(6).orEmpty(),
         position = getInt(7),
         active = getInt(8) != 0,
+        providerId = getString(9).orEmpty(),
+        model = getString(10).orEmpty(),
+        reasoning = getString(11).orEmpty(),
     )
 
     private fun Cursor.toMessage(): CrewMessage {
@@ -492,7 +552,25 @@ class CrewStore(private val database: AssistantDatabase) {
             reactions = reactions(),
             kind = kind,
             createdAt = getLong(9),
+            reasoning = getString(10).orEmpty(),
+            elapsedMs = getLong(11),
+            tools = tools(),
+            attachments = attachments(),
         )
+    }
+
+    private fun Cursor.tools(): List<CrewToolTrace> {
+        val raw = if (isNull(12)) null else getString(12)
+        return raw?.let {
+            runCatching { json.decodeFromString(toolsSerializer, it) }.getOrDefault(emptyList())
+        }.orEmpty()
+    }
+
+    private fun Cursor.attachments(): List<ChatAttachment> {
+        val raw = if (isNull(13)) null else getString(13)
+        return raw?.let {
+            runCatching { json.decodeFromString(attachmentsSerializer, it) }.getOrDefault(emptyList())
+        }.orEmpty()
     }
 
     private fun Cursor.reactions(): List<String> {
@@ -506,8 +584,10 @@ class CrewStore(private val database: AssistantDatabase) {
         private const val GROUP_COLUMNS =
             "id, name, topic, avatar_preset, avatar_palette, created_at, updated_at, last_message_at, archived"
         private const val MEMBER_COLUMNS =
-            "id, group_id, name, duty, avatar_preset, avatar_palette, avatar_image, position, active"
+            "id, group_id, name, duty, avatar_preset, avatar_palette, avatar_image, position, active, " +
+                "provider_id, model, reasoning"
         private const val MESSAGE_COLUMNS =
-            "id, group_id, author_type, author_id, author_name, content, reply_to_id, reactions, kind, created_at"
+            "id, group_id, author_type, author_id, author_name, content, reply_to_id, reactions, kind, created_at, " +
+                "reasoning, elapsed_ms, tools, attachments"
     }
 }
