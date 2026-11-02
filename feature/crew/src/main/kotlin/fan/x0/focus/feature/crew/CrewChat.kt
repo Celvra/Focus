@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -43,8 +44,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +69,7 @@ import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
 import fan.x0.focus.core.designsystem.components.FocusComposer
 import fan.x0.focus.core.designsystem.components.FocusEmptyState
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.FocusJumpToLatest
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
@@ -82,6 +85,8 @@ import fan.x0.focus.data.assistant.AttachmentKind
 import fan.x0.focus.data.assistant.ChatAttachment
 import fan.x0.focus.data.assistant.CrewApprovalPhase
 import fan.x0.focus.data.assistant.CrewToolStatus
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,28 +105,34 @@ fun CrewChatScreen(
     val entries = state.entries
     val listState = rememberLazyListState()
     val hazeState = rememberHazeState()
+    val scope = rememberCoroutineScope()
     var composerHeight by remember { mutableIntStateOf(0) }
     var follow by remember { mutableStateOf(true) }
-    val lastIndex by rememberUpdatedState(entries.lastIndex)
     val bottomPadding = with(LocalDensity.current) { composerHeight.toDp() } + 16.dp
     val panelOffset = with(LocalDensity.current) { composerHeight.toDp() } + 18.dp
     val played = remember(group.id) { mutableSetOf<String>() }
+    val stats = state.stats
+    val trailing = (if (state.todos.isNotEmpty()) 1 else 0) + (if (stats != null) 1 else 0)
+    val lastIndex = entries.size + trailing - 1
+    val lastEntry = entries.lastOrNull()
+    val lastTextLength = (lastEntry as? CrewEntryUi.Message)?.text?.length ?: 0
+    val lastToolCount = (lastEntry as? CrewEntryUi.Message)?.tools?.size ?: 0
 
     LaunchedEffect(group.id) { follow = true }
+    LaunchedEffect(state.running) { if (state.running) follow = true }
     LaunchedEffect(listState) {
         listState.interactionSource.interactions.collect { interaction ->
             when (interaction) {
                 is DragInteraction.Start -> follow = false
                 is DragInteraction.Stop, is DragInteraction.Cancel -> {
-                    follow = (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= lastIndex - 1
+                    snapshotFlow { listState.isScrollInProgress }.first { !it }
+                    follow = listState.atBottom()
                 }
             }
         }
     }
-    val liveTextLength = (entries.lastOrNull() as? CrewEntryUi.Message)?.takeIf { it.streaming }?.text?.length ?: 0
-    val stats = state.stats
-    LaunchedEffect(entries.size, liveTextLength, state.todos.size, stats) {
-        if (follow && entries.isNotEmpty()) listState.scrollToItem(lastIndex)
+    LaunchedEffect(entries.size, lastEntry?.key, lastTextLength, lastToolCount, bottomPadding, state.todos, stats) {
+        if (follow && lastIndex >= 0) listState.requestScrollToItem(lastIndex)
     }
     LaunchedEffect(state.focusMessageId) {
         val id = state.focusMessageId ?: return@LaunchedEffect
@@ -297,6 +308,19 @@ fun CrewChatScreen(
                         )
                     }
                 },
+            )
+            FocusJumpToLatest(
+                visible = !follow && entries.isNotEmpty(),
+                onClick = {
+                    scope.launch {
+                        val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+                        listState.animateScrollToItem(target)
+                        follow = true
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = bottomPadding),
             )
         }
     }
@@ -812,6 +836,12 @@ private fun CrewEntryUi.isFresh(): Boolean = when (this) {
     is CrewEntryUi.Ask -> true
     is CrewEntryUi.Message -> key.startsWith("user-") || key.startsWith("agent-")
     is CrewEntryUi.Notice -> false
+}
+
+private fun LazyListState.atBottom(): Boolean {
+    val layout = layoutInfo
+    val last = layout.visibleItemsInfo.lastOrNull() ?: return true
+    return last.index >= layout.totalItemsCount - 1
 }
 
 @Composable

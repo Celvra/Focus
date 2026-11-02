@@ -509,7 +509,10 @@ class CrewViewModel(
         val shown = if (agent != null) updateReveal(groupId, agent) else null
         return entries.mapNotNull { entry ->
             val mapped = if (shown != null && entry is CrewRunEntry.Agent && entry.key == agent?.key) {
-                entry.copy(text = shown)
+                entry.copy(
+                    text = shown,
+                    streaming = entry.streaming || shown.length < entry.text.length,
+                )
             } else {
                 entry
             }
