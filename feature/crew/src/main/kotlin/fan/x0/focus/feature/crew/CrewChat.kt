@@ -1,10 +1,6 @@
 package fan.x0.focus.feature.crew
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -30,15 +26,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -47,31 +40,31 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import fan.x0.focus.core.designsystem.components.FocusAttachmentSheet
+import fan.x0.focus.core.designsystem.components.FocusBubbleEnter
 import fan.x0.focus.core.designsystem.components.FocusChatBubble
 import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
 import fan.x0.focus.core.designsystem.components.FocusComposer
-import fan.x0.focus.core.designsystem.components.FocusBubbleEnter
 import fan.x0.focus.core.designsystem.components.FocusEmptyState
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
@@ -79,12 +72,15 @@ import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusReasoningCard
-import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
-import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
+import fan.x0.focus.core.designsystem.components.FocusSelectionBar
+import fan.x0.focus.core.designsystem.components.FocusTraceCard
+import fan.x0.focus.core.designsystem.components.FocusTraceStep
+import fan.x0.focus.core.designsystem.components.FocusStepStatus
 import fan.x0.focus.core.designsystem.components.hapticTap
-import fan.x0.focus.data.assistant.CrewApprovalPhase
+import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.data.assistant.AttachmentKind
 import fan.x0.focus.data.assistant.ChatAttachment
+import fan.x0.focus.data.assistant.CrewApprovalPhase
 import fan.x0.focus.data.assistant.CrewToolStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,6 +93,7 @@ fun CrewChatScreen(
     onPickFiles: () -> Unit,
     onPickPhotos: () -> Unit,
     onTakePhoto: () -> Unit,
+    onCopy: (String) -> Unit,
 ) {
     val group = state.group ?: return
     var attachSheet by remember { mutableStateOf(false) }
@@ -122,7 +119,8 @@ fun CrewChatScreen(
         }
     }
     val liveTextLength = (entries.lastOrNull() as? CrewEntryUi.Message)?.takeIf { it.streaming }?.text?.length ?: 0
-    LaunchedEffect(entries.size, liveTextLength) {
+    val stats = state.stats
+    LaunchedEffect(entries.size, liveTextLength, state.todos.size, stats) {
         if (follow && entries.isNotEmpty()) listState.scrollToItem(lastIndex)
     }
     LaunchedEffect(state.focusMessageId) {
@@ -138,7 +136,18 @@ fun CrewChatScreen(
         onAction(CrewAction.ClearFocus)
     }
 
-    BackHandler(enabled = state.mention.visible) { onAction(CrewAction.MentionDismiss) }
+    val mentionBackState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
+    NavigationBackHandler(
+        state = mentionBackState,
+        isBackEnabled = state.mention.visible,
+        onBackCompleted = { onAction(CrewAction.MentionDismiss) },
+    )
+    val selectionBackState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
+    NavigationBackHandler(
+        state = selectionBackState,
+        isBackEnabled = state.selectionKey != null,
+        onBackCompleted = { onAction(CrewAction.ClearSelection) },
+    )
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -168,7 +177,7 @@ fun CrewChatScreen(
                             start = 12.dp,
                             top = 10.dp,
                             end = 12.dp,
-                            bottom = bottomPadding,
+                            bottom = bottomPadding + if (state.selectionKey != null) 64.dp else 0.dp,
                         ),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
@@ -194,9 +203,9 @@ fun CrewChatScreen(
                                 when (entry) {
                                     is CrewEntryUi.Message -> CrewMessageRow(
                                         entry = entry,
-                                        highlighted = entry.messageId != null &&
-                                            entry.messageId == state.focusMessageId,
-                                        onOpenMenu = { onAction(CrewAction.OpenMessageMenu(entry.key)) },
+                                        state = state,
+                                        onAction = onAction,
+                                        onCopy = onCopy,
                                         onJump = { id -> onAction(CrewAction.JumpToMessage(id)) },
                                     )
                                     is CrewEntryUi.Notice -> CrewNoticeRow(entry.text)
@@ -219,6 +228,15 @@ fun CrewChatScreen(
                                 CrewTodoCard(state.todos)
                             }
                         }
+                        if (stats != null) {
+                            item(key = "stats", contentType = "stats") {
+                                CrewStatsLine(
+                                    stats = stats,
+                                    config = state.statsConfig,
+                                    modifier = Modifier.animateItem(),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -233,6 +251,20 @@ fun CrewChatScreen(
                 CrewMentionPanel(
                     mention = state.mention,
                     onPick = { onAction(CrewAction.MentionPick(it)) },
+                )
+            }
+            AnimatedVisibility(
+                visible = state.selectionKey != null && !state.mention.visible,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 12.dp, end = 12.dp, bottom = panelOffset),
+                enter = slideInVertically { it / 2 } + fadeIn(),
+                exit = slideOutVertically { it / 2 } + fadeOut(),
+            ) {
+                FocusSelectionBar(
+                    text = stringResource(R.string.crew_selection_mode),
+                    doneText = stringResource(R.string.crew_selection_done),
+                    onDone = { onAction(CrewAction.ClearSelection) },
                 )
             }
             FocusComposer(
@@ -276,70 +308,25 @@ fun CrewChatScreen(
         )
     }
     if (attachSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { attachSheet = false },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.crew_attach_title),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                CrewAttachOption(
-                    icon = FocusIcons.Photo,
-                    label = stringResource(R.string.crew_attach_photos),
-                    onClick = {
-                        attachSheet = false
-                        onPickPhotos()
-                    },
-                )
-                CrewAttachOption(
-                    icon = FocusIcons.File,
-                    label = stringResource(R.string.crew_attach_files),
-                    onClick = {
-                        attachSheet = false
-                        onPickFiles()
-                    },
-                )
-                CrewAttachOption(
-                    icon = FocusIcons.Photo,
-                    label = stringResource(R.string.crew_attach_camera),
-                    onClick = {
-                        attachSheet = false
-                        onTakePhoto()
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CrewAttachOption(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = FocusShapeTokens.card,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        onClick = hapticTap(onClick),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
-            Text(text = label, style = MaterialTheme.typography.titleSmall)
-        }
+        FocusAttachmentSheet(
+            title = stringResource(R.string.crew_attach_title),
+            cameraLabel = stringResource(R.string.crew_attach_camera),
+            photosLabel = stringResource(R.string.crew_attach_photos),
+            filesLabel = stringResource(R.string.crew_attach_files),
+            onTakePhoto = {
+                attachSheet = false
+                onTakePhoto()
+            },
+            onPickPhotos = {
+                attachSheet = false
+                onPickPhotos()
+            },
+            onPickFiles = {
+                attachSheet = false
+                onPickFiles()
+            },
+            onDismiss = { attachSheet = false },
+        )
     }
 }
 
@@ -433,10 +420,13 @@ private fun CrewEmptyThread() {
 @Composable
 private fun CrewMessageRow(
     entry: CrewEntryUi.Message,
-    highlighted: Boolean,
-    onOpenMenu: () -> Unit,
+    state: CrewUiState,
+    onAction: (CrewAction) -> Unit,
+    onCopy: (String) -> Unit,
     onJump: (Long) -> Unit,
 ) {
+    val highlighted = entry.messageId != null && entry.messageId == state.focusMessageId
+    val selecting = state.selectionKey == entry.key
     val alignment = if (entry.fromUser) Alignment.End else Alignment.Start
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -486,6 +476,18 @@ private fun CrewMessageRow(
                     startedAt = entry.reasoningStartedAt,
                 )
             }
+            if (entry.tools.isNotEmpty()) {
+                FocusTraceCard(
+                    steps = entry.tools.map { tool ->
+                        FocusTraceStep(
+                            label = tool.label,
+                            status = tool.status.toStepStatus(),
+                            summary = tool.summary.ifBlank { tool.detail }.ifBlank { null },
+                            durationMs = 0,
+                        )
+                    },
+                )
+            }
             if (entry.streaming && entry.text.isBlank()) {
                 CrewTypingBubble(activity = entry.activity)
             } else if (entry.text.isNotBlank()) {
@@ -493,12 +495,25 @@ private fun CrewMessageRow(
                     text = entry.text,
                     fromUser = entry.fromUser,
                     highlighted = highlighted,
+                    selectable = selecting,
                     modifier = Modifier.fillMaxWidth(),
                     streaming = entry.streaming,
                     reactions = entry.reactions,
-                    onLongPress = entry.messageId?.let { { onOpenMenu() } },
+                    onLongPress = entry.messageId?.let {
+                        { onAction(CrewAction.OpenMessageMenu(entry.key)) }
+                    },
                     header = entry.replyTo?.let { quote ->
                         { CrewQuoteHeader(quote = quote, onJump = onJump) }
+                    },
+                    menu = {
+                        val menu = state.menu
+                        if (menu?.key == entry.key) {
+                            CrewMessageActionPopup(
+                                menu = menu,
+                                onAction = onAction,
+                                onCopy = onCopy,
+                            )
+                        }
                     },
                 )
             }
@@ -520,9 +535,6 @@ private fun CrewMessageRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-            if (entry.tools.isNotEmpty()) {
-                CrewToolTraces(entry.tools)
             }
             entry.error?.let { error ->
                 Text(
@@ -597,156 +609,6 @@ private fun CrewQuoteHeader(quote: CrewQuoteUi, onJump: (Long) -> Unit) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-    }
-}
-
-@Composable
-private fun CrewToolTraces(tools: List<CrewToolUi>) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        tools.forEach { tool ->
-            key(tool.id) {
-                CrewToolCard(tool)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CrewToolCard(tool: CrewToolUi) {
-    var expanded by rememberSaveable(tool.id) { mutableStateOf(false) }
-    val motion = LocalFocusMotion.current
-    val scheme = MaterialTheme.colorScheme
-    val container by animateColorAsState(
-        targetValue = when (tool.status) {
-            CrewToolStatus.Failed -> scheme.errorContainer
-            CrewToolStatus.Running -> scheme.secondaryContainer
-            CrewToolStatus.Done -> scheme.surfaceContainer
-        },
-        animationSpec = motion.effectsDefault(),
-        label = "crewToolContainer",
-    )
-    val content = when (tool.status) {
-        CrewToolStatus.Failed -> scheme.onErrorContainer
-        CrewToolStatus.Running -> scheme.onSecondaryContainer
-        CrewToolStatus.Done -> scheme.onSurfaceVariant
-    }
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = motion.spatialDefault(),
-        label = "crewToolChevron",
-    )
-    val expandable = tool.arguments.isNotBlank() || tool.detail.isNotBlank()
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(motion.spatialDefault()),
-        shape = MaterialTheme.shapes.large,
-        color = container,
-        contentColor = content,
-        onClick = hapticTap { if (expandable) expanded = !expanded },
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (tool.status == CrewToolStatus.Running) {
-                    FocusLoadingBlob(size = 12.dp)
-                } else {
-                    Icon(
-                        imageVector = if (tool.status == CrewToolStatus.Done) {
-                            FocusIcons.Check
-                        } else {
-                            FocusIcons.Warning
-                        },
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                    )
-                }
-                Text(
-                    text = tool.label,
-                    style = MaterialTheme.typography.labelLargeEmphasized,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (tool.summary.isNotBlank()) {
-                    Text(
-                        text = tool.summary,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                } else {
-                    Spacer(Modifier.weight(1f))
-                }
-                if (expandable) {
-                    Icon(
-                        imageVector = FocusIcons.ArrowDown,
-                        contentDescription = stringResource(
-                            if (expanded) R.string.crew_tool_collapse else R.string.crew_tool_expand,
-                        ),
-                        modifier = Modifier
-                            .size(18.dp)
-                            .graphicsLayer { rotationZ = rotation },
-                    )
-                }
-            }
-            AnimatedVisibility(visible = expanded) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (tool.arguments.isNotBlank()) {
-                        Text(
-                            text = stringResource(R.string.crew_tool_input),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (tool.status == CrewToolStatus.Failed) {
-                                scheme.onErrorContainer
-                            } else {
-                                scheme.onSurfaceVariant
-                            },
-                        )
-                        SelectionContainer {
-                            Text(
-                                text = tool.arguments,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 160.dp)
-                                    .verticalScroll(rememberScrollState()),
-                            )
-                        }
-                    }
-                    if (tool.detail.isNotBlank()) {
-                        Text(
-                            text = stringResource(R.string.crew_tool_output),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (tool.status == CrewToolStatus.Failed) {
-                                scheme.onErrorContainer
-                            } else {
-                                scheme.onSurfaceVariant
-                            },
-                        )
-                        SelectionContainer {
-                            Text(
-                                text = tool.detail,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 240.dp)
-                                    .verticalScroll(rememberScrollState()),
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -937,6 +799,12 @@ private fun CrewComposerAttachments(
             }
         }
     }
+}
+
+private fun CrewToolStatus.toStepStatus(): FocusStepStatus = when (this) {
+    CrewToolStatus.Running -> FocusStepStatus.Running
+    CrewToolStatus.Done -> FocusStepStatus.Done
+    CrewToolStatus.Failed -> FocusStepStatus.Failed
 }
 
 private fun CrewEntryUi.isFresh(): Boolean = when (this) {

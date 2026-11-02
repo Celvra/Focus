@@ -104,7 +104,6 @@
     <string name="crew_todo_in_progress">进行中</string>
     <string name="crew_member_provider">提供商</string>
     <string name="crew_member_model">模型</string>
-    <string name="crew_member_model_hint">留空则使用提供商默认模型</string>
     <string name="crew_member_reasoning">推理等级</string>
     <string name="crew_reasoning_auto">自动</string>
     <string name="crew_reasoning_off">关闭</string>
@@ -114,4 +113,29 @@
     <string name="crew_reasoning_xhigh">极高</string>
     <string name="crew_reasoning_max">最大</string>
     <string name="crew_member_default_provider">当前提供商</string>
+    <string name="crew_member_model_default">提供商默认模型</string>
+    <string name="crew_reasoning_off_desc">跳过推理，直接回答。</string>
+    <string name="crew_reasoning_auto_desc">由模型决定思考多少。</string>
+    <string name="crew_reasoning_low_desc">适合简单问题的简短推理。</string>
+    <string name="crew_reasoning_medium_desc">适合日常问题的均衡思考。</string>
+    <string name="crew_reasoning_high_desc">适合较难问题的较长推理。</string>
+    <string name="crew_reasoning_xhigh_desc">适合复杂任务的深度推理。</string>
+    <string name="crew_reasoning_max_desc">为最困难的问题投入最大算力。</string>
+    <string name="crew_model_picker_title">选择模型</string>
+    <string name="crew_model_picker_search">搜索模型</string>
+    <string name="crew_model_picker_empty">没有模型</string>
+    <string name="crew_model_picker_loading">正在加载模型</string>
+    <string name="crew_selection_mode">选择模式</string>
+    <string name="crew_selection_done">完成</string>
+    <string name="crew_select_text">选择文本</string>
+    <string name="crew_stats_provider">提供商</string>
+    <string name="crew_stats_model">模型</string>
+    <string name="crew_stats_input">输入</string>
+    <string name="crew_stats_output">输出</string>
+    <string name="crew_stats_total">总计</string>
+    <string name="crew_stats_cached">缓存</string>
+    <string name="crew_stats_round_value">第 %1$d 轮</string>
+    <string name="crew_stats_step_value">第 %1$d 步</string>
+    <string name="crew_stats_tokens">%1$sk</string>
+    <string name="crew_stats_seconds">%1$s 秒</string>
 </resources>

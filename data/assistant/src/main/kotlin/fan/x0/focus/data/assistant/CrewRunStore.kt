@@ -65,6 +65,7 @@ sealed interface CrewRunEntry {
         val reasoningMs: Long = 0,
         val reasoningStartedAt: Long = 0,
         val reasoningRunning: Boolean = false,
+        val stats: MessageStats? = null,
     ) : CrewRunEntry
 
     data class Approval(
@@ -210,6 +211,10 @@ class CrewRunStore {
 
     fun setAgentReasoningRunning(groupId: String, key: String, running: Boolean) {
         updateAgent(groupId, key) { it.copy(reasoningRunning = running) }
+    }
+
+    fun setAgentStats(groupId: String, key: String, stats: MessageStats) {
+        updateAgent(groupId, key) { it.copy(stats = stats) }
     }
 
     fun setTodos(groupId: String, todos: List<ConversationTodo>) {

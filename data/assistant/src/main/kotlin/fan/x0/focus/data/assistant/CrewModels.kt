@@ -48,6 +48,7 @@ data class CrewMessage(
     val elapsedMs: Long = 0,
     val tools: List<CrewToolTrace> = emptyList(),
     val attachments: List<ChatAttachment> = emptyList(),
+    val stats: MessageStats? = null,
 )
 
 data class CrewGroupDetail(

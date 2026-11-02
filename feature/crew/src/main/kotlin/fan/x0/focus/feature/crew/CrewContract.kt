@@ -7,10 +7,12 @@ import fan.x0.focus.data.assistant.AskAnswer
 import fan.x0.focus.data.assistant.AskKind
 import fan.x0.focus.data.assistant.AskQuestion
 import fan.x0.focus.data.assistant.ChatAttachment
+import fan.x0.focus.data.assistant.ChatDetailConfig
 import fan.x0.focus.data.assistant.ConversationTodo
 import fan.x0.focus.data.assistant.CrewApprovalPhase
 import fan.x0.focus.data.assistant.CrewAskPhase
 import fan.x0.focus.data.assistant.CrewToolStatus
+import fan.x0.focus.data.assistant.MessageStats
 
 data class CrewGroupUi(
     val id: String,
@@ -89,6 +91,7 @@ sealed interface CrewEntryUi {
         val reasoningStartedAt: Long = 0,
         val reasoningRunning: Boolean = false,
         val error: String? = null,
+        val stats: MessageStats? = null,
     ) : CrewEntryUi
 
     data class Ask(
@@ -200,6 +203,13 @@ data class CrewUiState(
     val memberDraft: MemberDraft? = null,
     val deleteGroup: CrewGroupUi? = null,
     val saving: Boolean = false,
+    val memberModels: List<String> = emptyList(),
+    val memberModelsLoading: Boolean = false,
+    val memberModelQuery: String = "",
+    val modelPickerOpen: Boolean = false,
+    val selectionKey: String? = null,
+    val statsConfig: ChatDetailConfig = ChatDetailConfig(),
+    val liveStats: MessageStats = MessageStats(),
 ) : UiState {
     val entries: List<CrewEntryUi>
         get() {
@@ -218,6 +228,16 @@ data class CrewUiState(
                     }
                     else -> false
                 }
+            }
+        }
+
+    val stats: MessageStats?
+        get() {
+            if (liveStats.hasUsage || liveStats.providerId.isNotBlank() || liveStats.round > 0) {
+                return liveStats
+            }
+            return history.asReversed().firstNotNullOfOrNull {
+                (it as? CrewEntryUi.Message)?.stats
             }
         }
 }
@@ -258,6 +278,10 @@ sealed interface CrewAction : UiAction {
     data object MemberPhotoCleared : CrewAction
     data class MemberProviderChanged(val id: String) : CrewAction
     data class MemberModelChanged(val value: String) : CrewAction
+    data object OpenMemberModelPicker : CrewAction
+    data object CloseMemberModelPicker : CrewAction
+    data class MemberModelQueryChanged(val value: String) : CrewAction
+    data object RefreshMemberModels : CrewAction
     data class MemberReasoningChanged(val value: String) : CrewAction
     data object SaveMember : CrewAction
     data class SetMemberActive(val id: String, val active: Boolean) : CrewAction
@@ -286,6 +310,8 @@ sealed interface CrewAction : UiAction {
     data object ConfirmDeleteMessage : CrewAction
     data object CancelDeleteMessage : CrewAction
     data class JumpToMessage(val messageId: Long) : CrewAction
+    data class SelectText(val key: String) : CrewAction
+    data object ClearSelection : CrewAction
     data object ClearFocus : CrewAction
     data class Approve(val approvalId: String, val approved: Boolean) : CrewAction
 }

@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 16) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 17) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -239,7 +239,8 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 reasoning TEXT NOT NULL DEFAULT '',
                 elapsed_ms INTEGER NOT NULL DEFAULT 0,
                 tools TEXT,
-                attachments TEXT
+                attachments TEXT,
+                stats_json TEXT
             )
             """.trimIndent(),
         )
@@ -496,6 +497,9 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             db.execSQL("ALTER TABLE crew_messages ADD COLUMN elapsed_ms INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE crew_messages ADD COLUMN tools TEXT")
             db.execSQL("ALTER TABLE crew_messages ADD COLUMN attachments TEXT")
+        }
+        if (oldVersion < 17) {
+            db.execSQL("ALTER TABLE crew_messages ADD COLUMN stats_json TEXT")
         }
     }
 

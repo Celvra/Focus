@@ -3,15 +3,11 @@ package fan.x0.focus.feature.chat
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import fan.x0.focus.core.designsystem.components.FocusStatsLine
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.data.assistant.ChatDetailConfig
 import fan.x0.focus.data.assistant.ChatStatField
@@ -111,14 +107,7 @@ internal fun ChatStatsLine(
             }
         }
     if (parts.isEmpty()) return
-    Text(
-        text = parts.joinToString(" · "),
-        modifier = modifier.padding(start = 6.dp, top = 2.dp),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 3,
-        overflow = TextOverflow.Ellipsis,
-    )
+    FocusStatsLine(parts = parts, modifier = modifier)
 }
 
 internal fun MessageStats.hasStats(config: ChatDetailConfig): Boolean =

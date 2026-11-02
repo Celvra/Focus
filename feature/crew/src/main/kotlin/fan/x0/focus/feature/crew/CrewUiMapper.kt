@@ -96,6 +96,7 @@ internal fun List<CrewMessage>.toEntries(
                     attachments = message.attachments,
                     reasoning = message.reasoning,
                     reasoningMs = message.elapsedMs,
+                    stats = message.stats,
                 )
             }
             else -> CrewEntryUi.Notice(
@@ -154,6 +155,7 @@ internal fun CrewRunEntry.toUi(
                 reasoningStartedAt = reasoningStartedAt,
                 reasoningRunning = reasoningRunning,
                 error = error,
+                stats = stats,
             )
         }
     }

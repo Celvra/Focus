@@ -11,17 +11,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +40,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.BrandIcon
 import fan.x0.focus.core.designsystem.components.BrandIcons
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.FocusAttachmentSheet
 import fan.x0.focus.core.designsystem.components.hapticSelect
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.components.rememberProviderImage
@@ -312,7 +309,6 @@ internal fun ReasoningPickerSheet(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AttachmentSheet(
     mode: AgentMode,
@@ -322,112 +318,45 @@ internal fun AttachmentSheet(
     onPickFiles: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberBottomSheetState(
-        initialValue = SheetValue.Hidden,
-        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-    )
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    FocusAttachmentSheet(
+        title = stringResource(R.string.chat_attach_title),
+        cameraLabel = stringResource(R.string.chat_attach_camera),
+        photosLabel = stringResource(R.string.chat_attach_photos),
+        filesLabel = stringResource(R.string.chat_attach_files),
+        onTakePhoto = onTakePhoto,
+        onPickPhotos = onPickPhotos,
+        onPickFiles = onPickFiles,
+        onDismiss = onDismiss,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.chat_attach_title),
-                style = MaterialTheme.typography.titleLargeEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AttachmentTile(
-                    icon = FocusIcons.Camera,
-                    label = stringResource(R.string.chat_attach_camera),
-                    onClick = onTakePhoto,
-                    modifier = Modifier.weight(1f),
-                )
-                AttachmentTile(
-                    icon = FocusIcons.Photo,
-                    label = stringResource(R.string.chat_attach_photos),
-                    onClick = onPickPhotos,
-                    modifier = Modifier.weight(1f),
-                )
-                AttachmentTile(
-                    icon = FocusIcons.UploadFile,
-                    label = stringResource(R.string.chat_attach_files),
-                    onClick = onPickFiles,
-                    modifier = Modifier.weight(1f),
+        HorizontalDivider(
+            modifier = Modifier.padding(top = 4.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        )
+        Text(
+            text = stringResource(R.string.chat_mode_section),
+            style = MaterialTheme.typography.titleSmallEmphasized,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            AgentMode.entries.forEachIndexed { index, option ->
+                SegmentedButton(
+                    selected = option == mode,
+                    onClick = hapticSelect { onModeSelect(option) },
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = AgentMode.entries.size,
+                    ),
+                    label = {
+                        Text(stringResource(option.labelRes()))
+                    },
                 )
             }
-            HorizontalDivider(
-                modifier = Modifier.padding(top = 4.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-            )
-            Text(
-                text = stringResource(R.string.chat_mode_section),
-                style = MaterialTheme.typography.titleSmallEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                AgentMode.entries.forEachIndexed { index, option ->
-                    SegmentedButton(
-                        selected = option == mode,
-                        onClick = hapticSelect { onModeSelect(option) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = AgentMode.entries.size,
-                        ),
-                        label = {
-                            Text(stringResource(option.labelRes()))
-                        },
-                    )
-                }
-            }
-            Text(
-                text = stringResource(mode.descriptionRes()),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
-    }
-}
-
-@Composable
-private fun AttachmentTile(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    FilledTonalButton(
-        onClick = hapticTap(onClick),
-        modifier = modifier.heightIn(min = 88.dp),
-        shape = MaterialTheme.shapes.extraLarge,
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 16.dp),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(28.dp),
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Text(
+            text = stringResource(mode.descriptionRes()),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

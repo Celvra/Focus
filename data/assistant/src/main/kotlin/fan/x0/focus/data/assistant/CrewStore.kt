@@ -301,6 +301,7 @@ class CrewStore(private val database: AssistantDatabase) {
         elapsedMs: Long = 0,
         tools: List<CrewToolTrace> = emptyList(),
         attachments: List<ChatAttachment> = emptyList(),
+        stats: MessageStats? = null,
     ): CrewMessage = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val values = ContentValues().apply {
@@ -326,6 +327,7 @@ class CrewStore(private val database: AssistantDatabase) {
                 "attachments",
                 if (attachments.isEmpty()) null else json.encodeToString(attachmentsSerializer, attachments),
             )
+            put("stats_json", stats?.let { json.encodeToString(MessageStats.serializer(), it) })
         }
         val id = database.writableDatabase.insertOrThrow("crew_messages", null, values)
         val touch = ContentValues().apply {
@@ -348,6 +350,7 @@ class CrewStore(private val database: AssistantDatabase) {
             elapsedMs = elapsedMs,
             tools = tools,
             attachments = attachments,
+            stats = stats,
         )
     }
 
@@ -556,6 +559,7 @@ class CrewStore(private val database: AssistantDatabase) {
             elapsedMs = getLong(11),
             tools = tools(),
             attachments = attachments(),
+            stats = stats(),
         )
     }
 
@@ -573,6 +577,13 @@ class CrewStore(private val database: AssistantDatabase) {
         }.orEmpty()
     }
 
+    private fun Cursor.stats(): MessageStats? {
+        val raw = if (isNull(14)) null else getString(14)
+        return raw?.let {
+            runCatching { json.decodeFromString(MessageStats.serializer(), it) }.getOrNull()
+        }
+    }
+
     private fun Cursor.reactions(): List<String> {
         val raw = if (isNull(7)) null else getString(7)
         return raw?.let {
@@ -588,6 +599,6 @@ class CrewStore(private val database: AssistantDatabase) {
                 "provider_id, model, reasoning"
         private const val MESSAGE_COLUMNS =
             "id, group_id, author_type, author_id, author_name, content, reply_to_id, reactions, kind, created_at, " +
-                "reasoning, elapsed_ms, tools, attachments"
+                "reasoning, elapsed_ms, tools, attachments, stats_json"
     }
 }

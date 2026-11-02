@@ -228,6 +228,7 @@ class CrewRunner(
         elapsedMs: Long = 0,
         tools: List<CrewToolTrace> = emptyList(),
         attachments: List<ChatAttachment> = emptyList(),
+        stats: MessageStats? = null,
     ): CrewMessage? {
         if (groupId in discarded) return null
         return store.appendMessage(
@@ -242,6 +243,7 @@ class CrewRunner(
             elapsedMs = elapsedMs,
             tools = tools,
             attachments = attachments,
+            stats = stats,
         )
     }
 
@@ -342,6 +344,7 @@ class CrewRunner(
                             key,
                             event.durationMs,
                         )
+                        is CrewSpeechEvent.StatsUpdated -> runs.setAgentStats(groupId, key, event.stats)
                         is CrewSpeechEvent.Retry -> runs.setAgentActivity(
                             groupId,
                             key,
@@ -420,6 +423,7 @@ class CrewRunner(
                         reasoning = snapshot?.reasoning.orEmpty(),
                         elapsedMs = snapshot?.reasoningMs ?: 0,
                         tools = snapshot?.tools.orEmpty(),
+                        stats = snapshot?.stats,
                     )
                     if (stored != null) {
                         lastPreview = text
@@ -484,6 +488,7 @@ class CrewRunner(
                         reasoning = snapshot?.reasoning.orEmpty(),
                         elapsedMs = snapshot?.reasoningMs ?: 0,
                         tools = snapshot?.tools.orEmpty(),
+                        stats = snapshot?.stats,
                     )
                 }
                 append(

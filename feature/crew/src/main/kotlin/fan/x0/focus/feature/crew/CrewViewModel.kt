@@ -7,9 +7,11 @@ import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.MessageNotifier
 import fan.x0.focus.data.assistant.AskAnswer
 import fan.x0.focus.data.assistant.AskKind
+import fan.x0.focus.data.assistant.AssistantConfig
 import fan.x0.focus.data.assistant.AssistantSettings
 import fan.x0.focus.data.assistant.AttachmentLoader
 import fan.x0.focus.data.assistant.ChatAttachment
+import fan.x0.focus.data.assistant.ChatDetailSettings
 import fan.x0.focus.data.assistant.CrewAvatarStore
 import fan.x0.focus.data.assistant.CrewAvatars
 import fan.x0.focus.data.assistant.CrewAskPhase
@@ -17,9 +19,15 @@ import fan.x0.focus.data.assistant.CrewDefaults
 import fan.x0.focus.data.assistant.CrewMember
 import fan.x0.focus.data.assistant.CrewMentions
 import fan.x0.focus.data.assistant.CrewMessage
+import fan.x0.focus.data.assistant.CrewRunEntry
+import fan.x0.focus.data.assistant.CrewRunState
 import fan.x0.focus.data.assistant.CrewRunner
 import fan.x0.focus.data.assistant.CrewStore
 import fan.x0.focus.data.assistant.CrewSwitcher
+import fan.x0.focus.data.assistant.MessageStats
+import fan.x0.focus.data.assistant.ModelCatalogRepository
+import fan.x0.focus.data.assistant.SecretStore
+import fan.x0.focus.data.assistant.requestConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -37,10 +45,15 @@ class CrewViewModel(
     private val settings: AssistantSettings,
     private val notifier: MessageNotifier,
     private val presence: AppPresence,
+    private val details: ChatDetailSettings,
+    private val catalog: ModelCatalogRepository,
+    private val secrets: SecretStore,
 ) : BaseViewModel<CrewAction, CrewUiState, CrewEffect>(CrewUiState()) {
 
     private var loadJob: Job? = null
     private var groupJob: Job? = null
+    private var modelJob: Job? = null
+    private var assistantConfig: AssistantConfig? = null
     private var allMembers: List<CrewMember> = emptyList()
     private var messagesById: Map<Long, CrewMessage> = emptyMap()
     private var wasRunning = false
@@ -51,12 +64,18 @@ class CrewViewModel(
         refreshGroups()
         viewModelScope.launch {
             val config = runCatching { settings.configOnce() }.getOrNull() ?: return@launch
+            assistantConfig = config
             updateState {
                 copy(
                     providers = config.providers.map {
                         CrewProviderUi(it.id, it.name, it.model)
                     },
                 )
+            }
+        }
+        viewModelScope.launch {
+            details.config.collect { config ->
+                updateState { copy(statsConfig = config) }
             }
         }
         viewModelScope.launch {
@@ -151,10 +170,14 @@ class CrewViewModel(
             CrewAction.ConfirmDeleteGroup -> confirmDeleteGroup()
             CrewAction.CancelDeleteGroup -> updateState { copy(deleteGroup = null) }
             CrewAction.OpenMembers -> updateState { copy(memberSheetOpen = true) }
-            CrewAction.CloseMembers -> updateState { copy(memberSheetOpen = false, memberDraft = null) }
+            CrewAction.CloseMembers -> updateState {
+                copy(memberSheetOpen = false, memberDraft = null, modelPickerOpen = false)
+            }
             CrewAction.NewMember -> newMember()
             is CrewAction.EditMember -> editMember(action.id)
-            CrewAction.DismissMemberEditor -> updateState { copy(memberDraft = null) }
+            CrewAction.DismissMemberEditor -> updateState {
+                copy(memberDraft = null, modelPickerOpen = false, memberModels = emptyList())
+            }
             is CrewAction.MemberNameChanged -> updateState {
                 copy(memberDraft = memberDraft?.copy(name = action.value))
             }
@@ -180,12 +203,29 @@ class CrewViewModel(
                 if (draft == null || draft.providerId == action.id) {
                     this
                 } else {
-                    copy(memberDraft = draft.copy(providerId = action.id, model = ""))
+                    copy(
+                        memberDraft = draft.copy(providerId = action.id, model = ""),
+                        memberModels = emptyList(),
+                        memberModelQuery = "",
+                        modelPickerOpen = false,
+                    )
                 }
             }
             is CrewAction.MemberModelChanged -> updateState {
-                copy(memberDraft = memberDraft?.copy(model = action.value))
+                copy(
+                    memberDraft = memberDraft?.copy(model = action.value),
+                    modelPickerOpen = false,
+                    memberModelQuery = "",
+                )
             }
+            CrewAction.OpenMemberModelPicker -> openMemberModelPicker()
+            CrewAction.CloseMemberModelPicker -> updateState {
+                copy(modelPickerOpen = false, memberModelQuery = "")
+            }
+            is CrewAction.MemberModelQueryChanged -> updateState {
+                copy(memberModelQuery = action.value)
+            }
+            CrewAction.RefreshMemberModels -> loadMemberModels()
             is CrewAction.MemberReasoningChanged -> updateState {
                 copy(memberDraft = memberDraft?.copy(reasoning = action.value))
             }
@@ -222,6 +262,10 @@ class CrewViewModel(
             is CrewAction.JumpToMessage -> updateState {
                 copy(focusMessageId = action.messageId, menu = null)
             }
+            is CrewAction.SelectText -> updateState {
+                copy(selectionKey = action.key, menu = null)
+            }
+            CrewAction.ClearSelection -> updateState { copy(selectionKey = null) }
             CrewAction.ClearFocus -> updateState { copy(focusMessageId = null) }
             is CrewAction.Approve -> runner.decide(action.approvalId, action.approved)
         }
@@ -282,6 +326,7 @@ class CrewViewModel(
                     live = emptyList(),
                     running = false,
                     working = "",
+                    liveStats = MessageStats(),
                 )
             }
             try {
@@ -313,6 +358,7 @@ class CrewViewModel(
                         todos = todos,
                         running = running,
                         working = run?.working.orEmpty(),
+                        liveStats = run.stats(),
                     )
                 }
             } catch (e: CancellationException) {
@@ -352,6 +398,12 @@ class CrewViewModel(
                 groupMenuId = null,
                 memberSheetOpen = false,
                 memberDraft = null,
+                memberModels = emptyList(),
+                memberModelsLoading = false,
+                memberModelQuery = "",
+                modelPickerOpen = false,
+                selectionKey = null,
+                liveStats = MessageStats(),
                 groupDraft = null,
                 deleteGroup = null,
                 removedMembers = emptyList(),
@@ -359,7 +411,7 @@ class CrewViewModel(
         }
     }
 
-    private fun applyRuns(runs: Map<String, fan.x0.focus.data.assistant.CrewRunState>) {
+    private fun applyRuns(runs: Map<String, CrewRunState>) {
         val ids = runs.values.filter { it.running }.mapTo(mutableSetOf()) { it.groupId }
         val previousIds = lastRunningIds
         val stopped = previousIds - ids
@@ -387,6 +439,7 @@ class CrewViewModel(
                 working = run?.working.orEmpty(),
                 live = live,
                 todos = run?.todos ?: todos,
+                liveStats = run.stats(),
             )
         }
         if (wasRunning && !running) {
@@ -426,6 +479,7 @@ class CrewViewModel(
                         todos = todos,
                         running = running,
                         working = run?.working.orEmpty(),
+                        liveStats = run.stats(),
                     )
                 }
             } catch (e: CancellationException) {
@@ -621,12 +675,16 @@ class CrewViewModel(
                     avatarPreset = avatar.preset,
                     avatarPalette = avatar.palette,
                 ),
+                modelPickerOpen = false,
+                memberModels = emptyList(),
+                memberModelQuery = "",
             )
         }
     }
 
     private fun editMember(id: String) {
         val member = currentState.members.firstOrNull { it.id == id } ?: return
+        val source = allMembers.firstOrNull { it.id == id }
         updateState {
             copy(
                 memberDraft = MemberDraft(
@@ -637,12 +695,65 @@ class CrewViewModel(
                     avatarPreset = member.avatarPreset,
                     avatarPalette = member.avatarPalette,
                     avatarPath = member.avatarPath,
-                    avatarImage = allMembers.firstOrNull { it.id == id }?.avatarImage.orEmpty(),
-                    providerId = allMembers.firstOrNull { it.id == id }?.providerId.orEmpty(),
-                    model = allMembers.firstOrNull { it.id == id }?.model.orEmpty(),
-                    reasoning = allMembers.firstOrNull { it.id == id }?.reasoning.orEmpty(),
+                    avatarImage = source?.avatarImage.orEmpty(),
+                    providerId = source?.providerId.orEmpty(),
+                    model = source?.model.orEmpty(),
+                    reasoning = source?.reasoning.orEmpty(),
                 ),
+                modelPickerOpen = false,
+                memberModels = emptyList(),
+                memberModelQuery = "",
             )
+        }
+    }
+
+    private fun openMemberModelPicker() {
+        if (currentState.memberDraft == null) return
+        updateState { copy(modelPickerOpen = true, memberModelQuery = "") }
+        if (currentState.memberModels.isEmpty()) loadMemberModels()
+    }
+
+    private fun loadMemberModels() {
+        val draft = currentState.memberDraft ?: return
+        val config = assistantConfig
+        if (config == null) {
+            viewModelScope.launch {
+                val loaded = runCatching { settings.configOnce() }.getOrNull() ?: return@launch
+                assistantConfig = loaded
+                loadMemberModels()
+            }
+            return
+        }
+        val provider = config.providers.firstOrNull { it.id == draft.providerId }
+            ?: config.activeProvider
+            ?: return
+        modelJob?.cancel()
+        updateState { copy(memberModelsLoading = true) }
+        modelJob = viewModelScope.launch {
+            val key = secrets.apiKey(provider.id).orEmpty()
+            if (provider.requiresKey && key.isBlank()) {
+                updateState { copy(memberModelsLoading = false) }
+                return@launch
+            }
+            val models = try {
+                catalog.models(
+                    provider.id,
+                    provider.baseUrl,
+                    draft.model.ifBlank { provider.model },
+                    provider.requestConfig(key),
+                    provider.protocol,
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                emptyList()
+            }
+            updateState {
+                copy(
+                    memberModels = models.map { it.id },
+                    memberModelsLoading = false,
+                )
+            }
         }
     }
 
@@ -1045,6 +1156,13 @@ class CrewViewModel(
     }
 
     private fun conversationId(groupId: String): String = "crew:$groupId"
+
+    private fun CrewRunState?.stats(): MessageStats {
+        val entries = this?.entries.orEmpty()
+            .filterIsInstance<CrewRunEntry.Agent>()
+            .mapNotNull { it.stats }
+        return entries.fold(MessageStats()) { total, stats -> total.merge(stats) }
+    }
 
     companion object {
         private const val MESSAGE_LIMIT = 200

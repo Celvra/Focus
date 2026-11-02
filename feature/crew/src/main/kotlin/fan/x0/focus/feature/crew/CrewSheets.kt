@@ -11,14 +11,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -29,23 +28,22 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetState
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,11 +60,11 @@ import fan.x0.focus.core.designsystem.components.FocusTonalButton
 import fan.x0.focus.core.designsystem.components.StatusTone
 import fan.x0.focus.core.designsystem.components.hapticSelect
 import fan.x0.focus.core.designsystem.components.hapticTap
-import fan.x0.focus.core.designsystem.theme.FocusRadii
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 import fan.x0.focus.data.assistant.CrewAvatars
 import fan.x0.focus.data.assistant.ReasoningLevel
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,7 +73,10 @@ fun CrewGroupEditorSheet(
     saving: Boolean,
     onAction: (CrewAction) -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
     var expandedAvatar by remember { mutableStateOf<String?>(null) }
     ModalBottomSheet(
         onDismissRequest = { onAction(CrewAction.DismissGroupEditor) },
@@ -247,7 +248,10 @@ fun CrewMemberSheet(
     onAction: (CrewAction) -> Unit,
     onPickPhoto: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
     val draft = state.memberDraft
     ModalBottomSheet(
         onDismissRequest = {
@@ -263,6 +267,7 @@ fun CrewMemberSheet(
                 draft = draft,
                 saving = state.saving,
                 providers = state.providers,
+                modelsLoading = state.memberModelsLoading,
                 onAction = onAction,
                 onPickPhoto = onPickPhoto,
             )
@@ -435,6 +440,7 @@ private fun MemberEditor(
     draft: MemberDraft,
     saving: Boolean,
     providers: List<CrewProviderUi>,
+    modelsLoading: Boolean,
     onAction: (CrewAction) -> Unit,
     onPickPhoto: () -> Unit,
 ) {
@@ -504,30 +510,61 @@ private fun MemberEditor(
                 )
             }
         }
-        OutlinedTextField(
-            value = draft.model,
-            onValueChange = { onAction(CrewAction.MemberModelChanged(it)) },
-            label = { Text(stringResource(R.string.crew_member_model)) },
-            placeholder = { Text(stringResource(R.string.crew_member_model_hint)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+        Text(
+            text = stringResource(R.string.crew_member_model),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            onClick = hapticTap { onAction(CrewAction.OpenMemberModelPicker) },
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = draft.model.ifBlank {
+                        stringResource(R.string.crew_member_model_default)
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (draft.model.isBlank()) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (modelsLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = FocusIcons.ArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
         Text(
             text = stringResource(R.string.crew_member_reasoning),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ReasoningLevel.entries.forEach { level ->
-                FilterChip(
-                    selected = ReasoningLevel.fromName(draft.reasoning) == level,
-                    onClick = { onAction(CrewAction.MemberReasoningChanged(level.name)) },
-                    label = { Text(stringResource(level.labelRes())) },
-                )
-            }
+        key(draft.key) {
+            ReasoningSlider(
+                level = ReasoningLevel.fromName(draft.reasoning),
+                onSelect = { onAction(CrewAction.MemberReasoningChanged(it.name)) },
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FocusPrimaryButton(
@@ -545,6 +582,50 @@ private fun MemberEditor(
             )
         }
     }
+}
+
+@Composable
+private fun ReasoningSlider(
+    level: ReasoningLevel,
+    onSelect: (ReasoningLevel) -> Unit,
+) {
+    val levels = ReasoningLevel.entries
+    val sliderState = rememberSliderState(
+        value = levels.indexOf(level).coerceAtLeast(0).toFloat(),
+        steps = (levels.size - 2).coerceAtLeast(0),
+        trackRange = 0f..levels.lastIndex.toFloat(),
+    )
+    val preview = levels[sliderState.value.roundToInt().coerceIn(0, levels.lastIndex)]
+    Text(
+        text = stringResource(preview.labelRes()),
+        style = MaterialTheme.typography.titleSmallEmphasized,
+        color = MaterialTheme.colorScheme.primary,
+    )
+    Text(
+        text = stringResource(preview.descriptionRes()),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Slider(
+        state = sliderState,
+        onValueChange = { sliderState.value = it },
+        onValueChangeFinished = hapticSelect {
+            val index = sliderState.value.roundToInt().coerceIn(0, levels.lastIndex)
+            sliderState.value = index.toFloat()
+            onSelect(levels[index])
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+private fun ReasoningLevel.descriptionRes(): Int = when (this) {
+    ReasoningLevel.Off -> R.string.crew_reasoning_off_desc
+    ReasoningLevel.Auto -> R.string.crew_reasoning_auto_desc
+    ReasoningLevel.Low -> R.string.crew_reasoning_low_desc
+    ReasoningLevel.Medium -> R.string.crew_reasoning_medium_desc
+    ReasoningLevel.High -> R.string.crew_reasoning_high_desc
+    ReasoningLevel.XHigh -> R.string.crew_reasoning_xhigh_desc
+    ReasoningLevel.Max -> R.string.crew_reasoning_max_desc
 }
 
 private fun ReasoningLevel.labelRes(): Int = when (this) {
@@ -578,151 +659,6 @@ fun CrewDeleteGroupDialog(
             }
         },
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CrewMessageMenuSheet(
-    menu: CrewMessageMenuUi,
-    onAction: (CrewAction) -> Unit,
-    onCopy: (String) -> Unit,
-) {
-    ModalBottomSheet(
-        onDismissRequest = { onAction(CrewAction.CloseMessageMenu) },
-        sheetState = rememberBottomSheetState(
-            initialValue = SheetValue.Hidden,
-            enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-        ),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                text = menu.author.ifBlank { stringResource(R.string.crew_you) },
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
-            Text(
-                text = menu.text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
-            if (menu.messageId != null) {
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    val counts = menu.reactions.groupingBy { it }.eachCount()
-                    CrewReactionChoices.forEach { emoji ->
-                        val selected = counts[emoji] != null
-                        FilterChip(
-                            selected = selected,
-                            onClick = hapticSelect {
-                                onAction(CrewAction.React(menu.messageId, emoji))
-                            },
-                            label = {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(emoji, style = MaterialTheme.typography.labelLarge)
-                                    if (selected) {
-                                        Text(
-                                            text = counts[emoji].toString(),
-                                            style = MaterialTheme.typography.labelMedium,
-                                        )
-                                    }
-                                }
-                            },
-                            shape = RoundedCornerShape(FocusRadii.extraLarge),
-                        )
-                    }
-                }
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                )
-                CrewMenuAction(
-                    icon = FocusIcons.Reply,
-                    label = stringResource(R.string.crew_reply),
-                    onClick = { onAction(CrewAction.ReplyTo(menu.key)) },
-                )
-                CrewMenuAction(
-                    icon = FocusIcons.Edit,
-                    label = stringResource(R.string.crew_edit_message),
-                    enabled = menu.canEdit,
-                    onClick = { onAction(CrewAction.StartEdit(menu.key)) },
-                )
-            }
-            CrewMenuAction(
-                icon = FocusIcons.Copy,
-                label = stringResource(R.string.crew_copy),
-                enabled = menu.text.isNotBlank(),
-                onClick = { onCopy(menu.text) },
-            )
-            if (menu.messageId != null) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                )
-                CrewMenuAction(
-                    icon = FocusIcons.Delete,
-                    label = stringResource(R.string.crew_delete_message),
-                    enabled = menu.canDelete,
-                    destructive = true,
-                    onClick = { onAction(CrewAction.AskDeleteMessage(menu.key)) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CrewMenuAction(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    destructive: Boolean = false,
-) {
-    val scheme = MaterialTheme.colorScheme
-    val shape = MaterialTheme.shapes.large
-    val content = when {
-        !enabled -> scheme.onSurface.copy(alpha = 0.38f)
-        destructive -> scheme.error
-        else -> scheme.onSurface
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .clickable(enabled = enabled, role = Role.Button, onClick = hapticTap(onClick))
-            .heightIn(min = 48.dp)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = content,
-            modifier = Modifier.size(20.dp),
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = content,
-        )
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -31,6 +31,7 @@ sealed interface CrewSpeechEvent {
     data class Activity(val text: String) : CrewSpeechEvent
     data class ReasoningDelta(val text: String) : CrewSpeechEvent
     data class ReasoningTimed(val durationMs: Long) : CrewSpeechEvent
+    data class StatsUpdated(val stats: MessageStats) : CrewSpeechEvent
     data class Retry(val attempt: Int, val max: Int, val reason: String) : CrewSpeechEvent
     data class ToolStarted(val id: String, val label: String, val arguments: String = "") : CrewSpeechEvent
     data class ToolFinished(
@@ -115,6 +116,11 @@ class CrewEngine(
         val requestConfig = provider.requestConfig(apiKey)
         val reasoning = ReasoningLevel.fromName(member.reasoning)
         val retry = agent.configOnce().retry
+        var totalStats = MessageStats(
+            providerId = provider.id,
+            providerName = provider.name,
+            model = model,
+        )
         val history = store.messages(group.id, CONTEXT_MESSAGES)
         val quotes = mutableMapOf<Long, CrewMessage>()
         history.mapNotNullTo(mutableSetOf()) { it.replyToId }.forEach { id ->
@@ -165,6 +171,8 @@ class CrewEngine(
                 val roundText = StringBuilder()
                 roundAppended = false
                 activeRoundText = ""
+                val roundBase = totalStats
+                var roundLatest = roundBase
                 val result = streamRound(
                     endpoint = endpoint,
                     protocol = provider.protocol,
@@ -172,6 +180,16 @@ class CrewEngine(
                     messages = conversation,
                     retry = retry,
                     reasoningEffort = reasoning.wire,
+                    stats = roundBase,
+                    round = round,
+                    onStats = { roundStats ->
+                        roundLatest = roundBase.merge(roundStats)
+                        emit(
+                            CrewSpeechEvent.StatsUpdated(
+                                roundLatest.copy(round = round, step = round),
+                            ),
+                        )
+                    },
                     onDelta = { delta ->
                         roundText.append(delta)
                         activeRoundText = roundText.toString()
@@ -185,6 +203,7 @@ class CrewEngine(
                         emit(CrewSpeechEvent.Retry(attempt, max, reason))
                     },
                 )
+                totalStats = roundLatest
                 val finalText = result.text
                 val streamed = roundText.toString()
                 val separator = if (answer.isNotEmpty() && finalText.isNotBlank()) "\n\n" else ""
@@ -466,6 +485,9 @@ class CrewEngine(
         messages: List<ChatMessageDto>,
         retry: RetryConfig,
         reasoningEffort: String?,
+        stats: MessageStats,
+        round: Int,
+        onStats: suspend (MessageStats) -> Unit,
         onDelta: suspend (String) -> Unit,
         onReasoning: suspend (String) -> Unit,
         onReasoningTimed: suspend (Long) -> Unit,
@@ -476,6 +498,14 @@ class CrewEngine(
             var visible = false
             var reasoningStartedAt = 0L
             var reasoningEndedAt = 0L
+            val startedAt = System.currentTimeMillis()
+            var roundStats = MessageStats(
+                providerId = stats.providerId,
+                providerName = stats.providerName,
+                model = stats.model,
+                round = round,
+                step = round,
+            )
             val accumulator = StreamAccumulator()
             try {
                 client.stream(
@@ -506,6 +536,17 @@ class CrewEngine(
                             if (event.delta.isEmpty()) return@collect
                             if (reasoningStartedAt == 0L) reasoningStartedAt = System.currentTimeMillis()
                             onReasoning(event.delta)
+                        }
+                        is ChatStreamEvent.Usage -> {
+                            roundStats = roundStats.copy(
+                                inputTokens = event.prompt,
+                                outputTokens = event.completion,
+                                cachedTokens = event.cached,
+                                totalTokens = event.total,
+                                durationMs = System.currentTimeMillis() - startedAt,
+                                lastContextTokens = event.prompt,
+                            )
+                            onStats(roundStats)
                         }
                         else -> Unit
                     }
