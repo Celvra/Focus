@@ -12,8 +12,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -49,7 +47,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -102,6 +99,7 @@ import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
 import fan.x0.focus.core.designsystem.components.FocusIconBadge
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.FocusJumpToLatest
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusMarkdown
@@ -836,7 +834,7 @@ private fun ChatThread(
             }
         }
 
-        JumpToLatest(
+        FocusJumpToLatest(
             visible = !follow && entries.isNotEmpty(),
             onClick = {
                 scope.launch {
@@ -885,34 +883,4 @@ private fun LazyListState.atBottom(): Boolean {
     val layout = layoutInfo
     val last = layout.visibleItemsInfo.lastOrNull() ?: return true
     return last.index >= layout.totalItemsCount - 1
-}
-
-@Composable
-private fun JumpToLatest(
-    visible: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val motion = LocalFocusMotion.current
-    AnimatedVisibility(
-        visible = visible,
-        modifier = modifier,
-        enter = fadeIn(motion.effectsDefault()) +
-            scaleIn(motion.spatialFast(), initialScale = 0.7f) +
-            slideInVertically(motion.spatialFast()) { height -> height / 4 },
-        exit = fadeOut(motion.effectsFast()) +
-            scaleOut(motion.spatialFast(), targetScale = 0.7f),
-    ) {
-        SmallFloatingActionButton(
-            onClick = hapticTap(onClick),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ) {
-            Icon(
-                imageVector = FocusIcons.ArrowDown,
-                contentDescription = stringResource(R.string.chat_jump_latest),
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
 }
