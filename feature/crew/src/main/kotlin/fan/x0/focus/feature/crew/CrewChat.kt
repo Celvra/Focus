@@ -74,9 +74,8 @@ import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
-import fan.x0.focus.core.designsystem.components.FocusReasoningCard
+import fan.x0.focus.core.designsystem.components.FocusActivity
 import fan.x0.focus.core.designsystem.components.FocusSelectionBar
-import fan.x0.focus.core.designsystem.components.FocusTraceCard
 import fan.x0.focus.core.designsystem.components.FocusTraceStep
 import fan.x0.focus.core.designsystem.components.FocusStepStatus
 import fan.x0.focus.core.designsystem.components.hapticTap
@@ -85,6 +84,7 @@ import fan.x0.focus.data.assistant.AttachmentKind
 import fan.x0.focus.data.assistant.ChatAttachment
 import fan.x0.focus.data.assistant.CrewApprovalPhase
 import fan.x0.focus.data.assistant.CrewToolStatus
+import fan.x0.focus.data.assistant.ToolPayload
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -492,21 +492,20 @@ private fun CrewMessageRow(
                     CrewMentionChips(entry.mentions)
                 }
             }
-            if (!entry.fromUser && entry.reasoning.isNotBlank()) {
-                FocusReasoningCard(
-                    text = entry.reasoning,
+            if (!entry.fromUser && (entry.reasoning.isNotBlank() || entry.tools.isNotEmpty())) {
+                FocusActivity(
+                    reasoning = entry.reasoning,
                     running = entry.reasoningRunning,
-                    durationMs = entry.reasoningMs,
-                    startedAt = entry.reasoningStartedAt,
-                )
-            }
-            if (entry.tools.isNotEmpty()) {
-                FocusTraceCard(
+                    reasoningMs = entry.reasoningMs,
+                    reasoningStartedAt = entry.reasoningStartedAt,
                     steps = entry.tools.map { tool ->
                         FocusTraceStep(
                             label = tool.label,
                             status = tool.status.toStepStatus(),
-                            summary = tool.summary.ifBlank { tool.detail }.ifBlank { null },
+                            summary = tool.summary.ifBlank { null },
+                            tool = tool.tool,
+                            input = ToolPayload.format(tool.arguments),
+                            output = ToolPayload.format(tool.detail),
                             durationMs = 0,
                         )
                     },

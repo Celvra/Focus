@@ -64,8 +64,6 @@
     <string name="chat_attach_camera">Camera</string>
     <string name="chat_attach_photos">Photos</string>
     <string name="chat_attach_files">Files</string>
-    <string name="chat_picker_provider_title">Provider</string>
-    <string name="chat_picker_provider_empty">No providers yet.</string>
     <string name="chat_picker_model_title">Model</string>
     <string name="chat_picker_model_search">Search models</string>
     <string name="chat_picker_model_empty">No models</string>

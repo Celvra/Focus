@@ -18,6 +18,7 @@ enum class CrewAskPhase { Waiting, Answered, Skipped }
 data class CrewToolTrace(
     val id: String,
     val label: String,
+    val tool: String = "",
     val status: CrewToolStatus,
     val summary: String = "",
     val arguments: String = "",
@@ -256,12 +257,13 @@ class CrewRunStore {
             it is CrewRunEntry.Agent && it.key == key
         } as? CrewRunEntry.Agent
 
-    fun startTool(groupId: String, key: String, id: String, label: String, arguments: String = "") {
+    fun startTool(groupId: String, key: String, id: String, label: String, tool: String = "", arguments: String = "") {
         updateAgent(groupId, key) {
             it.copy(
                 tools = it.tools + CrewToolTrace(
                     id = id,
                     label = label,
+                    tool = tool,
                     status = CrewToolStatus.Running,
                     arguments = arguments,
                 ),
@@ -276,6 +278,7 @@ class CrewRunStore {
         label: String,
         ok: Boolean,
         summary: String,
+        tool: String = "",
         arguments: String = "",
         detail: String = "",
     ) {
@@ -283,6 +286,7 @@ class CrewRunStore {
             val trace = CrewToolTrace(
                 id = id,
                 label = label,
+                tool = tool,
                 status = if (ok) CrewToolStatus.Done else CrewToolStatus.Failed,
                 summary = summary.take(200),
                 arguments = arguments,

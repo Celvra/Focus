@@ -45,12 +45,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
-import fan.x0.focus.core.designsystem.components.BrandIcons
 import fan.x0.focus.core.designsystem.components.FocusComposer
 import fan.x0.focus.core.designsystem.components.FocusComposerPill
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusImageLightbox
-import fan.x0.focus.core.designsystem.components.FocusSearchPickerSheet
+import fan.x0.focus.core.designsystem.components.FocusGroupedPickerSheet
+import fan.x0.focus.core.designsystem.components.FocusPickerGroup
+import fan.x0.focus.core.designsystem.components.FocusPickerItem
+import fan.x0.focus.core.designsystem.components.FocusPickerSelection
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.data.assistant.AttachmentKind
 
@@ -66,6 +68,11 @@ internal fun Composer(
     modifier: Modifier = Modifier,
 ) {
     var attachSheet by remember { mutableStateOf(false) }
+    val modelLabel = state.models[state.providerId]
+        ?.firstOrNull { it.id == state.model }
+        ?.name
+        ?.ifBlank { state.model }
+        ?: state.model
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -131,15 +138,7 @@ internal fun Composer(
             },
             pills = {
                 FocusComposerPill(
-                    icon = FocusIcons.Provider,
-                    contentDescription = state.providerName.ifBlank {
-                        stringResource(R.string.chat_picker_provider_title)
-                    },
-                    compact = true,
-                    onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Provider)) },
-                )
-                FocusComposerPill(
-                    label = state.model.ifBlank { stringResource(R.string.chat_picker_model_empty) },
+                    label = modelLabel.ifBlank { stringResource(R.string.chat_picker_model_empty) },
                     icon = FocusIcons.Assistant,
                     compact = true,
                     onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Model)) },
@@ -156,20 +155,27 @@ internal fun Composer(
     }
 
     when (state.picker) {
-        ComposerPicker.Provider -> ProviderPickerSheet(
-            providers = state.providers,
-            selected = state.providerId,
-            onSelect = { onAction(ChatAction.SelectProvider(it)) },
-            onDismiss = { onAction(ChatAction.OpenPicker(null)) },
-        )
         ComposerPicker.Model -> {
             val labels = modelMetaLabels()
-            val details = remember(state.models, labels) {
-                state.models.mapNotNull { option ->
-                    option.meta.toPickerDetail(labels)?.let { option.id to it }
-                }.toMap()
+            val groups = remember(state.providers, state.models, labels) {
+                state.providers.mapNotNull { provider ->
+                    val models = state.models[provider.id].orEmpty()
+                    if (models.isEmpty()) return@mapNotNull null
+                    FocusPickerGroup(
+                        id = provider.id,
+                        title = provider.name,
+                        icon = provider.icon,
+                        items = models.map { option ->
+                            FocusPickerItem(
+                                id = option.id,
+                                label = option.name.ifBlank { option.id },
+                                detail = option.meta.toPickerDetail(labels),
+                            )
+                        },
+                    )
+                }
             }
-            FocusSearchPickerSheet(
+            FocusGroupedPickerSheet(
                 title = stringResource(R.string.chat_picker_model_title),
                 searchHint = stringResource(R.string.chat_picker_model_search),
                 emptyText = stringResource(
@@ -179,15 +185,14 @@ internal fun Composer(
                         R.string.chat_picker_model_empty
                     },
                 ),
-                items = remember(state.models) { state.models.map { it.id } },
+                groups = groups,
                 query = state.modelQuery,
                 onQueryChange = { onAction(ChatAction.ModelQueryChanged(it)) },
-                onSelect = { onAction(ChatAction.SelectModel(it)) },
+                onSelect = { onAction(ChatAction.SelectModel(it.groupId, it.itemId)) },
                 onDismiss = { onAction(ChatAction.OpenPicker(null)) },
-                selected = state.model,
+                selected = FocusPickerSelection(state.providerId, state.model),
+                loading = state.modelsLoading,
                 onRefresh = { onAction(ChatAction.RefreshModels) },
-                itemIcon = { BrandIcons.forModel(it) },
-                details = details,
             )
         }
         ComposerPicker.Reasoning -> ReasoningPickerSheet(

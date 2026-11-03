@@ -7,7 +7,6 @@ import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.MessageNotifier
 import fan.x0.focus.data.assistant.AskAnswer
 import fan.x0.focus.data.assistant.AskKind
-import fan.x0.focus.data.assistant.AssistantConfig
 import fan.x0.focus.data.assistant.AssistantSettings
 import fan.x0.focus.data.assistant.AttachmentLoader
 import fan.x0.focus.data.assistant.ChatAttachment
@@ -25,9 +24,7 @@ import fan.x0.focus.data.assistant.CrewRunner
 import fan.x0.focus.data.assistant.CrewStore
 import fan.x0.focus.data.assistant.CrewSwitcher
 import fan.x0.focus.data.assistant.MessageStats
-import fan.x0.focus.data.assistant.ModelCatalogRepository
-import fan.x0.focus.data.assistant.SecretStore
-import fan.x0.focus.data.assistant.requestConfig
+import fan.x0.focus.data.assistant.ProviderModelCatalog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -54,14 +51,12 @@ class CrewViewModel(
     private val notifier: MessageNotifier,
     private val presence: AppPresence,
     private val details: ChatDetailSettings,
-    private val catalog: ModelCatalogRepository,
-    private val secrets: SecretStore,
+    private val providerModels: ProviderModelCatalog,
 ) : BaseViewModel<CrewAction, CrewUiState, CrewEffect>(CrewUiState()) {
 
     private var loadJob: Job? = null
     private var groupJob: Job? = null
     private var modelJob: Job? = null
-    private var assistantConfig: AssistantConfig? = null
     private var allMembers: List<CrewMember> = emptyList()
     private var messagesById: Map<Long, CrewMessage> = emptyMap()
     private var wasRunning = false
@@ -75,17 +70,6 @@ class CrewViewModel(
 
     init {
         refreshGroups()
-        viewModelScope.launch {
-            val config = runCatching { settings.configOnce() }.getOrNull() ?: return@launch
-            assistantConfig = config
-            updateState {
-                copy(
-                    providers = config.providers.map {
-                        CrewProviderUi(it.id, it.name, it.model)
-                    },
-                )
-            }
-        }
         viewModelScope.launch {
             details.config.collect { config ->
                 updateState { copy(statsConfig = config) }
@@ -214,22 +198,12 @@ class CrewViewModel(
             CrewAction.MemberPhotoCleared -> updateState {
                 copy(memberDraft = memberDraft?.copy(avatarImage = "", avatarPath = null))
             }
-            is CrewAction.MemberProviderChanged -> updateState {
-                val draft = memberDraft
-                if (draft == null || draft.providerId == action.id) {
-                    this
-                } else {
-                    copy(
-                        memberDraft = draft.copy(providerId = action.id, model = ""),
-                        memberModels = emptyList(),
-                        memberModelQuery = "",
-                        modelPickerOpen = false,
-                    )
-                }
-            }
             is CrewAction.MemberModelChanged -> updateState {
                 copy(
-                    memberDraft = memberDraft?.copy(model = action.value),
+                    memberDraft = memberDraft?.copy(
+                        providerId = action.providerId,
+                        model = action.value,
+                    ),
                     modelPickerOpen = false,
                     memberModelQuery = "",
                 )
@@ -801,43 +775,15 @@ class CrewViewModel(
     }
 
     private fun loadMemberModels() {
-        val draft = currentState.memberDraft ?: return
-        val config = assistantConfig
-        if (config == null) {
-            viewModelScope.launch {
-                val loaded = runCatching { settings.configOnce() }.getOrNull() ?: return@launch
-                assistantConfig = loaded
-                loadMemberModels()
-            }
-            return
-        }
-        val provider = config.providers.firstOrNull { it.id == draft.providerId }
-            ?: config.activeProvider
-            ?: return
+        if (currentState.memberDraft == null) return
         modelJob?.cancel()
         updateState { copy(memberModelsLoading = true) }
         modelJob = viewModelScope.launch {
-            val key = secrets.apiKey(provider.id).orEmpty()
-            if (provider.requiresKey && key.isBlank()) {
-                updateState { copy(memberModelsLoading = false) }
-                return@launch
-            }
-            val models = try {
-                catalog.models(
-                    provider.id,
-                    provider.baseUrl,
-                    draft.model.ifBlank { provider.model },
-                    provider.requestConfig(key),
-                    provider.protocol,
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                emptyList()
-            }
+            val config = runCatching { settings.configOnce() }.getOrNull()
+            val groups = if (config == null) emptyList() else providerModels.load(config)
             updateState {
                 copy(
-                    memberModels = models.map { it.id },
+                    memberModels = groups,
                     memberModelsLoading = false,
                 )
             }

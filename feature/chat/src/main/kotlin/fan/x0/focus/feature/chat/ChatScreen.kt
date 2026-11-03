@@ -91,8 +91,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fan.x0.focus.core.designsystem.components.AvatarState
 import fan.x0.focus.core.designsystem.components.AvatarStyle
 import fan.x0.focus.core.designsystem.components.FocusAvatar
+import fan.x0.focus.core.designsystem.components.FocusActivity
 import fan.x0.focus.core.designsystem.components.FocusBubbleEnter
-import fan.x0.focus.core.designsystem.components.FocusReasoningCard
 import fan.x0.focus.core.designsystem.components.FocusTraceCard
 import fan.x0.focus.core.designsystem.components.FocusTraceStep
 import fan.x0.focus.core.designsystem.components.hapticTap
@@ -596,7 +596,7 @@ private fun ChatThread(
 ) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
-    val entries = state.entries
+    val entries = remember(state.history, state.live) { state.entries.toActivities() }
     val retry = state.retry
     val todos = state.todos
     val stats = state.stats?.takeIf { it.hasStats(state.statsConfig) }
@@ -636,7 +636,7 @@ private fun ChatThread(
 
     LaunchedEffect(state.highlightKey) {
         val key = state.highlightKey ?: return@LaunchedEffect
-        val index = entries.indexOfFirst { it.key == key }
+        val index = entries.indexOfFirst { it.key == key || it.key == "activity-$key" }
         if (index < 0) {
             onAction(ChatAction.ConsumeHighlight)
             return@LaunchedEffect
@@ -668,6 +668,7 @@ private fun ChatThread(
                         is ChatEntry.User -> "user"
                         is ChatEntry.Assistant -> "assistant"
                         is ChatEntry.Trace -> "trace"
+                        is ChatEntry.Activity -> "activity"
                         is ChatEntry.Approval -> "approval"
                         is ChatEntry.Plan -> "plan"
                         is ChatEntry.Ask -> "ask"
@@ -714,49 +715,26 @@ private fun ChatThread(
                                 }
                             }
                         }
-                        is ChatEntry.Assistant -> Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.Start,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            if (entry.reasoning.isNotBlank()) {
-                                key(entry.key) {
-                                    FocusReasoningCard(
-                                        text = entry.reasoning,
-                                        running = entry.live,
-                                        durationMs = entry.reasoningMs,
-                                        startedAt = entry.reasoningStartedAt,
-                                    )
-                                }
-                            }
-                            if (entry.text.isNotBlank()) {
-                                ChatMessageBubble(
-                                    entry = entry,
-                                    fromUser = false,
-                                    state = state,
-                                    onAction = onAction,
-                                    onCopy = onCopy,
-                                    streaming = entry.live,
-                                )
-                            }
+                        is ChatEntry.Assistant -> if (entry.text.isNotBlank()) {
+                            ChatMessageBubble(
+                                entry = entry,
+                                fromUser = false,
+                                state = state,
+                                onAction = onAction,
+                                onCopy = onCopy,
+                                streaming = entry.live,
+                            )
                         }
                         is ChatEntry.Trace -> FocusTraceCard(
-                            steps = entry.steps.map {
-                                FocusTraceStep(
-                                    label = it.label,
-                                    status = it.status.toStepStatus(),
-                                    summary = it.summary,
-                                    openKey = if (it.tool == "spawn_agent" && it.id.isNotBlank()) {
-                                        it.id
-                                    } else {
-                                        null
-                                    },
-                                    durationMs = it.durationMs,
-                                    startedAt = it.startedAt,
-                                    diffs = it.diffs.map { diff -> diff.toFocusDiff() },
-                                    media = it.media.mapNotNull { image -> image.toFocusTraceImage() },
-                                )
-                            },
+                            steps = entry.steps.map { it.toFocusStep() },
+                            onOpen = { onAction(ChatAction.OpenSubAgent(it)) },
+                        )
+                        is ChatEntry.Activity -> FocusActivity(
+                            reasoning = entry.reasoning,
+                            running = entry.running,
+                            reasoningMs = entry.reasoningMs,
+                            reasoningStartedAt = entry.reasoningStartedAt,
+                            steps = entry.steps.map { it.toFocusStep() },
                             onOpen = { onAction(ChatAction.OpenSubAgent(it)) },
                         )
                         is ChatEntry.Approval -> FocusApprovalCard(
@@ -863,10 +841,25 @@ private fun ChatUiState.avatarState(celebrate: Boolean): AvatarState = when {
 
 private enum class ChatBody { Loading, Home, Thread }
 
+private fun TraceStep.toFocusStep(): FocusTraceStep = FocusTraceStep(
+    label = label,
+    status = status.toStepStatus(),
+    summary = summary,
+    tool = tool,
+    input = arguments,
+    output = output.orEmpty(),
+    openKey = if (tool == "spawn_agent" && id.isNotBlank()) id else null,
+    durationMs = durationMs,
+    startedAt = startedAt,
+    diffs = diffs.map { it.toFocusDiff() },
+    media = media.mapNotNull { it.toFocusTraceImage() },
+)
+
 // Entries created during this session; entries restored from the database skip the pop-in.
 private fun ChatEntry.isFresh(): Boolean = when (this) {
     is ChatEntry.Approval -> true
     is ChatEntry.Ask -> true
+    is ChatEntry.Activity -> key.startsWith("activity-live-")
     else -> key.startsWith("local-") || key.startsWith("live-")
 }
 

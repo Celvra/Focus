@@ -17,7 +17,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
-import fan.x0.focus.core.designsystem.components.FocusSearchPickerSheet
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.mvi.CollectEffect
 import fan.x0.focus.core.designsystem.theme.FocusMotionDefaults
@@ -29,6 +28,7 @@ import fan.x0.focus.feature.assistant.settings.SettingsDataPage
 import fan.x0.focus.feature.assistant.settings.SettingsDestination
 import fan.x0.focus.feature.assistant.settings.SettingsHomePage
 import fan.x0.focus.feature.assistant.settings.SettingsMcpRoute
+import fan.x0.focus.feature.assistant.settings.SettingsModelPickerSheet
 import fan.x0.focus.feature.assistant.settings.SettingsNotificationsPage
 import fan.x0.focus.feature.assistant.settings.SettingsToolsPage
 import fan.x0.focus.feature.assistant.settings.ProviderEditorSheet
@@ -183,37 +183,6 @@ internal fun SettingsScreen(
         ProviderEditorSheet(state = state, onAction = onAction)
     }
     if (state.modelPickerOpen) {
-        val target = state.modelPickerTarget
-        val refresh: (() -> Unit)? = when (target) {
-            ModelPickerTarget.Judge -> ({ onAction(SettingsAction.RefreshJudgeModels) })
-            ModelPickerTarget.Subagent -> ({ onAction(SettingsAction.RefreshSubagentModels) })
-            ModelPickerTarget.Provider -> null
-        }
-        FocusSearchPickerSheet(
-            title = stringResource(
-                when (target) {
-                    ModelPickerTarget.Judge -> R.string.settings_judge_model_item
-                    ModelPickerTarget.Subagent -> R.string.settings_subagent_model_item
-                    ModelPickerTarget.Provider -> R.string.settings_model_picker_title
-                },
-            ),
-            searchHint = stringResource(R.string.settings_model_search_hint),
-            emptyText = stringResource(R.string.settings_models_empty),
-            items = when (target) {
-                ModelPickerTarget.Judge -> state.judgeModels
-                ModelPickerTarget.Subagent -> state.subagentModels
-                ModelPickerTarget.Provider -> state.models
-            },
-            query = state.modelQuery,
-            onQueryChange = { onAction(SettingsAction.ModelQueryChanged(it)) },
-            onSelect = { onAction(SettingsAction.SelectModel(it)) },
-            onDismiss = { onAction(SettingsAction.CloseModelPicker) },
-            selected = when (target) {
-                ModelPickerTarget.Judge -> state.judgeModel
-                ModelPickerTarget.Subagent -> state.subagentModel
-                ModelPickerTarget.Provider -> state.model
-            },
-            onRefresh = refresh,
-        )
+        SettingsModelPickerSheet(state = state, onAction = onAction)
     }
 }

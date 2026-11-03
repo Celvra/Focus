@@ -13,6 +13,7 @@ import fan.x0.focus.data.assistant.CrewApprovalPhase
 import fan.x0.focus.data.assistant.CrewAskPhase
 import fan.x0.focus.data.assistant.CrewToolStatus
 import fan.x0.focus.data.assistant.MessageStats
+import fan.x0.focus.data.assistant.ProviderModelGroup
 
 data class CrewGroupUi(
     val id: String,
@@ -39,12 +40,6 @@ data class CrewMemberUi(
     val active: Boolean = true,
 )
 
-data class CrewProviderUi(
-    val id: String,
-    val name: String,
-    val model: String = "",
-)
-
 data class CrewQuoteUi(
     val messageId: Long,
     val author: String,
@@ -59,6 +54,7 @@ data class CrewMentionChipUi(
 data class CrewToolUi(
     val id: String,
     val label: String,
+    val tool: String = "",
     val status: CrewToolStatus,
     val summary: String,
     val arguments: String = "",
@@ -182,7 +178,6 @@ data class CrewUiState(
     val groupMenuId: String? = null,
     val members: List<CrewMemberUi> = emptyList(),
     val removedMembers: List<CrewMemberUi> = emptyList(),
-    val providers: List<CrewProviderUi> = emptyList(),
     val history: List<CrewEntryUi> = emptyList(),
     val live: List<CrewEntryUi> = emptyList(),
     val todos: List<ConversationTodo> = emptyList(),
@@ -203,7 +198,7 @@ data class CrewUiState(
     val memberDraft: MemberDraft? = null,
     val deleteGroup: CrewGroupUi? = null,
     val saving: Boolean = false,
-    val memberModels: List<String> = emptyList(),
+    val memberModels: List<ProviderModelGroup> = emptyList(),
     val memberModelsLoading: Boolean = false,
     val memberModelQuery: String = "",
     val modelPickerOpen: Boolean = false,
@@ -276,8 +271,7 @@ sealed interface CrewAction : UiAction {
     data class MemberAvatarChanged(val preset: Int, val palette: Int) : CrewAction
     data class MemberPhotoPicked(val uri: String) : CrewAction
     data object MemberPhotoCleared : CrewAction
-    data class MemberProviderChanged(val id: String) : CrewAction
-    data class MemberModelChanged(val value: String) : CrewAction
+    data class MemberModelChanged(val providerId: String, val value: String) : CrewAction
     data object OpenMemberModelPicker : CrewAction
     data object CloseMemberModelPicker : CrewAction
     data class MemberModelQueryChanged(val value: String) : CrewAction

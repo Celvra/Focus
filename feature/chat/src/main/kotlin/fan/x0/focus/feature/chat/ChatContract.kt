@@ -15,6 +15,7 @@ import fan.x0.focus.data.assistant.FileDiff
 import fan.x0.focus.data.assistant.MessageStats
 import fan.x0.focus.data.assistant.PlanStatus
 import fan.x0.focus.data.assistant.ProposedPlan
+import fan.x0.focus.data.assistant.ProviderModel
 import fan.x0.focus.data.assistant.ReasoningLevel
 
 enum class TraceStatus { Pending, Running, Done, Failed }
@@ -204,6 +205,15 @@ sealed interface ChatEntry {
 
     data class Trace(override val key: String, val steps: List<TraceStep>) : ChatEntry
 
+    data class Activity(
+        override val key: String,
+        val reasoning: String,
+        val running: Boolean,
+        val reasoningMs: Long = 0,
+        val reasoningStartedAt: Long = 0,
+        val steps: List<TraceStep>,
+    ) : ChatEntry
+
     data class Approval(override val key: String, val card: ApprovalUi) : ChatEntry
 
     data class Plan(override val key: String, val plan: ProposedPlan, val card: ApprovalUi) : ChatEntry
@@ -228,10 +238,12 @@ data class ProviderOption(
     val name: String,
     val model: String,
     val icon: String = "",
+    val models: List<ProviderModel> = emptyList(),
 )
 
 data class ModelOption(
     val id: String,
+    val name: String = "",
     val meta: ModelMeta = ModelMeta(),
 )
 
@@ -261,7 +273,8 @@ data class ChatUiState(
     val reasoningLevel: ReasoningLevel = ReasoningLevel.Auto,
     val mode: AgentMode = AgentMode.Build,
     val attachments: List<AttachmentUi> = emptyList(),
-    val models: List<ModelOption> = emptyList(),
+    val models: Map<String, List<ModelOption>> = emptyMap(),
+    val modelsLoaded: Boolean = false,
     val modelsLoading: Boolean = false,
     val picker: ComposerPicker? = null,
     val modelQuery: String = "",
@@ -321,7 +334,7 @@ data class ChatUiState(
     val isEmpty: Boolean get() = history.isEmpty() && !sending && streaming.isBlank() && reasoning.isBlank()
 }
 
-enum class ComposerPicker { Provider, Model, Reasoning }
+enum class ComposerPicker { Model, Reasoning }
 
 sealed interface ChatAction : UiAction {
     data class InputChanged(val value: String) : ChatAction
@@ -344,8 +357,7 @@ sealed interface ChatAction : UiAction {
     data object CloseBtw : ChatAction
     data object RetryBtw : ChatAction
     data class OpenPicker(val picker: ComposerPicker?) : ChatAction
-    data class SelectProvider(val providerId: String) : ChatAction
-    data class SelectModel(val model: String) : ChatAction
+    data class SelectModel(val providerId: String, val model: String) : ChatAction
     data class ModelQueryChanged(val value: String) : ChatAction
     data object RefreshModels : ChatAction
     data class SelectReasoning(val level: ReasoningLevel) : ChatAction

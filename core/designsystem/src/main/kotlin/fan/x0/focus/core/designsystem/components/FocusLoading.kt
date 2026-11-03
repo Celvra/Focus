@@ -6,10 +6,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -18,10 +19,11 @@ import androidx.compose.ui.unit.dp
 fun FocusLoadingBlob(
     modifier: Modifier = Modifier,
     size: Dp = 52.dp,
+    color: Color = MaterialTheme.colorScheme.primary,
 ) {
     LoadingIndicator(
         modifier = modifier.size(size),
-        color = LocalContentColor.current,
+        color = color,
     )
 }
 

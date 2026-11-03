@@ -33,12 +33,18 @@ sealed interface CrewSpeechEvent {
     data class ReasoningTimed(val durationMs: Long) : CrewSpeechEvent
     data class StatsUpdated(val stats: MessageStats) : CrewSpeechEvent
     data class Retry(val attempt: Int, val max: Int, val reason: String) : CrewSpeechEvent
-    data class ToolStarted(val id: String, val label: String, val arguments: String = "") : CrewSpeechEvent
+    data class ToolStarted(
+        val id: String,
+        val label: String,
+        val tool: String = "",
+        val arguments: String = "",
+    ) : CrewSpeechEvent
     data class ToolFinished(
         val id: String,
         val label: String,
         val ok: Boolean,
         val summary: String,
+        val tool: String = "",
         val arguments: String = "",
         val detail: String = "",
     ) : CrewSpeechEvent
@@ -240,6 +246,7 @@ class CrewEngine(
                         CrewSpeechEvent.ToolStarted(
                             id = call.id,
                             label = ToolLabels.of(call.name),
+                            tool = call.name,
                             arguments = call.arguments.take(ARGUMENT_LIMIT),
                         ),
                     )
@@ -256,6 +263,7 @@ class CrewEngine(
                             label = ToolLabels.of(call.name),
                             ok = outcome.result.ok,
                             summary = outcome.result.summary,
+                            tool = call.name,
                             arguments = call.arguments.take(ARGUMENT_LIMIT),
                             detail = outcome.result.content.take(DETAIL_LIMIT),
                         ),

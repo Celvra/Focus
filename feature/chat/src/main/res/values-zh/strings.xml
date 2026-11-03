@@ -63,8 +63,6 @@
     <string name="chat_attach_camera">拍照</string>
     <string name="chat_attach_photos">照片</string>
     <string name="chat_attach_files">文件</string>
-    <string name="chat_picker_provider_title">服务商</string>
-    <string name="chat_picker_provider_empty">还没有服务商。</string>
     <string name="chat_picker_model_title">模型</string>
     <string name="chat_picker_model_search">搜索模型</string>
     <string name="chat_picker_model_empty">没有模型</string>

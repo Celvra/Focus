@@ -155,6 +155,8 @@ fun FocusTimelineStep(
                     when (status) {
                         FocusStepStatus.Running -> ContainedLoadingIndicator(
                             modifier = Modifier.size(NodeSize),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            indicatorColor = MaterialTheme.colorScheme.primary,
                         )
                         FocusStepStatus.Done -> Icon(
                             imageVector = FocusIcons.Check,
@@ -280,7 +282,7 @@ fun FocusTimelineStep(
 }
 
 @Composable
-private fun FocusTraceMedia(media: List<FocusTraceImage>) {
+internal fun FocusTraceMedia(media: List<FocusTraceImage>) {
     var preview by remember { mutableStateOf<FocusTraceImage?>(null) }
     Row(
         modifier = Modifier

@@ -31,12 +31,13 @@ import fan.x0.focus.core.designsystem.components.BrandIcons
 import fan.x0.focus.core.designsystem.components.FocusCardGroup
 import fan.x0.focus.core.designsystem.components.FocusCardGroupIcon
 import fan.x0.focus.core.designsystem.components.FocusIcons
+import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusReveal
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.components.rememberProviderImage
-import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.core.network.openai.ProviderBalance
 import fan.x0.focus.data.assistant.ProviderConfig
+import fan.x0.focus.data.assistant.modelOptions
 import fan.x0.focus.feature.assistant.R
 import fan.x0.focus.feature.assistant.SettingsAction
 import fan.x0.focus.feature.assistant.SettingsUiState
@@ -70,8 +71,13 @@ internal fun SettingsAccountPage(
                 )
             }
         }
-        item(key = "providers") {
+        item(key = "model") {
             FocusReveal(index = 1) {
+                ActiveModelGroup(state = state, onAction = onAction)
+            }
+        }
+        item(key = "providers") {
+            FocusReveal(index = 2) {
                 ProvidersGroup(state = state, onAction = onAction)
             }
         }
@@ -96,10 +102,79 @@ internal fun SettingsAccountPage(
 }
 
 @Composable
+private fun ActiveModelGroup(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
+    val provider = state.activeProvider
+    val modelLabel = provider?.modelOptions
+        ?.firstOrNull { it.id == state.activeModel }
+        ?.name
+        ?.ifBlank { state.activeModel }
+        .orEmpty()
+    FocusCardGroup(title = stringResource(R.string.settings_model_title)) {
+        item(
+            headlineContent = {
+                Text(
+                    text = modelLabel.ifBlank {
+                        stringResource(R.string.settings_provider_no_model)
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            supportingContent = {
+                Column {
+                    if (provider != null) {
+                        Text(
+                            text = provider.name,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.settings_model_active_body),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            },
+            leadingContent = {
+                if (provider != null) {
+                    ProviderBadge(provider = provider, active = true)
+                } else {
+                    FocusCardGroupIcon(
+                        icon = FocusIcons.Assistant,
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            },
+            trailingContent = {
+                if (state.providerModelsLoading) {
+                    FocusLoadingBlob(size = 18.dp)
+                } else {
+                    Icon(
+                        imageVector = FocusIcons.Search,
+                        contentDescription = stringResource(R.string.settings_model_picker_title),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            onClick = { onAction(SettingsAction.OpenActiveModelPicker) },
+        )
+    }
+}
+
+@Composable
 private fun ProvidersGroup(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
     FocusCardGroup(title = stringResource(R.string.settings_providers_title)) {
         state.providers.forEach { provider ->
             val active = provider.id == state.activeProviderId
+            val modelLabel = provider.modelOptions
+                .firstOrNull { it.id == provider.model }
+                ?.name
+                ?.ifBlank { provider.model }
+                .orEmpty()
             item(
                 selected = active,
                 headlineContent = {
@@ -117,7 +192,7 @@ private fun ProvidersGroup(state: SettingsUiState, onAction: (SettingsAction) ->
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = provider.model.ifBlank {
+                            text = modelLabel.ifBlank {
                                 stringResource(R.string.settings_provider_no_model)
                             },
                             style = MaterialTheme.typography.labelSmall,
@@ -125,7 +200,7 @@ private fun ProvidersGroup(state: SettingsUiState, onAction: (SettingsAction) ->
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = protocolLabel(provider.protocol),
+                            text = provider.protocol.displayName(),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -172,15 +247,6 @@ private fun ProvidersGroup(state: SettingsUiState, onAction: (SettingsAction) ->
         )
     }
 }
-
-@Composable
-private fun protocolLabel(protocol: ChatProtocol): String = stringResource(
-    when (protocol) {
-        ChatProtocol.ChatCompletions -> R.string.settings_protocol_chat
-        ChatProtocol.Responses -> R.string.settings_protocol_responses
-        ChatProtocol.AnthropicMessages -> R.string.settings_protocol_anthropic
-    },
-)
 
 internal fun formatBalance(balance: ProviderBalance): String {
     val symbol = when (balance.currency.uppercase()) {

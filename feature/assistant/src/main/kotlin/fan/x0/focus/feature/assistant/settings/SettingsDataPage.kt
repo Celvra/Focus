@@ -82,7 +82,11 @@ internal fun SettingsDataPage(
                     modifier = Modifier.size(48.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 2.dp,
+                    )
                 }
             } else {
                 IconButton(onClick = hapticTap { onAction(SettingsAction.RefreshData) }) {
@@ -362,6 +366,7 @@ private fun AboutGroup(
                 when {
                     state.updateChecking -> CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.primary,
                         strokeWidth = 2.dp,
                     )
                     state.updateAvailable -> FocusCardGroupValue(state.updateVersion)
@@ -583,7 +588,11 @@ private fun LoadingRow() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+            color = MaterialTheme.colorScheme.primary,
+            strokeWidth = 2.dp,
+        )
         Text(
             text = stringResource(R.string.settings_about_contributors_loading),
             style = MaterialTheme.typography.bodyMedium,

@@ -9,11 +9,19 @@ import kotlinx.serialization.Serializable
 const val LEGACY_PROVIDER_ID = "default"
 
 @Serializable
+data class ProviderModel(
+    val id: String,
+    val name: String = "",
+)
+
+@Serializable
 data class ProviderConfig(
     val id: String,
     val name: String,
     val baseUrl: String,
     val model: String = "",
+    val models: List<ProviderModel> = emptyList(),
+    val modelsConfigured: Boolean = false,
     val protocol: ChatProtocol = ChatProtocol.ChatCompletions,
     val requiresKey: Boolean = true,
     val userAgent: String = "",
@@ -21,6 +29,15 @@ data class ProviderConfig(
     val auth: ProviderAuth = ProviderAuth(),
     val icon: String = "",
 )
+
+val ProviderConfig.modelOptions: List<ProviderModel>
+    get() {
+        val saved = models
+            .filter { it.id.isNotBlank() }
+            .distinctBy { it.id }
+        if (model.isBlank() || saved.any { it.id == model }) return saved
+        return listOf(ProviderModel(model)) + saved
+    }
 
 fun ProviderConfig.requestConfig(apiKey: String): ProviderRequestConfig = ProviderRequestConfig(
     apiKey = apiKey,

@@ -55,16 +55,20 @@ import fan.x0.focus.core.designsystem.components.FocusAmbientWorking
 import fan.x0.focus.core.designsystem.components.FocusBubbleEnter
 import fan.x0.focus.core.designsystem.components.FocusChatBubble
 import fan.x0.focus.core.designsystem.components.FocusChip
+import fan.x0.focus.core.designsystem.components.FocusChoiceButtons
 import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
 import fan.x0.focus.core.designsystem.components.FocusComposer
 import fan.x0.focus.core.designsystem.components.FocusComposerPill
+import fan.x0.focus.core.designsystem.components.FocusGroupedPickerSheet
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
+import fan.x0.focus.core.designsystem.components.FocusPickerGroup
+import fan.x0.focus.core.designsystem.components.FocusPickerItem
+import fan.x0.focus.core.designsystem.components.FocusPickerSelection
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusReasoningCard
-import fan.x0.focus.core.designsystem.components.FocusSearchPickerSheet
 import fan.x0.focus.core.designsystem.components.FocusTextButton
 import fan.x0.focus.core.designsystem.components.FocusTraceCard
 import fan.x0.focus.core.designsystem.components.hapticTap
@@ -163,7 +167,17 @@ fun OnboardingScreen(
             ProviderSheet(state = state, onAction = onAction)
         }
         if (state.modelPickerOpen) {
-            FocusSearchPickerSheet(
+            val groupId = "onboarding"
+            val group = FocusPickerGroup(
+                id = groupId,
+                title = state.providerName.ifBlank {
+                    stringResource(R.string.onboarding_provider_title)
+                },
+                items = (listOfNotNull(state.model.takeIf { it.isNotBlank() }) + state.models)
+                    .distinct()
+                    .map { FocusPickerItem(id = it) },
+            )
+            FocusGroupedPickerSheet(
                 title = stringResource(R.string.onboarding_model_picker_title),
                 searchHint = stringResource(R.string.onboarding_model_search_hint),
                 emptyText = stringResource(
@@ -173,12 +187,13 @@ fun OnboardingScreen(
                         R.string.onboarding_models_empty
                     },
                 ),
-                items = state.models,
+                groups = listOf(group),
                 query = state.modelQuery,
                 onQueryChange = { onAction(OnboardingAction.ModelQueryChanged(it)) },
-                onSelect = { onAction(OnboardingAction.SelectModel(it)) },
+                onSelect = { onAction(OnboardingAction.SelectModel(it.itemId)) },
                 onDismiss = { onAction(OnboardingAction.CloseModelPicker) },
-                selected = state.model,
+                selected = FocusPickerSelection(groupId, state.model),
+                loading = state.fetchingModels,
                 onRefresh = { onAction(OnboardingAction.FetchModels) },
             )
         }
@@ -510,27 +525,19 @@ private fun ProtocolChips(state: OnboardingUiState, onAction: (OnboardingAction)
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FocusChip(
-                label = stringResource(R.string.onboarding_protocol_chat),
-                selected = state.protocol == ChatProtocol.ChatCompletions,
-                onClick = { onAction(OnboardingAction.ProtocolChanged(ChatProtocol.ChatCompletions)) },
-            )
-            FocusChip(
-                label = stringResource(R.string.onboarding_protocol_responses),
-                selected = state.protocol == ChatProtocol.Responses,
-                onClick = { onAction(OnboardingAction.ProtocolChanged(ChatProtocol.Responses)) },
-            )
-            FocusChip(
-                label = stringResource(R.string.onboarding_protocol_anthropic),
-                selected = state.protocol == ChatProtocol.AnthropicMessages,
-                onClick = { onAction(OnboardingAction.ProtocolChanged(ChatProtocol.AnthropicMessages)) },
-            )
-        }
+        FocusChoiceButtons(
+            options = ChatProtocol.entries,
+            selected = state.protocol,
+            onSelect = { onAction(OnboardingAction.ProtocolChanged(it)) },
+            label = { stringResource(it.labelRes()) },
+        )
     }
+}
+
+private fun ChatProtocol.labelRes(): Int = when (this) {
+    ChatProtocol.ChatCompletions -> R.string.onboarding_protocol_chat
+    ChatProtocol.Responses -> R.string.onboarding_protocol_responses
+    ChatProtocol.AnthropicMessages -> R.string.onboarding_protocol_anthropic
 }
 
 @Composable

@@ -5,38 +5,39 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigationevent.NavigationEvent
-import androidx.navigationevent.NavigationEventInfo
-import androidx.navigationevent.NavigationEventTransitionState
-import androidx.navigationevent.compose.NavigationBackHandler
-import androidx.navigationevent.compose.rememberNavigationEventState
-import fan.x0.focus.core.designsystem.components.FocusSearchPickerSheet
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.ui.NavDisplay
+import fan.x0.focus.core.designsystem.components.FocusAmbientSurface
+import fan.x0.focus.core.designsystem.components.FocusGroupedPickerSheet
+import fan.x0.focus.core.designsystem.components.FocusPickerGroup
+import fan.x0.focus.core.designsystem.components.FocusPickerItem
+import fan.x0.focus.core.designsystem.components.FocusPickerSelection
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
+import fan.x0.focus.core.designsystem.theme.FocusMotionDefaults
 import fan.x0.focus.core.mvi.CollectEffect
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
@@ -84,12 +85,13 @@ fun CrewRoute(viewModel: CrewViewModel = koinViewModel()) {
             viewModel.onAction(CrewAction.AttachPicked(listOf(uri.toString())))
         }
     }
+    val latest = rememberUpdatedState(state)
     CrewScreen(
         state = state,
         onAction = viewModel::onAction,
         snackbar = snackbar,
         onPickMemberPhoto = {
-            if (state.memberDraft != null) {
+            if (latest.value.memberDraft != null) {
                 picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             }
         },
@@ -131,69 +133,84 @@ fun CrewScreen(
         }
     }
 
-    val backState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
-    val gestureActive by remember(backState) {
-        derivedStateOf {
-            backState.transitionState is NavigationEventTransitionState.InProgress
+    val pages = remember {
+        mutableStateListOf<CrewPage>(CrewPage.Groups).apply {
+            state.group?.let { add(CrewPage.Chat(it.id)) }
         }
     }
-    val backEnabled = state.group != null && state.selectionKey == null &&
-        !state.memberSheetOpen && state.groupDraft == null && state.menu == null &&
-        state.edit == null && state.pendingDelete == null && state.deleteGroup == null
-    NavigationBackHandler(
-        state = backState,
-        isBackEnabled = backEnabled,
-        onBackCompleted = { onAction(CrewAction.CloseGroup) },
-    )
+    val groupId = state.group?.id
+    LaunchedEffect(groupId) {
+        val target = groupId?.let { CrewPage.Chat(it) }
+        if (target == null) {
+            while (pages.size > 1) pages.removeAt(pages.lastIndex)
+        } else if (pages.lastOrNull() != target) {
+            while (pages.size > 1) pages.removeAt(pages.lastIndex)
+            pages.add(target)
+        }
+    }
+    val closeChat: () -> Unit = {
+        if (pages.size > 1) pages.removeAt(pages.lastIndex)
+        onAction(CrewAction.CloseGroup)
+    }
+    val pageAction: (CrewAction) -> Unit = { action ->
+        if (action == CrewAction.CloseGroup) closeChat() else onAction(action)
+    }
+    val latestState = rememberUpdatedState(state)
+    val motion = FocusMotionDefaults
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (state.group != null && gestureActive) {
-            CrewGroupListScreen(state = state, onAction = onAction, snackbar = snackbar)
-        }
-        AnimatedContent(
-            targetState = state.group != null,
-            transitionSpec = {
-                if (targetState) {
-                    (slideInHorizontally { it / 4 } + fadeIn()) togetherWith
-                        (slideOutHorizontally { -it / 8 } + fadeOut())
-                } else {
-                    (slideInHorizontally { -it / 4 } + fadeIn()) togetherWith
-                        (slideOutHorizontally { it / 4 } + fadeOut())
+    NavDisplay(
+        backStack = pages,
+        onBack = closeChat,
+        modifier = Modifier.fillMaxSize(),
+        transitionSpec = {
+            (
+                slideInHorizontally(motion.spatialDefault()) { it / 5 } +
+                    fadeIn(motion.effectsDefault())
+                ) togetherWith fadeOut(motion.effectsFast())
+        },
+        popTransitionSpec = {
+            (
+                slideInHorizontally(motion.spatialDefault()) { -it / 5 } +
+                    fadeIn(motion.effectsDefault())
+                ) togetherWith (
+                slideOutHorizontally(motion.spatialFast()) { it / 5 } +
+                    fadeOut(motion.effectsFast())
+                )
+        },
+        predictivePopTransitionSpec = {
+            (
+                slideInHorizontally(motion.spatialDefault()) { -it / 5 } +
+                    fadeIn(motion.effectsDefault())
+                ) togetherWith (
+                slideOutHorizontally(motion.spatialFast()) { it / 5 } +
+                    fadeOut(motion.effectsFast())
+                )
+        },
+        entryProvider = { page ->
+            when (page) {
+                CrewPage.Groups -> NavEntry(key = page, contentKey = page) {
+                    CrewGroupListScreen(
+                        state = latestState.value,
+                        onAction = pageAction,
+                        snackbar = snackbar,
+                    )
                 }
-            },
-            label = "crewPage",
-            modifier = Modifier.graphicsLayer {
-                val event = (backState.transitionState as? NavigationEventTransitionState.InProgress)
-                    ?.latestEvent
-                val progress = event?.progress ?: 0f
-                val edge = event?.swipeEdge ?: NavigationEvent.EDGE_LEFT
-                val direction = if (edge == NavigationEvent.EDGE_RIGHT) -1f else 1f
-                translationX = direction * size.width * 0.35f * progress
-                val scale = 1f - 0.06f * progress
-                scaleX = scale
-                scaleY = scale
-                transformOrigin = TransformOrigin(
-                    pivotFractionX = if (edge == NavigationEvent.EDGE_RIGHT) 1f else 0f,
-                    pivotFractionY = 0.5f,
-                )
-            },
-        ) { hasGroup ->
-            if (!hasGroup) {
-                CrewGroupListScreen(state = state, onAction = onAction, snackbar = snackbar)
-            } else {
-                CrewChatScreen(
-                    state = state,
-                    onAction = onAction,
-                    snackbar = snackbar,
-                    onPickMemberPhoto = onPickMemberPhoto,
-                    onPickFiles = onPickFiles,
-                    onPickPhotos = onPickPhotos,
-                    onTakePhoto = onTakePhoto,
-                    onCopy = copy,
-                )
+                is CrewPage.Chat -> NavEntry(key = page, contentKey = page) {
+                    CrewChatPage(
+                        groupId = page.id,
+                        state = latestState.value,
+                        onAction = pageAction,
+                        snackbar = snackbar,
+                        onPickMemberPhoto = onPickMemberPhoto,
+                        onPickFiles = onPickFiles,
+                        onPickPhotos = onPickPhotos,
+                        onTakePhoto = onTakePhoto,
+                        onCopy = copy,
+                    )
+                }
             }
-        }
-    }
+        },
+    )
 
     state.groupDraft?.let { draft ->
         CrewGroupEditorSheet(
@@ -210,7 +227,22 @@ fun CrewScreen(
         )
     }
     if (state.modelPickerOpen && state.memberDraft != null) {
-        FocusSearchPickerSheet(
+        val groups = remember(state.memberModels) {
+            state.memberModels.map { group ->
+                FocusPickerGroup(
+                    id = group.providerId,
+                    title = group.providerName,
+                    icon = group.icon,
+                    items = group.models.map { model ->
+                        FocusPickerItem(
+                            id = model.id,
+                            label = model.name.ifBlank { model.id },
+                        )
+                    },
+                )
+            }
+        }
+        FocusGroupedPickerSheet(
             title = stringResource(R.string.crew_model_picker_title),
             searchHint = stringResource(R.string.crew_model_picker_search),
             emptyText = stringResource(
@@ -220,12 +252,16 @@ fun CrewScreen(
                     R.string.crew_model_picker_empty
                 },
             ),
-            items = state.memberModels,
+            groups = groups,
             query = state.memberModelQuery,
             onQueryChange = { onAction(CrewAction.MemberModelQueryChanged(it)) },
-            onSelect = { onAction(CrewAction.MemberModelChanged(it)) },
+            onSelect = { onAction(CrewAction.MemberModelChanged(it.groupId, it.itemId)) },
             onDismiss = { onAction(CrewAction.CloseMemberModelPicker) },
-            selected = state.memberDraft.model.takeIf { it.isNotBlank() },
+            selected = FocusPickerSelection(
+                state.memberDraft.providerId,
+                state.memberDraft.model,
+            ),
+            loading = state.memberModelsLoading,
             onRefresh = { onAction(CrewAction.RefreshMemberModels) },
         )
     }
@@ -244,4 +280,41 @@ fun CrewScreen(
             onDismiss = { onAction(CrewAction.CancelDeleteMessage) },
         )
     }
+}
+
+@Composable
+private fun CrewChatPage(
+    groupId: String,
+    state: CrewUiState,
+    onAction: (CrewAction) -> Unit,
+    snackbar: SnackbarHostState,
+    onPickMemberPhoto: () -> Unit,
+    onPickFiles: () -> Unit,
+    onPickPhotos: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onCopy: (String) -> Unit,
+) {
+    val previous = remember { mutableStateOf(state) }
+    val live = state.group?.id == groupId
+    val shown = if (live) state else previous.value
+    SideEffect {
+        if (live) previous.value = state
+    }
+    FocusAmbientSurface {
+        CrewChatScreen(
+            state = shown,
+            onAction = onAction,
+            snackbar = snackbar,
+            onPickMemberPhoto = onPickMemberPhoto,
+            onPickFiles = onPickFiles,
+            onPickPhotos = onPickPhotos,
+            onTakePhoto = onTakePhoto,
+            onCopy = onCopy,
+        )
+    }
+}
+
+private sealed interface CrewPage : java.io.Serializable {
+    data object Groups : CrewPage
+    data class Chat(val id: String) : CrewPage
 }

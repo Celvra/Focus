@@ -30,14 +30,16 @@ import fan.x0.focus.data.assistant.LocaleController
 import fan.x0.focus.data.assistant.PolicySettings
 import fan.x0.focus.data.assistant.ProviderConfig
 import fan.x0.focus.data.assistant.ProviderIconStore
+import fan.x0.focus.data.assistant.ProviderModel
+import fan.x0.focus.data.assistant.ProviderModelCatalog
 import fan.x0.focus.data.assistant.SecretStore
 import fan.x0.focus.data.assistant.UpdateController
+import fan.x0.focus.data.assistant.modelOptions
 import fan.x0.focus.data.assistant.requestConfig
 import fan.x0.focus.data.sources.FeedRefreshScheduler
 import fan.x0.focus.data.sources.SourcePreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
@@ -51,6 +53,7 @@ class SettingsViewModel(
     private val scheduler: FeedRefreshScheduler,
     private val tester: ModelConnectionTester,
     private val catalog: OpenAiModelCatalog,
+    private val providerModels: ProviderModelCatalog,
     private val balanceClient: ProviderBalanceClient,
     private val locale: LocaleController,
     private val policy: PolicySettings,
@@ -63,7 +66,7 @@ class SettingsViewModel(
     private val updates: UpdateController,
 ) : BaseViewModel<SettingsAction, SettingsUiState, SettingsEffect>(SettingsUiState()) {
 
-    private var fetchJob: Job? = null
+    private var modelPickerJob: Job? = null
     private var avatarsJob: Job? = null
     private var fetchToken = 0
     private var balanceToken = 0
@@ -163,41 +166,29 @@ class SettingsViewModel(
             is SettingsAction.NameChanged -> updateState { copy(draftName = action.value) }
             is SettingsAction.IconChanged -> updateState { copy(draftIcon = action.value) }
             is SettingsAction.CustomIconPicked -> importIcon(action.uri)
-            is SettingsAction.BaseUrlChanged -> {
-                updateState {
-                    copy(
-                        baseUrl = action.value,
-                        connectionOk = false,
-                        connectionError = null,
-                        models = emptyList(),
-                    )
-                }
-                scheduleModelFetch()
+            is SettingsAction.BaseUrlChanged -> updateState {
+                copy(
+                    baseUrl = action.value,
+                    connectionOk = false,
+                    connectionError = null,
+                    availableModels = emptyList(),
+                )
             }
-            is SettingsAction.ModelChanged -> updateState {
-                copy(model = action.value, connectionOk = false, connectionError = null)
+            is SettingsAction.ProtocolChanged -> updateState {
+                copy(
+                    protocol = action.value,
+                    connectionOk = false,
+                    connectionError = null,
+                    availableModels = emptyList(),
+                )
             }
-            is SettingsAction.ProtocolChanged -> {
-                updateState {
-                    copy(
-                        protocol = action.value,
-                        connectionOk = false,
-                        connectionError = null,
-                        models = emptyList(),
-                    )
-                }
-                scheduleModelFetch()
-            }
-            is SettingsAction.ApiKeyChanged -> {
-                updateState {
-                    copy(
-                        apiKeyInput = action.value,
-                        connectionOk = false,
-                        connectionError = null,
-                        models = emptyList(),
-                    )
-                }
-                scheduleModelFetch()
+            is SettingsAction.ApiKeyChanged -> updateState {
+                copy(
+                    apiKeyInput = action.value,
+                    connectionOk = false,
+                    connectionError = null,
+                    availableModels = emptyList(),
+                )
             }
             SettingsAction.ToggleApiKeyVisibility -> updateState {
                 copy(apiKeyVisible = !apiKeyVisible)
@@ -252,53 +243,44 @@ class SettingsViewModel(
                 val token = ++fetchToken
                 viewModelScope.launch { fetchModels(token, notify = true) }
             }
-            SettingsAction.OpenModelPicker -> {
-                if (currentState.models.isEmpty()) {
-                    val token = ++fetchToken
-                    viewModelScope.launch { fetchModels(token, openPicker = true, notify = true) }
-                } else {
-                    updateState {
-                        copy(
-                            modelPickerOpen = true,
-                            modelPickerTarget = ModelPickerTarget.Provider,
-                            modelQuery = "",
-                        )
-                    }
-                }
+            is SettingsAction.AddProviderModel -> addProviderModel(action.id, action.name)
+            is SettingsAction.UpdateProviderModel -> updateProviderModel(
+                action.originalId,
+                action.id,
+                action.name,
+            )
+            is SettingsAction.RemoveProviderModel -> removeProviderModel(action.id)
+            is SettingsAction.SetDefaultProviderModel -> updateState {
+                copy(model = action.id, connectionOk = false, connectionError = null)
             }
+            is SettingsAction.ToggleProviderModel -> toggleProviderModel(action.id)
+            is SettingsAction.AddProviderModels -> addProviderModels(action.ids)
+            SettingsAction.OpenActiveModelPicker -> openActiveModelPicker()
+            SettingsAction.RefreshActiveModels -> openActiveModelPicker()
+            is SettingsAction.SelectActiveModel -> selectActiveModel(action.providerId, action.model)
             SettingsAction.CloseModelPicker -> updateState {
                 copy(
                     modelPickerOpen = false,
-                    modelPickerTarget = ModelPickerTarget.Provider,
+                    modelPickerTarget = ModelPickerTarget.Active,
                     modelQuery = "",
                 )
             }
             is SettingsAction.ModelQueryChanged -> updateState { copy(modelQuery = action.value) }
             is SettingsAction.SelectModel -> {
                 when (currentState.modelPickerTarget) {
-                    ModelPickerTarget.Judge -> {
-                        updateState { copy(modelPickerOpen = false, modelQuery = "") }
-                        setJudgeModel(action.id)
-                    }
-                    ModelPickerTarget.Subagent -> {
-                        updateState { copy(modelPickerOpen = false, modelQuery = "") }
-                        setSubagentModel(action.id)
-                    }
-                    ModelPickerTarget.Provider -> updateState {
-                        copy(model = action.id, modelPickerOpen = false, modelQuery = "", connectionOk = false)
-                    }
+                    ModelPickerTarget.Judge -> setJudgeSelection(action.providerId, action.id)
+                    ModelPickerTarget.Subagent -> setSubagentSelection(action.providerId, action.id)
+                    ModelPickerTarget.Active -> Unit
                 }
             }
             SettingsAction.FetchBalance -> fetchBalance()
             is SettingsAction.PolicyChanged -> setPolicy(action.value)
             is SettingsAction.JudgeKindChanged -> setJudgeKind(action.value)
-            is SettingsAction.JudgeProviderChanged -> setJudgeProvider(action.providerId)
             SettingsAction.OpenJudgeModelPicker -> openJudgeModelPicker()
             SettingsAction.RefreshJudgeModels -> openJudgeModelPicker()
             is SettingsAction.JudgeContextChanged -> setJudgeContext(action.value)
             is SettingsAction.JudgeMaxRiskChanged -> setJudgeMaxRisk(action.value)
             is SettingsAction.JudgeTimeoutChanged -> setJudgeTimeout(action.value)
-            is SettingsAction.SubagentProviderChanged -> setSubagentProvider(action.providerId)
             SettingsAction.OpenSubagentModelPicker -> openSubagentModelPicker()
             SettingsAction.RefreshSubagentModels -> openSubagentModelPicker()
             is SettingsAction.MaxRoundsChanged -> setMaxRounds(action.value)
@@ -317,9 +299,15 @@ class SettingsViewModel(
         viewModelScope.launch { policy.setJudgeKind(value) }
     }
 
-    private fun setJudgeProvider(providerId: String) {
-        val model = currentState.providers.firstOrNull { it.id == providerId }?.model.orEmpty()
-        updateState { copy(judgeProviderId = providerId, judgeModel = model) }
+    private fun setJudgeSelection(providerId: String, model: String) {
+        updateState {
+            copy(
+                modelPickerOpen = false,
+                modelQuery = "",
+                judgeProviderId = providerId,
+                judgeModel = model,
+            )
+        }
         viewModelScope.launch { policy.setJudgeProvider(providerId, model) }
     }
 
@@ -328,47 +316,8 @@ class SettingsViewModel(
         viewModelScope.launch { policy.setContextWindow(value) }
     }
 
-    private fun setJudgeModel(value: String) {
-        updateState { copy(judgeModel = value) }
-        viewModelScope.launch { policy.setJudgeModel(value) }
-    }
-
     private fun openJudgeModelPicker() {
-        updateState { copy(judgeModelsLoading = true) }
-        viewModelScope.launch {
-            val provider = currentState.providers.firstOrNull { it.id == currentState.judgeProviderId }
-            val seeded = listOfNotNull(
-                provider?.model?.takeIf { it.isNotBlank() },
-                currentState.judgeModel.takeIf { it.isNotBlank() },
-            )
-            val fetched = provider?.let { config ->
-                val key = secrets.apiKey(config.id).orEmpty()
-                if (key.isBlank()) {
-                    null
-                } else {
-                    runCatching {
-                        catalog.list(
-                            ModelEndpoint(config.baseUrl, currentState.judgeModel.trim()),
-                            config.requestConfig(key),
-                            config.protocol,
-                        )
-                    }.getOrElse { error ->
-                        if (seeded.isEmpty()) emitError(error.toAppError())
-                        null
-                    }
-                }
-            }
-            val models = (seeded + fetched.orEmpty()).distinct()
-            updateState {
-                copy(
-                    judgeModels = models,
-                    judgeModelsLoading = false,
-                    modelPickerOpen = models.isNotEmpty(),
-                    modelPickerTarget = ModelPickerTarget.Judge,
-                    modelQuery = "",
-                )
-            }
-        }
+        openModelPicker(ModelPickerTarget.Judge)
     }
 
     private fun setJudgeMaxRisk(value: Int) {
@@ -381,53 +330,20 @@ class SettingsViewModel(
         viewModelScope.launch { policy.setTimeoutSeconds(value) }
     }
 
-    private fun setSubagentProvider(providerId: String) {
-        val model = currentState.providers.firstOrNull { it.id == providerId }?.model.orEmpty()
-        updateState { copy(subagentProviderId = providerId, subagentModel = model) }
+    private fun setSubagentSelection(providerId: String, model: String) {
+        updateState {
+            copy(
+                modelPickerOpen = false,
+                modelQuery = "",
+                subagentProviderId = providerId,
+                subagentModel = model,
+            )
+        }
         viewModelScope.launch { agent.setSubagentProvider(providerId, model) }
     }
 
-    private fun setSubagentModel(value: String) {
-        updateState { copy(subagentModel = value) }
-        viewModelScope.launch { agent.setSubagentModel(value) }
-    }
-
     private fun openSubagentModelPicker() {
-        updateState { copy(subagentModelsLoading = true) }
-        viewModelScope.launch {
-            val provider = currentState.providers.firstOrNull { it.id == currentState.subagentProviderId }
-            val seeded = listOfNotNull(
-                provider?.model?.takeIf { it.isNotBlank() },
-                currentState.subagentModel.takeIf { it.isNotBlank() },
-            )
-            val fetched = provider?.let { config ->
-                val key = secrets.apiKey(config.id).orEmpty()
-                if (key.isBlank()) {
-                    null
-                } else {
-                    runCatching {
-                        catalog.list(
-                            ModelEndpoint(config.baseUrl, currentState.subagentModel.trim()),
-                            config.requestConfig(key),
-                            config.protocol,
-                        )
-                    }.getOrElse { error ->
-                        if (seeded.isEmpty()) emitError(error.toAppError())
-                        null
-                    }
-                }
-            }
-            val models = (seeded + fetched.orEmpty()).distinct()
-            updateState {
-                copy(
-                    subagentModels = models,
-                    subagentModelsLoading = false,
-                    modelPickerOpen = models.isNotEmpty(),
-                    modelPickerTarget = ModelPickerTarget.Subagent,
-                    modelQuery = "",
-                )
-            }
-        }
+        openModelPicker(ModelPickerTarget.Subagent)
     }
 
     private fun setMaxRounds(value: Int) {
@@ -502,9 +418,52 @@ class SettingsViewModel(
         }
     }
 
+    private fun openActiveModelPicker() {
+        openModelPicker(ModelPickerTarget.Active)
+    }
+
+    private fun openModelPicker(target: ModelPickerTarget) {
+        modelPickerJob?.cancel()
+        updateState {
+            copy(
+                modelPickerOpen = true,
+                modelPickerTarget = target,
+                modelQuery = "",
+                providerModelsLoading = true,
+            )
+        }
+        modelPickerJob = viewModelScope.launch {
+            val groups = providerModels.load(settings.configOnce())
+            updateState {
+                copy(
+                    providerModelGroups = groups,
+                    providerModelsLoading = false,
+                )
+            }
+        }
+    }
+
+    private fun selectActiveModel(providerId: String, model: String) {
+        viewModelScope.launch {
+            val provider = settings.configOnce().providers
+                .firstOrNull { it.id == providerId }
+                ?: return@launch
+            settings.updateProvider(provider.copy(model = model), makeActive = true)
+            updateState {
+                copy(
+                    providers = providers.map {
+                        if (it.id == providerId) it.copy(model = model) else it
+                    },
+                    activeProviderId = providerId,
+                    modelPickerOpen = false,
+                    modelQuery = "",
+                )
+            }
+        }
+    }
+
     private fun openProvider(id: String) {
         val provider = currentState.providers.firstOrNull { it.id == id } ?: return
-        fetchJob?.cancel()
         ++fetchToken
         ++balanceToken
         updateState {
@@ -516,7 +475,11 @@ class SettingsViewModel(
                 draftIcon = provider.icon,
                 encodingIcon = false,
                 baseUrl = provider.baseUrl,
-                model = provider.model,
+                model = provider.model.ifBlank {
+                    provider.modelOptions.firstOrNull()?.id.orEmpty()
+                },
+                draftModels = provider.modelOptions,
+                draftModelsChanged = false,
                 protocol = provider.protocol,
                 apiKeyInput = "",
                 apiKeySaved = false,
@@ -532,7 +495,8 @@ class SettingsViewModel(
                 connectionOk = false,
                 savingConnection = false,
                 testing = false,
-                models = emptyList(),
+                availableModels = emptyList(),
+                fetchingModels = false,
                 modelPickerOpen = false,
                 modelQuery = "",
                 deleteConfirm = false,
@@ -551,8 +515,6 @@ class SettingsViewModel(
                 )
             }
             if (!saved.isNullOrBlank()) {
-                val token = ++fetchToken
-                fetchModels(token)
                 refreshBalance(
                     provider.id,
                     provider.baseUrl,
@@ -565,7 +527,6 @@ class SettingsViewModel(
     }
 
     private fun addProvider() {
-        fetchJob?.cancel()
         ++fetchToken
         ++balanceToken
         updateState {
@@ -578,6 +539,8 @@ class SettingsViewModel(
                 encodingIcon = false,
                 baseUrl = "",
                 model = "",
+                draftModels = emptyList(),
+                draftModelsChanged = false,
                 protocol = ChatProtocol.ChatCompletions,
                 apiKeyInput = "",
                 apiKeySaved = false,
@@ -593,7 +556,8 @@ class SettingsViewModel(
                 connectionOk = false,
                 savingConnection = false,
                 testing = false,
-                models = emptyList(),
+                availableModels = emptyList(),
+                fetchingModels = false,
                 modelPickerOpen = false,
                 modelQuery = "",
                 deleteConfirm = false,
@@ -605,7 +569,6 @@ class SettingsViewModel(
     }
 
     private fun closeEditor() {
-        fetchJob?.cancel()
         ++fetchToken
         ++balanceToken
         updateState {
@@ -619,7 +582,10 @@ class SettingsViewModel(
                 requiresKey = true,
                 connectionError = null,
                 connectionOk = false,
-                models = emptyList(),
+                draftModels = emptyList(),
+                draftModelsChanged = false,
+                availableModels = emptyList(),
+                fetchingModels = false,
                 modelPickerOpen = false,
                 modelQuery = "",
                 deleteConfirm = false,
@@ -659,6 +625,94 @@ class SettingsViewModel(
         updateState { copy(headers = headers, connectionOk = false, connectionError = null) }
     }
 
+    private fun addProviderModel(id: String, name: String) {
+        val modelId = id.trim()
+        if (modelId.isBlank()) return
+        if (currentState.draftModels.any { it.id == modelId }) {
+            emitError(AppError(AppErrorType.Generic, serverMessage = "Model already exists"))
+            return
+        }
+        updateState {
+            copy(
+                draftModels = draftModels + ProviderModel(modelId, name.trim()),
+                draftModelsChanged = true,
+                model = model.ifBlank { modelId },
+                connectionOk = false,
+                connectionError = null,
+            )
+        }
+    }
+
+    private fun updateProviderModel(originalId: String, id: String, name: String) {
+        val modelId = id.trim()
+        if (modelId.isBlank()) return
+        val state = currentState
+        val index = state.draftModels.indexOfFirst { it.id == originalId }
+        if (index < 0) return
+        if (modelId != originalId && state.draftModels.any { it.id == modelId }) {
+            emitError(AppError(AppErrorType.Generic, serverMessage = "Model already exists"))
+            return
+        }
+        updateState {
+            val models = draftModels.toMutableList()
+            models[index] = ProviderModel(modelId, name.trim())
+            copy(
+                draftModels = models,
+                draftModelsChanged = true,
+                model = if (model == originalId) modelId else model,
+                connectionOk = false,
+                connectionError = null,
+            )
+        }
+    }
+
+    private fun removeProviderModel(id: String) {
+        updateState {
+            val models = draftModels.filterNot { it.id == id }
+            copy(
+                draftModels = models,
+                draftModelsChanged = true,
+                model = if (model == id) models.firstOrNull()?.id.orEmpty() else model,
+                connectionOk = false,
+                connectionError = null,
+            )
+        }
+    }
+
+    private fun toggleProviderModel(id: String) {
+        if (id.isBlank()) return
+        updateState {
+            if (draftModels.any { it.id == id }) {
+                val models = draftModels.filterNot { it.id == id }
+                copy(
+                    draftModels = models,
+                    draftModelsChanged = true,
+                    model = if (model == id) models.firstOrNull()?.id.orEmpty() else model,
+                )
+            } else {
+                copy(
+                    draftModels = draftModels + ProviderModel(id),
+                    draftModelsChanged = true,
+                    model = model.ifBlank { id },
+                )
+            }
+        }
+    }
+
+    private fun addProviderModels(ids: List<String>) {
+        updateState {
+            val models = draftModels.toMutableList()
+            ids.filter { it.isNotBlank() }.forEach { id ->
+                if (models.none { it.id == id }) models += ProviderModel(id)
+            }
+            copy(
+                draftModels = models,
+                draftModelsChanged = true,
+                model = model.ifBlank { models.firstOrNull()?.id.orEmpty() },
+            )
+        }
+    }
+
     private fun draftRequestConfig(apiKey: String): ProviderRequestConfig = ProviderRequestConfig(
         apiKey = apiKey,
         auth = ProviderAuth(
@@ -686,11 +740,28 @@ class SettingsViewModel(
             try {
                 val id = state.editingProviderId ?: UUID.randomUUID().toString()
                 val existing = state.providers.firstOrNull { it.id == id }
+                val defaultModel = state.model.trim()
+                val models = if (state.draftModelsChanged) {
+                    state.draftModels
+                        .map { ProviderModel(it.id.trim(), it.name.trim()) }
+                        .filter { it.id.isNotBlank() }
+                        .distinctBy { it.id }
+                        .toMutableList()
+                        .also { list ->
+                            if (defaultModel.isNotBlank() && list.none { it.id == defaultModel }) {
+                                list.add(0, ProviderModel(defaultModel))
+                            }
+                        }
+                } else {
+                    existing?.models.orEmpty()
+                }
                 val provider = ProviderConfig(
                     id = id,
                     name = name,
                     baseUrl = baseUrl,
-                    model = state.model.trim(),
+                    model = defaultModel.ifBlank { models.firstOrNull()?.id.orEmpty() },
+                    models = models,
+                    modelsConfigured = state.draftModelsChanged || existing?.modelsConfigured == true,
                     protocol = state.protocol,
                     requiresKey = state.requiresKey,
                     userAgent = state.userAgent.trim(),
@@ -717,7 +788,10 @@ class SettingsViewModel(
                         encodingIcon = false,
                         providers = config.providers,
                         activeProviderId = config.activeProviderId,
-                        models = emptyList(),
+                        draftModels = emptyList(),
+                        draftModelsChanged = false,
+                        availableModels = emptyList(),
+                        fetchingModels = false,
                         modelPickerOpen = false,
                         modelQuery = "",
                     )
@@ -746,7 +820,8 @@ class SettingsViewModel(
         val state = currentState
         if (state.testing) return
         val baseUrl = state.baseUrl.trim().trimEnd('/')
-        if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://") || state.model.isBlank()) {
+        val model = state.model.ifBlank { state.draftModels.firstOrNull()?.id.orEmpty() }
+        if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://") || model.isBlank()) {
             updateState {
                 copy(connectionError = AppError(AppErrorType.Generic, serverMessage = "Fill the endpoint and model"))
             }
@@ -768,7 +843,7 @@ class SettingsViewModel(
                     }
                     return@launch
                 }
-                tester.test(ModelEndpoint(baseUrl, state.model.trim()), draftRequestConfig(key), state.protocol)
+                tester.test(ModelEndpoint(baseUrl, model), draftRequestConfig(key), state.protocol)
                 updateState { copy(testing = false, connectionOk = true) }
                 val id = state.editingProviderId
                 if (id != null) {
@@ -823,7 +898,10 @@ class SettingsViewModel(
                         deleteConfirm = false,
                         apiKeyInput = "",
                         apiKeyVisible = false,
-                        models = emptyList(),
+                        draftModels = emptyList(),
+                        draftModelsChanged = false,
+                        availableModels = emptyList(),
+                        fetchingModels = false,
                         modelPickerOpen = false,
                         modelQuery = "",
                         providerBalances = providerBalances - id,
@@ -841,49 +919,35 @@ class SettingsViewModel(
         }
     }
 
-    private fun scheduleModelFetch() {
-        fetchJob?.cancel()
-        val token = ++fetchToken
-        val url = currentState.baseUrl.trim()
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            updateState { copy(fetchingModels = false) }
-            return
-        }
-        val editingProvider = currentState.providers
-            .firstOrNull { it.id == currentState.editingProviderId }
-        if (currentState.apiKeyInput.isBlank() && currentState.requiresKey) {
-            updateState { copy(fetchingModels = false) }
-            return
-        }
-        fetchJob = viewModelScope.launch {
-            delay(1200)
-            fetchModels(token)
-        }
-    }
-
-    private suspend fun fetchModels(token: Int, openPicker: Boolean = false, notify: Boolean = false) {
+    private suspend fun fetchModels(token: Int, notify: Boolean = false) {
         if (token != fetchToken) return
-        val baseUrl = currentState.baseUrl.trim().trimEnd('/')
-        if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) return
-        val key = currentState.apiKeyInput.trim().ifBlank {
-            currentState.editingProviderId?.let { secrets.apiKey(it) }.orEmpty()
+        val state = currentState
+        val baseUrl = state.baseUrl.trim().trimEnd('/')
+        val key = state.apiKeyInput.trim().ifBlank {
+            state.editingProviderId?.let { secrets.apiKey(it) }.orEmpty()
         }
-        if (key.isBlank() && currentState.requiresKey) return
+        val validUrl = baseUrl.startsWith("http://") || baseUrl.startsWith("https://")
+        if (!validUrl || (key.isBlank() && state.requiresKey)) {
+            updateState { copy(fetchingModels = false) }
+            if (notify) {
+                emitError(
+                    AppError(AppErrorType.Generic, serverMessage = "Fill the endpoint and API key"),
+                )
+            }
+            return
+        }
         updateState { copy(fetchingModels = true) }
         try {
             val models = catalog.list(
-                ModelEndpoint(baseUrl, currentState.model.trim()),
+                ModelEndpoint(baseUrl, state.model.trim()),
                 draftRequestConfig(key),
-                currentState.protocol,
+                state.protocol,
             )
             if (token != fetchToken) return
             updateState {
                 copy(
                     fetchingModels = false,
-                    models = models,
-                    model = if (model.isBlank() && models.size == 1) models.first() else model,
-                    modelPickerOpen = if (openPicker) models.isNotEmpty() else modelPickerOpen,
-                    modelQuery = if (openPicker) "" else modelQuery,
+                    availableModels = models,
                 )
             }
         } catch (e: CancellationException) {

@@ -19,7 +19,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -263,10 +262,17 @@ fun CrewMemberSheet(
         if (draft == null) {
             MemberList(state = state, onAction = onAction)
         } else {
+            val modelLabel = state.memberModels
+                .firstOrNull { it.providerId == draft.providerId }
+                ?.models
+                ?.firstOrNull { it.id == draft.model }
+                ?.name
+                ?.ifBlank { draft.model }
+                ?: draft.model
             MemberEditor(
                 draft = draft,
                 saving = state.saving,
-                providers = state.providers,
+                modelLabel = modelLabel,
                 modelsLoading = state.memberModelsLoading,
                 onAction = onAction,
                 onPickPhoto = onPickPhoto,
@@ -439,7 +445,7 @@ private fun MemberList(state: CrewUiState, onAction: (CrewAction) -> Unit) {
 private fun MemberEditor(
     draft: MemberDraft,
     saving: Boolean,
-    providers: List<CrewProviderUi>,
+    modelLabel: String,
     modelsLoading: Boolean,
     onAction: (CrewAction) -> Unit,
     onPickPhoto: () -> Unit,
@@ -489,28 +495,6 @@ private fun MemberEditor(
             enabled = !saving,
         )
         Text(
-            text = stringResource(R.string.crew_member_provider),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
-                selected = draft.providerId.isBlank(),
-                onClick = { onAction(CrewAction.MemberProviderChanged("")) },
-                label = { Text(stringResource(R.string.crew_member_default_provider)) },
-            )
-            providers.forEach { provider ->
-                FilterChip(
-                    selected = draft.providerId == provider.id,
-                    onClick = { onAction(CrewAction.MemberProviderChanged(provider.id)) },
-                    label = { Text(provider.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                )
-            }
-        }
-        Text(
             text = stringResource(R.string.crew_member_model),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -528,7 +512,7 @@ private fun MemberEditor(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = draft.model.ifBlank {
+                    text = modelLabel.ifBlank {
                         stringResource(R.string.crew_member_model_default)
                     },
                     style = MaterialTheme.typography.bodyLarge,
@@ -544,6 +528,7 @@ private fun MemberEditor(
                 if (modelsLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.primary,
                         strokeWidth = 2.dp,
                     )
                 } else {

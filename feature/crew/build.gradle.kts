@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.koin.compose.viewmodel)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.navigationevent.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.savedstate)

@@ -7,17 +7,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,7 +22,6 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberSliderState
@@ -38,19 +31,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import fan.x0.focus.core.designsystem.components.BrandIcon
-import fan.x0.focus.core.designsystem.components.BrandIcons
-import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusAttachmentSheet
 import fan.x0.focus.core.designsystem.components.hapticSelect
-import fan.x0.focus.core.designsystem.components.hapticTap
-import fan.x0.focus.core.designsystem.components.rememberProviderImage
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.data.assistant.AgentMode
 import fan.x0.focus.data.assistant.ReasoningLevel
@@ -58,139 +43,6 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 private const val MAX_HINT_DURATION_MS = 3000L
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun ProviderPickerSheet(
-    providers: List<ProviderOption>,
-    selected: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberBottomSheetState(
-        initialValue = SheetValue.Hidden,
-        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-    )
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .imePadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.chat_picker_provider_title),
-                style = MaterialTheme.typography.titleLargeEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            if (providers.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.chat_picker_provider_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 12.dp),
-                )
-            } else {
-                providers.forEach { provider ->
-                    val active = provider.id == selected
-                    val image = rememberProviderImage(provider.icon)
-                    val brand = BrandIcons.forKey(provider.icon)
-                        ?: BrandIcons.forProvider(provider.id, provider.name)
-                    Surface(
-                        onClick = hapticTap { onSelect(provider.id) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.largeIncreased,
-                        color = if (active) {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainer
-                        },
-                        contentColor = if (active) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            if (image != null) {
-                                Surface(
-                                    modifier = Modifier.size(28.dp),
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                                ) {
-                                    Image(
-                                        bitmap = image,
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                }
-                            } else if (brand != null) {
-                                BrandIcon(
-                                    icon = brand,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(22.dp),
-                                )
-                            } else {
-                                Surface(
-                                    modifier = Modifier.size(28.dp),
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = provider.name.trim().take(1).uppercase(),
-                                            style = MaterialTheme.typography.labelMedium,
-                                        )
-                                    }
-                                }
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = provider.name,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = provider.model.ifBlank {
-                                        stringResource(R.string.chat_picker_model_empty)
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (active) {
-                                        MaterialTheme.colorScheme.onSecondaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            if (active) {
-                                Icon(
-                                    imageVector = FocusIcons.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 private data class ReasoningPreviewContent(
     val level: ReasoningLevel,

@@ -31,12 +31,11 @@ import fan.x0.focus.data.assistant.CommandPolicy
 import fan.x0.focus.data.assistant.ConversationCompaction
 import fan.x0.focus.data.assistant.ConversationTodo
 import fan.x0.focus.data.assistant.MessageStats
-import fan.x0.focus.data.assistant.ModelCatalogRepository
 import fan.x0.focus.data.assistant.PlanStatus
 import fan.x0.focus.data.assistant.PolicySettings
 import fan.x0.focus.data.assistant.ProposedPlan
+import fan.x0.focus.data.assistant.ProviderModelCatalog
 import fan.x0.focus.data.assistant.ReasoningLevel
-import fan.x0.focus.data.assistant.SecretStore
 import fan.x0.focus.data.assistant.SubAgentRunState
 import fan.x0.focus.data.assistant.SubAgentRunStatus
 import fan.x0.focus.data.assistant.SubAgentRunStore
@@ -44,9 +43,9 @@ import fan.x0.focus.data.assistant.TodoPriority
 import fan.x0.focus.data.assistant.TodoStatus
 import fan.x0.focus.data.assistant.ToolCatalog
 import fan.x0.focus.data.assistant.ToolLabels
+import fan.x0.focus.data.assistant.ToolPayload
 import fan.x0.focus.data.assistant.TurnOptions
 import fan.x0.focus.data.assistant.WorkspaceStore
-import fan.x0.focus.data.assistant.requestConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -67,8 +66,7 @@ class ChatViewModel(
     private val switcher: ChatSwitcher,
     private val workspace: WorkspaceStore,
     private val settings: AssistantSettings,
-    private val secrets: SecretStore,
-    private val catalog: ModelCatalogRepository,
+    private val providerModels: ProviderModelCatalog,
     private val loader: AttachmentLoader,
     private val turns: ChatTurnRunner,
     private val suggestionGenerator: ChatSuggestionGenerator,
@@ -163,12 +161,16 @@ class ChatViewModel(
                         previous != null && model == previous.model -> provider.model
                         else -> model
                     }
+                    val options = config.providers.map {
+                        ProviderOption(it.id, it.name, it.model, it.icon, it.models)
+                    }
+                    val providersChanged = options != providers
                     copy(
-                        providers = config.providers.map {
-                            ProviderOption(it.id, it.name, it.model, it.icon)
-                        },
+                        providers = options,
                         providerId = resolved,
                         model = nextModel,
+                        models = if (providersChanged) emptyMap() else models,
+                        modelsLoaded = if (providersChanged) false else modelsLoaded,
                     )
                 }
             }
@@ -198,14 +200,13 @@ class ChatViewModel(
             ChatAction.RetryBtw -> retryBtw()
             is ChatAction.OpenPicker -> {
                 updateState { copy(picker = action.picker, modelQuery = "") }
-                if (action.picker == ComposerPicker.Model && currentState.models.isEmpty()) {
+                if (action.picker == ComposerPicker.Model && !currentState.modelsLoaded) {
                     loadModels()
                 }
             }
-            is ChatAction.SelectProvider -> selectProvider(action.providerId)
-            is ChatAction.SelectModel -> selectModel(action.model)
+            is ChatAction.SelectModel -> selectModel(action.providerId, action.model)
             is ChatAction.ModelQueryChanged -> updateState { copy(modelQuery = action.value) }
-            ChatAction.RefreshModels -> loadModels()
+            ChatAction.RefreshModels -> loadModels(force = true)
             is ChatAction.SelectReasoning -> selectReasoning(action.level)
             is ChatAction.AttachPicked -> attach(action.uris)
             is ChatAction.RemoveAttachment -> updateState {
@@ -856,23 +857,9 @@ class ChatViewModel(
         turns.answer(askId, answers, skipped)
     }
 
-    private fun selectProvider(providerId: String) {
-        val option = currentState.providers.firstOrNull { it.id == providerId } ?: return
-        persistTurnSettings(providerId = option.id, model = option.model)
-        updateState {
-            copy(
-                providerId = option.id,
-                model = option.model,
-                picker = null,
-                models = emptyList(),
-            )
-        }
-        loadModels()
-    }
-
-    private fun selectModel(model: String) {
-        persistTurnSettings(model = model)
-        updateState { copy(model = model, picker = null) }
+    private fun selectModel(providerId: String, model: String) {
+        persistTurnSettings(providerId = providerId, model = model)
+        updateState { copy(providerId = providerId, model = model, picker = null) }
     }
 
     private fun selectReasoning(level: ReasoningLevel) {
@@ -892,37 +879,22 @@ class ChatViewModel(
         }
     }
 
-    private fun loadModels() {
-        val state = currentState
+    private fun loadModels(force: Boolean = false) {
+        if (!force && (currentState.modelsLoaded || currentState.modelsLoading)) return
         modelJob?.cancel()
-        updateState { copy(modelsLoading = true, models = emptyList()) }
+        updateState { copy(modelsLoading = true) }
         modelJob = viewModelScope.launch {
             val config = settings.configOnce()
-            val provider = config.providers.firstOrNull { it.id == state.providerId }
-            val key = secrets.apiKey(state.providerId).orEmpty()
-            if (provider == null || (provider.requiresKey && key.isBlank())) {
-                updateState { copy(modelsLoading = false) }
-                return@launch
+            val groups = providerModels.load(config).associate { group ->
+                group.providerId to group.models.map { ModelOption(it.id, it.name, it.meta) }
             }
-            val models = try {
-                catalog.models(
-                    state.providerId,
-                    provider.baseUrl,
-                    state.model,
-                    provider.requestConfig(key),
-                    provider.protocol,
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                emptyList()
-            }
-            val options = models.map { ModelOption(it.id, it.meta) }
+            val loaded = groups.values.any { it.isNotEmpty() }
             updateState {
                 copy(
-                    models = options,
+                    models = groups,
+                    modelsLoaded = loaded,
                     modelsLoading = false,
-                    model = if (model.isBlank() && options.isNotEmpty()) options.first().id else model,
+                    model = model.ifBlank { groups[providerId]?.firstOrNull()?.id.orEmpty() },
                 )
             }
         }
@@ -966,7 +938,7 @@ class ChatViewModel(
                 sending = false,
                 compacting = false,
                 workingText = "",
-                providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon) },
+                providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon, it.models) },
                 providerId = providerId,
                 model = model,
                 askDrafts = emptyMap(),
@@ -1020,12 +992,11 @@ class ChatViewModel(
                 input = "",
                 turn = 0,
                 attachments = emptyList(),
-                providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon) },
+                providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon, it.models) },
                 providerId = providerId,
                 model = model,
                 reasoningLevel = level,
                 mode = conversation?.mode ?: AgentMode.Build,
-                models = emptyList(),
                 modelsLoading = false,
                 picker = null,
                 modelQuery = "",
@@ -1352,8 +1323,8 @@ class ChatViewModel(
         summary = summary,
         id = id,
         tool = tool,
-        arguments = arguments,
-        output = output,
+        arguments = ToolPayload.format(arguments),
+        output = ToolPayload.format(output),
         durationMs = durationMs,
         startedAt = startedAt,
         diffs = diffs,
@@ -1369,6 +1340,7 @@ class ChatViewModel(
 
     private suspend fun List<ChatMessage>.toEntries(compaction: ConversationCompaction?): List<ChatEntry> {
         val quotes = chats.messagesByIds(mapNotNull { it.replyToId }.toSet())
+        val argumentsByCall = flatMap { it.toolCalls }.associate { it.id to it.arguments }
         val entries = mutableListOf<ChatEntry>()
         var pendingStats: MessageStats? = null
         var compactionAdded = false
@@ -1427,7 +1399,7 @@ class ChatViewModel(
                     if (message.name != ToolCatalog.SET_WORKING_TEXT) {
                         entries += ChatEntry.Trace(
                             key = "m${message.id}",
-                            steps = message.toSteps(),
+                            steps = message.toSteps(argumentsByCall[message.toolCallId.orEmpty()].orEmpty()),
                         )
                     }
                 }
@@ -1490,18 +1462,18 @@ class ChatViewModel(
         )
     }
 
-    private fun ChatMessage.toSteps(): List<TraceStep> {
+    private fun ChatMessage.toSteps(arguments: String): List<TraceStep> {
         val labels = label?.lines()?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
-        val summaries = content.lineSequence().filter { it.isNotBlank() }.toList()
+        val status = if (content.startsWith("Error: ")) TraceStatus.Failed else TraceStatus.Done
         if (labels.size <= 1) {
             return listOf(
                 TraceStep(
                     label = labels.firstOrNull() ?: ToolLabels.of(name),
-                    status = TraceStatus.Done,
-                    summary = summaries.firstOrNull()?.take(120),
+                    status = status,
                     id = toolCallId.orEmpty(),
                     tool = name.orEmpty(),
-                    output = content.take(2000),
+                    arguments = ToolPayload.format(arguments),
+                    output = ToolPayload.format(content),
                     durationMs = elapsedMs,
                     diffs = stepDiffs.firstOrNull().orEmpty(),
                     media = attachments.map { it.toUi() },
@@ -1511,11 +1483,11 @@ class ChatViewModel(
         return labels.mapIndexed { index, value ->
             TraceStep(
                 label = value,
-                status = TraceStatus.Done,
-                summary = summaries.getOrNull(index)?.take(120),
+                status = status,
                 id = toolCallId.orEmpty(),
                 tool = name.orEmpty(),
-                output = content.take(2000),
+                arguments = ToolPayload.format(arguments),
+                output = ToolPayload.format(content),
                 durationMs = elapsedMs,
                 diffs = stepDiffs.getOrNull(index).orEmpty(),
                 media = if (index == 0) attachments.map { it.toUi() } else emptyList(),

@@ -610,6 +610,8 @@ class ToolExecutor(
                         name = name,
                         baseUrl = baseUrl,
                         model = model,
+                        models = existing?.models.orEmpty(),
+                        modelsConfigured = existing?.modelsConfigured == true,
                         protocol = protocol,
                         requiresKey = requiresKey,
                         userAgent = userAgent,

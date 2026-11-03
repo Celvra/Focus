@@ -28,6 +28,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -136,7 +137,7 @@ fun FocusPrimaryButton(
         contentPadding = ButtonDefaults.ContentPadding,
     ) {
         if (loading) {
-            FocusLoadingBlob(size = 20.dp)
+            FocusLoadingBlob(size = 20.dp, color = LocalContentColor.current)
             Spacer(Modifier.width(10.dp))
         } else if (icon != null) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -167,7 +168,7 @@ fun FocusTonalButton(
         contentPadding = ButtonDefaults.ContentPadding,
     ) {
         if (loading) {
-            FocusLoadingBlob(size = 18.dp)
+            FocusLoadingBlob(size = 18.dp, color = LocalContentColor.current)
             Spacer(Modifier.width(10.dp))
         } else if (icon != null) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -198,7 +199,7 @@ fun FocusOutlinedButton(
         contentPadding = ButtonDefaults.ContentPadding,
     ) {
         if (loading) {
-            FocusLoadingBlob(size = 18.dp)
+            FocusLoadingBlob(size = 18.dp, color = LocalContentColor.current)
             Spacer(Modifier.width(10.dp))
         } else if (icon != null) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))

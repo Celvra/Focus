@@ -22,6 +22,7 @@ import fan.x0.focus.data.assistant.OnboardingDefaults
 import fan.x0.focus.data.assistant.ProviderCatalog
 import fan.x0.focus.data.assistant.ProviderConfig
 import fan.x0.focus.data.assistant.SecretStore
+import fan.x0.focus.data.assistant.ToolPayload
 import fan.x0.focus.data.assistant.WorkspaceStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -203,7 +204,8 @@ class OnboardingViewModel(
                                     FocusTraceStep(
                                         label = event.label,
                                         status = FocusStepStatus.Running,
-                                        summary = event.arguments.take(120).ifBlank { null },
+                                        tool = event.tool,
+                                        input = ToolPayload.format(event.arguments),
                                     ),
                                 ),
                             ))
@@ -288,7 +290,11 @@ class OnboardingViewModel(
         val status = if (event.ok) FocusStepStatus.Done else FocusStepStatus.Failed
         val steps = trace.steps.map { step ->
             if (step.label == event.label && step.status == FocusStepStatus.Running) {
-                step.copy(status = status, summary = event.summary.take(120).ifBlank { null })
+                step.copy(
+                    status = status,
+                    summary = event.summary.take(120).ifBlank { null },
+                    output = ToolPayload.format(event.output),
+                )
             } else {
                 step
             }
@@ -439,6 +445,8 @@ class OnboardingViewModel(
                         name = name,
                         baseUrl = baseUrl,
                         model = model,
+                        models = existing?.models.orEmpty(),
+                        modelsConfigured = existing?.modelsConfigured == true,
                         protocol = state.protocol,
                     ),
                     makeActive = true,

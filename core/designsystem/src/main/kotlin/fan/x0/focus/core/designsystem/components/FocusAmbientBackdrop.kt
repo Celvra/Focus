@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -13,12 +12,7 @@ import androidx.compose.ui.graphics.luminance
 import kotlin.math.exp
 
 @Composable
-internal fun FocusAmbientBackdrop(activity: FocusAmbientActivity) {
-    val scheme = MaterialTheme.colorScheme
-    val dark = scheme.background.luminance() < 0.5f
-    val palette = remember(scheme, dark) { ambientPalette(scheme, dark) }
-    val progress = remember { mutableFloatStateOf(0f) }
-
+internal fun FocusAmbientClock(activity: FocusAmbientActivity) {
     LaunchedEffect(activity) {
         var last = withFrameNanos { it }
         var accumulated = 0L
@@ -33,12 +27,18 @@ internal fun FocusAmbientBackdrop(activity: FocusAmbientActivity) {
             accumulated = 0L
             val target = if (activity.working) WORKING_SPEED else IDLE_SPEED
             speed += (target - speed) * (1f - exp(-seconds / SPEED_RESPONSE_SECONDS))
-            progress.floatValue = (progress.floatValue + seconds * speed / LOOP_SECONDS) % 1f
+            activity.progress.floatValue = (activity.progress.floatValue + seconds * speed / LOOP_SECONDS) % 1f
         }
     }
+}
 
+@Composable
+internal fun FocusAmbientBackdrop(activity: FocusAmbientActivity) {
+    val scheme = MaterialTheme.colorScheme
+    val dark = scheme.background.luminance() < 0.5f
+    val palette = remember(scheme, dark) { ambientPalette(scheme, dark) }
     Canvas(modifier = Modifier.fillMaxSize()) {
-        drawAmbientFlow(palette, progress.floatValue)
+        drawAmbientFlow(palette, activity.progress.floatValue)
     }
 }
 

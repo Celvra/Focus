@@ -24,6 +24,7 @@ import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusReveal
 import fan.x0.focus.data.assistant.CommandPolicy
 import fan.x0.focus.data.assistant.JudgeKind
+import fan.x0.focus.data.assistant.modelOptions
 import fan.x0.focus.feature.assistant.AgentCard
 import fan.x0.focus.feature.assistant.R
 import fan.x0.focus.feature.assistant.SettingsAction
@@ -128,67 +129,52 @@ private fun PolicyCard(state: SettingsUiState, onAction: (SettingsAction) -> Uni
 
 @Composable
 private fun SubagentCard(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
+    val provider = state.providers.firstOrNull { it.id == state.subagentProviderId }
+    val modelLabel = provider?.modelOptions
+        ?.firstOrNull { it.id == state.subagentModel }
+        ?.name
+        ?.ifBlank { state.subagentModel }
+        ?: state.subagentModel
     FocusCardGroup(title = stringResource(R.string.settings_subagent_title)) {
-        formItem(
-            headlineContent = { Text(stringResource(R.string.settings_subagent_provider_item)) },
-            supportingContent = { Text(stringResource(R.string.settings_subagent_provider_body)) },
-            leadingContent = {
-                FocusCardGroupIcon(
-                    icon = FocusIcons.Tool,
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        item(
+            headlineContent = {
+                Text(
+                    text = modelLabel.ifBlank {
+                        stringResource(R.string.settings_subagent_model_none)
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             },
-        ) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FocusChip(
-                    label = stringResource(R.string.settings_subagent_follow),
-                    selected = state.subagentProviderId.isBlank(),
-                    onClick = { onAction(SettingsAction.SubagentProviderChanged("")) },
+            supportingContent = {
+                Text(
+                    provider?.name ?: stringResource(R.string.settings_subagent_follow),
                 )
-                state.providers.forEach { provider ->
-                    FocusChip(
-                        label = provider.name,
-                        selected = provider.id == state.subagentProviderId,
-                        onClick = { onAction(SettingsAction.SubagentProviderChanged(provider.id)) },
+            },
+            trailingContent = {
+                if (state.providerModelsLoading) {
+                    FocusLoadingBlob(size = 18.dp)
+                } else {
+                    Icon(
+                        imageVector = FocusIcons.Search,
+                        contentDescription = stringResource(R.string.settings_subagent_model_item),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-        }
-        if (state.subagentProviderId.isNotBlank()) {
-            item(
-                headlineContent = {
-                    Text(
-                        text = state.subagentModel.ifBlank {
-                            stringResource(R.string.settings_subagent_model_none)
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                supportingContent = { Text(stringResource(R.string.settings_subagent_model_body)) },
-                trailingContent = {
-                    if (state.subagentModelsLoading) {
-                        FocusLoadingBlob(size = 18.dp)
-                    } else {
-                        Icon(
-                            imageVector = FocusIcons.Search,
-                            contentDescription = stringResource(R.string.settings_subagent_model_item),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                onClick = { onAction(SettingsAction.OpenSubagentModelPicker) },
-            )
-        }
+            },
+            onClick = { onAction(SettingsAction.OpenSubagentModelPicker) },
+        )
     }
 }
 
 @Composable
 private fun JudgeCard(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
+    val provider = state.providers.firstOrNull { it.id == state.judgeProviderId }
+    val modelLabel = provider?.modelOptions
+        ?.firstOrNull { it.id == state.judgeModel }
+        ?.name
+        ?.ifBlank { state.judgeModel }
+        ?: state.judgeModel
     FocusCardGroup(title = stringResource(R.string.settings_judge_title)) {
         formItem(
             headlineContent = { Text(stringResource(R.string.settings_judge_engine_item)) },
@@ -217,44 +203,21 @@ private fun JudgeCard(state: SettingsUiState, onAction: (SettingsAction) -> Unit
                 )
             }
         }
-        formItem(
-            headlineContent = { Text(stringResource(R.string.settings_judge_provider_item)) },
-            supportingContent = {
-                Text(
-                    if (state.providers.isEmpty()) {
-                        stringResource(R.string.settings_judge_provider_empty)
-                    } else {
-                        stringResource(R.string.settings_judge_provider_body)
-                    },
-                )
-            },
-        ) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                state.providers.forEach { provider ->
-                    FocusChip(
-                        label = provider.name,
-                        selected = provider.id == state.judgeProviderId,
-                        onClick = { onAction(SettingsAction.JudgeProviderChanged(provider.id)) },
-                    )
-                }
-            }
-        }
         item(
             headlineContent = {
                 Text(
-                    text = state.judgeModel.ifBlank {
+                    text = modelLabel.ifBlank {
                         stringResource(R.string.settings_judge_model_none)
                     },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             },
-            supportingContent = { Text(stringResource(R.string.settings_judge_model_body)) },
+            supportingContent = {
+                Text(provider?.name ?: stringResource(R.string.settings_judge_model_body))
+            },
             trailingContent = {
-                if (state.judgeModelsLoading) {
+                if (state.providerModelsLoading) {
                     FocusLoadingBlob(size = 18.dp)
                 } else {
                     Icon(

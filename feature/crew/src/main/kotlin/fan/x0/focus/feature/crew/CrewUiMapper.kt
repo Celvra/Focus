@@ -91,7 +91,7 @@ internal fun List<CrewMessage>.toEntries(
                     reactions = message.reactions,
                     mentions = message.mentions(members),
                     tools = message.tools.map {
-                        CrewToolUi(it.id, it.label, it.status, it.summary, it.arguments, it.detail)
+                        CrewToolUi(it.id, it.label, it.tool, it.status, it.summary, it.arguments, it.detail)
                     },
                     attachments = message.attachments,
                     reasoning = message.reasoning,
@@ -148,7 +148,7 @@ internal fun CrewRunEntry.toUi(
                 activity = activity,
                 mentions = CrewMentions.names(text, members).map { CrewMentionChipUi(it) },
                 tools = tools.map {
-                    CrewToolUi(it.id, it.label, it.status, it.summary, it.arguments, it.detail)
+                    CrewToolUi(it.id, it.label, it.tool, it.status, it.summary, it.arguments, it.detail)
                 },
                 reasoning = reasoning,
                 reasoningMs = reasoningMs,

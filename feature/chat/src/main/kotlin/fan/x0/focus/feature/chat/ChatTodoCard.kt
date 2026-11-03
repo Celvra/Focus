@@ -157,6 +157,7 @@ internal fun ChatTodoCard(
                     .padding(horizontal = 4.dp)
                     .height(4.dp)
                     .clip(CircleShape),
+                color = MaterialTheme.colorScheme.primary,
                 strokeCap = StrokeCap.Round,
             )
             AnimatedVisibility(

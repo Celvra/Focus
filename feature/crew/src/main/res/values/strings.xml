@@ -102,7 +102,6 @@
     <string name="crew_todo_title">Tasks</string>
     <string name="crew_todo_progress">%1$d of %2$d done</string>
     <string name="crew_todo_in_progress">In progress</string>
-    <string name="crew_member_provider">Provider</string>
     <string name="crew_member_model">Model</string>
     <string name="crew_member_reasoning">Reasoning</string>
     <string name="crew_reasoning_auto">Auto</string>
@@ -112,7 +111,6 @@
     <string name="crew_reasoning_high">High</string>
     <string name="crew_reasoning_xhigh">Extra high</string>
     <string name="crew_reasoning_max">Max</string>
-    <string name="crew_member_default_provider">Active provider</string>
     <string name="crew_member_model_default">Provider default</string>
     <string name="crew_reasoning_off_desc">Skip reasoning and answer right away.</string>
     <string name="crew_reasoning_auto_desc">Let the model decide how much to think.</string>

@@ -160,7 +160,11 @@ private fun CheckingRow() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+            color = MaterialTheme.colorScheme.primary,
+            strokeWidth = 2.dp,
+        )
         Text(
             text = stringResource(R.string.update_checking),
             style = MaterialTheme.typography.bodyMedium,
@@ -395,6 +399,7 @@ private fun AssetRow(
                     LinearProgressIndicator(
                         progress = { running.progress },
                         modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary,
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

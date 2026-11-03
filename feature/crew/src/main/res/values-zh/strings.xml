@@ -102,7 +102,6 @@
     <string name="crew_todo_title">任务</string>
     <string name="crew_todo_progress">已完成 %1$d/%2$d</string>
     <string name="crew_todo_in_progress">进行中</string>
-    <string name="crew_member_provider">提供商</string>
     <string name="crew_member_model">模型</string>
     <string name="crew_member_reasoning">推理等级</string>
     <string name="crew_reasoning_auto">自动</string>
@@ -112,7 +111,6 @@
     <string name="crew_reasoning_high">高</string>
     <string name="crew_reasoning_xhigh">极高</string>
     <string name="crew_reasoning_max">最大</string>
-    <string name="crew_member_default_provider">当前提供商</string>
     <string name="crew_member_model_default">提供商默认模型</string>
     <string name="crew_reasoning_off_desc">跳过推理，直接回答。</string>
     <string name="crew_reasoning_auto_desc">由模型决定思考多少。</string>

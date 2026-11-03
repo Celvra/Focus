@@ -255,6 +255,7 @@ private fun GoalCard(
                         modifier = Modifier
                             .weight(1f)
                             .height(6.dp),
+                        color = MaterialTheme.colorScheme.primary,
                         strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
                     )
                     Spacer(Modifier.width(12.dp))
