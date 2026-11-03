@@ -175,6 +175,14 @@ internal fun CrewRunEntry.toUi(
         steps = card.steps,
         phase = card.phase,
     )
+    is CrewRunEntry.Trust -> CrewEntryUi.Trust(
+        key = key,
+        id = card.id,
+        label = card.label,
+        kind = card.kind,
+        files = card.files,
+        phase = card.phase,
+    )
     is CrewRunEntry.Notice -> CrewEntryUi.Notice(key, text)
 }
 

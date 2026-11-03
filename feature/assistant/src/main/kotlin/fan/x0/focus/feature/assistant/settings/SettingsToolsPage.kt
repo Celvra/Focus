@@ -50,6 +50,8 @@ internal fun SettingsToolsPage(
                 val mcpBody = stringResource(R.string.settings_tools_mcp_body)
                 val indexTitle = stringResource(R.string.settings_tools_index_title)
                 val indexBody = stringResource(R.string.settings_tools_index_body)
+                val trustTitle = stringResource(R.string.settings_tools_trust_title)
+                val trustBody = stringResource(R.string.settings_tools_trust_body)
                 FocusCardGroup {
                     toolItem(
                         title = searchTitle,
@@ -68,6 +70,12 @@ internal fun SettingsToolsPage(
                         body = indexBody,
                         icon = FocusIcons.Folder,
                         onClick = { onOpen(SettingsDestination.WorkspaceIndex) },
+                    )
+                    toolItem(
+                        title = trustTitle,
+                        body = trustBody,
+                        icon = FocusIcons.Terminal,
+                        onClick = { onOpen(SettingsDestination.WorkspaceTrust) },
                     )
                     item(
                         headlineContent = { Text(stringResource(R.string.settings_tools_bridge_title)) },

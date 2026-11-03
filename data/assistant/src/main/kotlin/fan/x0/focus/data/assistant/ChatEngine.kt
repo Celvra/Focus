@@ -72,6 +72,8 @@ sealed interface ChatEvent {
     data class ApprovalResolved(val request: ApprovalRequest, val approved: Boolean) : ChatEvent
     data class AskRequested(val request: AskRequest) : ChatEvent
     data class AskResolved(val request: AskRequest, val reply: AskReply) : ChatEvent
+    data class TrustRequested(val request: WorkspaceTrustRequest) : ChatEvent
+    data class TrustResolved(val request: WorkspaceTrustRequest, val trusted: Boolean) : ChatEvent
     data class PlanProposed(val plan: ProposedPlan, val request: ApprovalRequest) : ChatEvent
     data class PlanResolved(val plan: ProposedPlan, val approved: Boolean) : ChatEvent
     data class TodoUpdated(val todos: List<ConversationTodo>) : ChatEvent
@@ -102,12 +104,18 @@ class ChatEngine(
     private val agent: AgentSettings,
     private val subAgents: SubAgentRunner,
     private val compactor: ChatCompactor,
+    private val workspaceTrust: WorkspaceTrustService,
 ) {
     private val waivers = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     private val askReplies = ConcurrentHashMap<String, CompletableDeferred<AskReply>>()
+    private val trustDecisions = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
 
     fun decide(approvalId: String, approved: Boolean) {
         waivers.computeIfAbsent(approvalId) { CompletableDeferred() }.complete(approved)
+    }
+
+    fun decideTrust(id: String, trusted: Boolean) {
+        trustDecisions.computeIfAbsent(id) { CompletableDeferred() }.complete(trusted)
     }
 
     fun reply(askId: String, answers: List<AskAnswer>, skipped: Boolean) {
@@ -305,7 +313,19 @@ class ChatEngine(
                 }
                 val results = executeTools(message.toolCalls, conversationId, agentMode, providerId, model)
                 pendingMedia = results.flatMap { it.media }
-                for ((call, result) in message.toolCalls.zip(results)) {
+                for ((index, call) in message.toolCalls.withIndex()) {
+                    var result = results[index]
+                    val trust = result.trust
+                    if (trust != null) {
+                        if (workspaceTrust.state(trust.target) == WorkspaceTrustState.Unknown) {
+                            emit(ChatEvent.TrustRequested(trust))
+                            val trusted = awaitTrust(trust.id)
+                            emit(ChatEvent.TrustResolved(trust, trusted))
+                            workspaceTrust.decide(trust, trusted)
+                        }
+                        result = executeTool(call, conversationId, agentMode, providerId, model)
+                        pendingMedia += result.media
+                    }
                     stepCount++
                     totalStats = totalStats.copy(step = stepCount, durationMs = System.currentTimeMillis() - startedAt)
                     emit(ChatEvent.StatsUpdated(totalStats))
@@ -423,7 +443,16 @@ class ChatEngine(
                         approval.steps.forEach { step ->
                             emit(ChatEvent.ToolStarted(step.label, tool = step.tool, arguments = step.arguments.take(500)))
                             val stepStartedAt = System.currentTimeMillis()
-                            val outcome = tools.runStep(step, conversationId, agentMode)
+                            var outcome = tools.runStep(step, conversationId, agentMode)
+                            outcome.trust?.let { trust ->
+                                if (workspaceTrust.state(trust.target) == WorkspaceTrustState.Unknown) {
+                                    emit(ChatEvent.TrustRequested(trust))
+                                    val trusted = awaitTrust(trust.id)
+                                    emit(ChatEvent.TrustResolved(trust, trusted))
+                                    workspaceTrust.decide(trust, trusted)
+                                }
+                                outcome = tools.runStep(step, conversationId, agentMode)
+                            }
                             stepDiffs += outcome.diffs
                             emit(
                                 ChatEvent.ToolFinished(
@@ -709,6 +738,13 @@ class ChatEngine(
         val reply = withTimeoutOrNull(APPROVAL_TIMEOUT_MS) { deferred.await() }
         askReplies.remove(askId)
         return reply ?: AskReply(id = askId, skipped = true)
+    }
+
+    private suspend fun awaitTrust(id: String): Boolean {
+        val deferred = trustDecisions.computeIfAbsent(id) { CompletableDeferred() }
+        val decision = withTimeoutOrNull(APPROVAL_TIMEOUT_MS) { deferred.await() }
+        trustDecisions.remove(id)
+        return decision ?: false
     }
 
     private fun String.withSummary(summary: String): String {

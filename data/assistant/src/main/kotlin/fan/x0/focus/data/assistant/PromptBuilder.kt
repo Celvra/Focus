@@ -6,6 +6,7 @@ import org.koin.core.annotation.Single
 class PromptBuilder(
     private val workspace: WorkspaceStore,
     private val locale: LocaleController,
+    private val workspaceTrust: WorkspaceTrustService,
 ) {
     suspend fun chatPrompt(title: String = "", mode: AgentMode = AgentMode.Build): String {
         val name = workspace.assistantName()
@@ -49,6 +50,11 @@ class PromptBuilder(
         builder.appendLine("- Delete a feed card or idea only when the user asks, using delete_update or delete_idea with the id from list_updates or list_ideas.")
         builder.appendLine("- You choose the category label and the icon key for every card, idea, and goal. Call list_icons before picking an icon.")
         builder.appendLine("- Categories are yours to name. Reuse a label that list_updates, list_ideas, or list_goals already shows when it fits, and group related items under the same label.")
+        val trust = workspaceTrust.promptSection()
+        if (trust.isNotBlank()) {
+            builder.appendLine("Workspace instructions:")
+            builder.appendLine(trust)
+        }
         appendDocuments(builder, documents)
         return builder.toString()
     }

@@ -53,6 +53,8 @@ sealed interface CrewSpeechEvent {
     data class ApprovalFinished(val id: String) : CrewSpeechEvent
     data class AskRequested(val request: AskRequest) : CrewSpeechEvent
     data class AskResolved(val request: AskRequest, val reply: AskReply) : CrewSpeechEvent
+    data class TrustRequested(val request: WorkspaceTrustRequest) : CrewSpeechEvent
+    data class TrustResolved(val request: WorkspaceTrustRequest, val trusted: Boolean) : CrewSpeechEvent
     data class TodoUpdated(val todos: List<ConversationTodo>) : CrewSpeechEvent
     data class ReactionAdded(val messageId: Long, val emoji: String) : CrewSpeechEvent
     data class Handoff(val memberId: String) : CrewSpeechEvent
@@ -76,9 +78,11 @@ class CrewEngine(
     private val tools: ToolExecutor,
     private val approvals: ApprovalStore,
     private val agent: AgentSettings,
+    private val workspaceTrust: WorkspaceTrustService,
 ) {
     private val waivers = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     private val askReplies = ConcurrentHashMap<String, CompletableDeferred<AskReply>>()
+    private val trustDecisions = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
 
     private val specs: List<ToolSpec> = ToolCatalog.chat()
         .filterNot { it.name in EXCLUDED }
@@ -90,6 +94,10 @@ class CrewEngine(
 
     fun decide(approvalId: String, approved: Boolean) {
         waivers.computeIfAbsent(approvalId) { CompletableDeferred() }.complete(approved)
+    }
+
+    fun decideTrust(id: String, trusted: Boolean) {
+        trustDecisions.computeIfAbsent(id) { CompletableDeferred() }.complete(trusted)
     }
 
     fun answerAsk(askId: String, answers: List<AskAnswer>, skipped: Boolean = false) {
@@ -133,7 +141,11 @@ class CrewEngine(
             store.message(id)?.let { quotes[id] = it }
         }
         val conversation = mutableListOf<ChatMessageDto>()
-        conversation += ChatMessageDto(role = "system", content = prompt.agentPrompt(group, member, members))
+        var workspaceInstructions = workspaceTrust.promptSection()
+        conversation += ChatMessageDto(
+            role = "system",
+            content = prompt.agentPrompt(group, member, members, workspaceInstructions),
+        )
         conversation += buildTranscript(history, quotes, member.id)
         conversation += ChatMessageDto(role = "user", content = prompt.turnPrompt(member))
         var lastSeenId = history.lastOrNull()?.id ?: 0
@@ -149,6 +161,11 @@ class CrewEngine(
 
         try {
             for (round in 0 until MAX_ROUNDS) {
+                workspaceInstructions = workspaceTrust.promptSection()
+                conversation[0] = ChatMessageDto(
+                    role = "system",
+                    content = prompt.agentPrompt(group, member, members, workspaceInstructions),
+                )
                 if (round > 0) {
                     val fresh = store.messagesAfter(group.id, lastSeenId)
                     if (fresh.isNotEmpty()) {
@@ -341,7 +358,17 @@ class CrewEngine(
                         result = ToolResult(false, "Error: tool ${call.name} is not allowed", "Tool not allowed"),
                     )
                 }
-                val result = tools.execute(call, conversationId = group.id, mode = AgentMode.Build)
+                var result = tools.execute(call, conversationId = group.id, mode = AgentMode.Build)
+                val trust = result.trust
+                if (trust != null) {
+                    if (workspaceTrust.state(trust.target) == WorkspaceTrustState.Unknown) {
+                        emitEvent(CrewSpeechEvent.TrustRequested(trust))
+                        val trusted = awaitTrust(trust.id)
+                        emitEvent(CrewSpeechEvent.TrustResolved(trust, trusted))
+                        workspaceTrust.decide(trust, trusted)
+                    }
+                    result = tools.execute(call, conversationId = group.id, mode = AgentMode.Build)
+                }
                 if (result.todos != null) {
                     emitEvent(CrewSpeechEvent.TodoUpdated(result.todos))
                 }
@@ -375,7 +402,16 @@ class CrewEngine(
         var ok = approved
         if (approved) {
             approval.steps.forEach { step ->
-                val outcome = tools.runStep(step, conversationId = group.id, mode = AgentMode.Build)
+                var outcome = tools.runStep(step, conversationId = group.id, mode = AgentMode.Build)
+                outcome.trust?.let { trust ->
+                    if (workspaceTrust.state(trust.target) == WorkspaceTrustState.Unknown) {
+                        emitEvent(CrewSpeechEvent.TrustRequested(trust))
+                        val trusted = awaitTrust(trust.id)
+                        emitEvent(CrewSpeechEvent.TrustResolved(trust, trusted))
+                        workspaceTrust.decide(trust, trusted)
+                    }
+                    outcome = tools.runStep(step, conversationId = group.id, mode = AgentMode.Build)
+                }
                 if (!outcome.ok) ok = false
                 lines += "${step.label}: ${if (outcome.ok) "done" else "failed"}. ${outcome.summary}"
             }
@@ -593,6 +629,13 @@ class CrewEngine(
         val reply = withTimeoutOrNull(APPROVAL_TIMEOUT_MS) { deferred.await() }
         askReplies.remove(askId)
         return reply ?: AskReply(id = askId, skipped = true)
+    }
+
+    private suspend fun awaitTrust(id: String): Boolean {
+        val deferred = trustDecisions.computeIfAbsent(id) { CompletableDeferred() }
+        val decision = withTimeoutOrNull(APPROVAL_TIMEOUT_MS) { deferred.await() }
+        trustDecisions.remove(id)
+        return decision ?: false
     }
 
     private fun parseArguments(raw: String): JsonObject? =

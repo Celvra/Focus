@@ -7,3 +7,7 @@ internal fun List<ChatEntry>.updateApproval(card: ApprovalUi): List<ChatEntry> =
 internal fun List<ChatEntry>.resolveAsk(card: AskCardUi): List<ChatEntry> = map { entry ->
     if (entry is ChatEntry.Ask && entry.card.id == card.id) entry.copy(card = card) else entry
 }
+
+internal fun List<ChatEntry>.updateTrust(card: TrustCardUi): List<ChatEntry> = map { entry ->
+    if (entry is ChatEntry.Trust && entry.card.id == card.id) entry.copy(card = card) else entry
+}

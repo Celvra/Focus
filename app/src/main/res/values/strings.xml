@@ -13,6 +13,7 @@
     <string name="notification_action_approval">The assistant is waiting for your approval.</string>
     <string name="notification_action_plan">The assistant proposed a plan.</string>
     <string name="notification_action_question">The assistant has a question for you.</string>
+    <string name="notification_action_workspace">The assistant needs permission to use a workspace.</string>
     <string name="notification_feed_title">New articles</string>
     <plurals name="notification_feed_body">
         <item quantity="one">%1$d new article</item>

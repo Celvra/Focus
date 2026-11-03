@@ -672,6 +672,7 @@ private fun ChatThread(
                         is ChatEntry.Approval -> "approval"
                         is ChatEntry.Plan -> "plan"
                         is ChatEntry.Ask -> "ask"
+                        is ChatEntry.Trust -> "trust"
                         is ChatEntry.Failure -> "failure"
                         is ChatEntry.Notice -> "notice"
                         is ChatEntry.Compaction -> "compaction"
@@ -757,6 +758,10 @@ private fun ChatThread(
                             card = entry.card,
                             drafts = state.askDrafts,
                             onAction = onAction,
+                        )
+                        is ChatEntry.Trust -> FocusTrustCard(
+                            card = entry.card,
+                            onDecide = { onAction(ChatAction.DecideTrust(entry.card.id, it)) },
                         )
                         is ChatEntry.Failure -> ChatFailureCard(
                             message = entry.message,
@@ -859,6 +864,7 @@ private fun TraceStep.toFocusStep(): FocusTraceStep = FocusTraceStep(
 private fun ChatEntry.isFresh(): Boolean = when (this) {
     is ChatEntry.Approval -> true
     is ChatEntry.Ask -> true
+    is ChatEntry.Trust -> true
     is ChatEntry.Activity -> key.startsWith("activity-live-")
     else -> key.startsWith("local-") || key.startsWith("live-")
 }

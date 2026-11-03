@@ -199,6 +199,25 @@ class ChatTurnRunner(
                             }
                             notifier.cancel(conversationId)
                         }
+                        is ChatEvent.TrustRequested -> {
+                            updateEntries(conversationId, turnId) { entries ->
+                                entries + ChatTurnEntry.Trust(event.request.toTurnTrust())
+                            }
+                            pushAction(conversationId, NotifyActionKind.Workspace)
+                        }
+                        is ChatEvent.TrustResolved -> {
+                            updateEntries(conversationId, turnId) { entries ->
+                                entries.resolveTrust(
+                                    id = event.request.id,
+                                    phase = if (event.trusted) {
+                                        ChatTurnTrustPhase.Trusted
+                                    } else {
+                                        ChatTurnTrustPhase.Declined
+                                    },
+                                )
+                            }
+                            notifier.cancel(conversationId)
+                        }
                         is ChatEvent.TodoUpdated -> updateState(conversationId, turnId) { state ->
                             state.copy(todos = event.todos)
                         }
@@ -288,6 +307,10 @@ class ChatTurnRunner(
 
     fun answer(askId: String, answers: List<AskAnswer>, skipped: Boolean) {
         engine.reply(askId, answers, skipped)
+    }
+
+    fun decideTrust(id: String, trusted: Boolean) {
+        engine.decideTrust(id, trusted)
     }
 
     fun consumeResult(conversationId: String, turnId: Long): Boolean {
@@ -432,6 +455,25 @@ class ChatTurnRunner(
             entry
         }
     }
+
+    private fun List<ChatTurnEntry>.resolveTrust(
+        id: String,
+        phase: ChatTurnTrustPhase,
+    ): List<ChatTurnEntry> = map { entry ->
+        if (entry is ChatTurnEntry.Trust && entry.card.id == id) {
+            entry.copy(card = entry.card.copy(phase = phase))
+        } else {
+            entry
+        }
+    }
+
+    private fun WorkspaceTrustRequest.toTurnTrust(): ChatTurnTrust = ChatTurnTrust(
+        id = id,
+        label = target.label,
+        kind = target.kind,
+        files = instructionFiles,
+        phase = ChatTurnTrustPhase.Waiting,
+    )
 
     private fun AskRequest.toTurnAsk(): ChatTurnAsk = ChatTurnAsk(
         id = id,

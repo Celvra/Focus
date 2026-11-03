@@ -48,6 +48,7 @@ data class ToolResult(
     val diffs: List<FileDiff> = emptyList(),
     val media: List<ChatAttachment> = emptyList(),
     val previews: List<ChatAttachment> = emptyList(),
+    val trust: WorkspaceTrustRequest? = null,
 )
 
 data class StepOutcome(
@@ -55,6 +56,7 @@ data class StepOutcome(
     val ok: Boolean,
     val summary: String,
     val diffs: List<FileDiff> = emptyList(),
+    val trust: WorkspaceTrustRequest? = null,
 )
 
 @Single
@@ -82,6 +84,7 @@ class ToolExecutor(
     private val backgroundWatch: BackgroundCommandMonitor,
     private val media: MediaLoader,
     private val crew: CrewToolHandler,
+    private val workspaceTrust: WorkspaceTrustService,
 ) {
     val specs: List<ToolSpec> = ToolCatalog.chat()
 
@@ -105,8 +108,17 @@ class ToolExecutor(
                 StepOutcome(step.label, false, "Unknown step")
             args == null -> StepOutcome(step.label, false, "Invalid arguments")
             else -> {
-                val result = runTool(spec, args, conversationId)
-                StepOutcome(step.label, result.ok, result.summary, result.diffs)
+                val trust = workspaceTrust.gate(spec.name, args)
+                if (trust is TrustGate.NeedsTrust) {
+                    return StepOutcome(
+                        label = step.label,
+                        ok = false,
+                        summary = "Workspace trust",
+                        trust = trust.request,
+                    )
+                }
+                val result = runToolGated(spec, args, conversationId, trust)
+                StepOutcome(step.label, result.ok, result.summary, result.diffs, result.trust)
             }
         }
     }
@@ -123,9 +135,18 @@ class ToolExecutor(
         if (mode == AgentMode.Plan && spec.kind !in setOf(ToolKind.Read, ToolKind.Ask, ToolKind.Plan)) {
             return fail("Plan mode only allows read-only tools. $name would change something. Ask the user to approve the plan first.")
         }
+        val trust = workspaceTrust.gate(name, args)
+        if (trust is TrustGate.NeedsTrust) {
+            return ToolResult(
+                ok = false,
+                content = "Workspace trust is required before using this workspace.",
+                summary = "Workspace trust",
+                trust = trust.request,
+            )
+        }
         crew.handle(name, args)?.let { return it }
         when (spec.kind) {
-            ToolKind.Read, ToolKind.Write -> return runTool(spec, args, conversationId)
+            ToolKind.Read, ToolKind.Write -> return runToolGated(spec, args, conversationId, trust)
             ToolKind.Gated -> {
                 if (!allowApproval) return fail("$name needs approval and is not allowed here")
                 val draft = gatedDraft(spec, args) ?: return fail("Missing or invalid fields for $name")
@@ -138,7 +159,7 @@ class ToolExecutor(
                     GateDecision.NeedsApproval("approval required")
                 }
                 when (decision) {
-                    is GateDecision.Allowed -> return runTool(spec, args, conversationId)
+                    is GateDecision.Allowed -> return runToolGated(spec, args, conversationId, trust)
                     is GateDecision.Refused -> return fail("Refused: ${decision.reason}")
                     is GateDecision.NeedsApproval -> Unit
                 }
@@ -1443,6 +1464,22 @@ class ToolExecutor(
         fail("${e.kind.name}: ${e.message}", "Tool failed")
     } catch (e: Exception) {
         fail("Tool failed: ${e.message ?: e.javaClass.simpleName}", "Tool failed")
+    }
+
+    private suspend fun runToolGated(
+        spec: ToolSpec,
+        args: JsonObject,
+        conversationId: String,
+        trust: TrustGate,
+    ): ToolResult {
+        val result = runTool(spec, args, conversationId)
+        workspaceTrust.onToolFinished(spec.name, args, result)
+        if (trust is TrustGate.Declined && result.ok) {
+            return result.copy(
+                content = workspaceTrust.declinedNote(trust.target) + "\n\n" + result.content,
+            )
+        }
+        return result
     }
 
     private sealed interface Draft {

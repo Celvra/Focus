@@ -63,6 +63,7 @@ class AndroidMessageNotifier(
                     NotifyActionKind.Approval -> R.string.notification_action_approval
                     NotifyActionKind.Plan -> R.string.notification_action_plan
                     NotifyActionKind.Question -> R.string.notification_action_question
+                    NotifyActionKind.Workspace -> R.string.notification_action_workspace
                 },
             )
             post(

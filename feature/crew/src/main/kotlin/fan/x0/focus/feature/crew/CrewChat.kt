@@ -84,7 +84,9 @@ import fan.x0.focus.data.assistant.AttachmentKind
 import fan.x0.focus.data.assistant.ChatAttachment
 import fan.x0.focus.data.assistant.CrewApprovalPhase
 import fan.x0.focus.data.assistant.CrewToolStatus
+import fan.x0.focus.data.assistant.CrewTrustPhase
 import fan.x0.focus.data.assistant.ToolPayload
+import fan.x0.focus.data.assistant.WorkspaceKind
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -201,6 +203,7 @@ fun CrewChatScreen(
                                     is CrewEntryUi.Notice -> "notice"
                                     is CrewEntryUi.Approval -> "approval"
                                     is CrewEntryUi.Ask -> "ask"
+                                    is CrewEntryUi.Trust -> "trust"
                                 }
                             },
                         ) { entry ->
@@ -230,6 +233,12 @@ fun CrewChatScreen(
                                         entry = entry,
                                         drafts = state.askDrafts[entry.id].orEmpty(),
                                         onAction = onAction,
+                                    )
+                                    is CrewEntryUi.Trust -> CrewTrustCard(
+                                        entry = entry,
+                                        onDecide = { trusted ->
+                                            onAction(CrewAction.DecideTrust(entry.id, trusted))
+                                        },
                                     )
                                 }
                             }
@@ -732,6 +741,76 @@ private fun approvalPhaseLabel(phase: CrewApprovalPhase): String = when (phase) 
 }
 
 @Composable
+private fun CrewTrustCard(entry: CrewEntryUi.Trust, onDecide: (Boolean) -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = FocusShapeTokens.card,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    if (entry.kind == WorkspaceKind.Bridge) FocusIcons.Terminal else FocusIcons.Folder,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = stringResource(R.string.crew_trust_title),
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = trustPhaseLabel(entry.phase),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Text(
+                text = entry.label,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(R.string.crew_trust_body),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (entry.files.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.crew_trust_files, entry.files.joinToString(", ")),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (entry.phase == CrewTrustPhase.Waiting) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FocusPrimaryButton(
+                        text = stringResource(R.string.crew_trust_accept),
+                        onClick = { onDecide(true) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    FocusOutlinedButton(
+                        text = stringResource(R.string.crew_trust_decline),
+                        onClick = { onDecide(false) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun trustPhaseLabel(phase: CrewTrustPhase): String = when (phase) {
+    CrewTrustPhase.Waiting -> stringResource(R.string.crew_trust_waiting)
+    CrewTrustPhase.Trusted -> stringResource(R.string.crew_trust_trusted)
+    CrewTrustPhase.Declined -> stringResource(R.string.crew_trust_declined)
+}
+
+@Composable
 private fun CrewReplyPreview(reply: CrewQuoteUi, onCancel: () -> Unit) {
     Row(
         modifier = Modifier
@@ -833,6 +912,7 @@ private fun CrewToolStatus.toStepStatus(): FocusStepStatus = when (this) {
 private fun CrewEntryUi.isFresh(): Boolean = when (this) {
     is CrewEntryUi.Approval -> true
     is CrewEntryUi.Ask -> true
+    is CrewEntryUi.Trust -> true
     is CrewEntryUi.Message -> key.startsWith("user-") || key.startsWith("agent-")
     is CrewEntryUi.Notice -> false
 }

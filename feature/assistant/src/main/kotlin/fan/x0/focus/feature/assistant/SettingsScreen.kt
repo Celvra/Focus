@@ -34,6 +34,7 @@ import fan.x0.focus.feature.assistant.settings.SettingsToolsPage
 import fan.x0.focus.feature.assistant.settings.ProviderEditorSheet
 import fan.x0.focus.feature.assistant.settings.SettingsWebSearchRoute
 import fan.x0.focus.feature.assistant.settings.SettingsWorkspaceIndexRoute
+import fan.x0.focus.feature.assistant.settings.SettingsWorkspaceTrustRoute
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -154,6 +155,9 @@ internal fun SettingsScreen(
                     SettingsDestination.WorkspaceIndex -> SettingsWorkspaceIndexRoute(
                         onBack = { backStack.removeLastOrNull() },
                         snackbar = snackbar,
+                    )
+                    SettingsDestination.WorkspaceTrust -> SettingsWorkspaceTrustRoute(
+                        onBack = { backStack.removeLastOrNull() },
                     )
                     SettingsDestination.ChatDetail -> SettingsChatDetailRoute(
                         onBack = { backStack.removeLastOrNull() },

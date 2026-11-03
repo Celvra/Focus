@@ -14,6 +14,8 @@ enum class CrewApprovalPhase { Waiting, Running, Finished, Declined }
 
 enum class CrewAskPhase { Waiting, Answered, Skipped }
 
+enum class CrewTrustPhase { Waiting, Trusted, Declined }
+
 @Serializable
 data class CrewToolTrace(
     val id: String,
@@ -39,6 +41,14 @@ data class CrewAskCard(
     val questions: List<AskQuestion>,
     val phase: CrewAskPhase,
     val answers: List<AskAnswer> = emptyList(),
+)
+
+data class CrewTrustCard(
+    val id: String,
+    val label: String,
+    val kind: WorkspaceKind,
+    val files: List<String>,
+    val phase: CrewTrustPhase,
 )
 
 sealed interface CrewRunEntry {
@@ -77,6 +87,11 @@ sealed interface CrewRunEntry {
     data class Ask(
         override val key: String,
         val card: CrewAskCard,
+    ) : CrewRunEntry
+
+    data class Trust(
+        override val key: String,
+        val card: CrewTrustCard,
     ) : CrewRunEntry
 
     data class Notice(
@@ -242,6 +257,36 @@ class CrewRunStore {
                             card = entry.card.copy(
                                 phase = if (reply.skipped) CrewAskPhase.Skipped else CrewAskPhase.Answered,
                                 answers = reply.answers,
+                            ),
+                        )
+                    } else {
+                        entry
+                    }
+                },
+            )
+        }
+    }
+
+    fun trustRequested(groupId: String, request: WorkspaceTrustRequest) {
+        val card = CrewTrustCard(
+            id = request.id,
+            label = request.target.label,
+            kind = request.target.kind,
+            files = request.instructionFiles,
+            phase = CrewTrustPhase.Waiting,
+        )
+        val entry = CrewRunEntry.Trust("trust-${request.id}", card)
+        update(groupId) { it.copy(entries = it.entries + entry) }
+    }
+
+    fun trustResolved(groupId: String, id: String, trusted: Boolean) {
+        update(groupId) { state ->
+            state.copy(
+                entries = state.entries.map { entry ->
+                    if (entry is CrewRunEntry.Trust && entry.card.id == id) {
+                        entry.copy(
+                            card = entry.card.copy(
+                                phase = if (trusted) CrewTrustPhase.Trusted else CrewTrustPhase.Declined,
                             ),
                         )
                     } else {

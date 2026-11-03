@@ -33,6 +33,14 @@
     <string name="chat_approval_declined">Declined</string>
     <string name="chat_approval_approve">Approve</string>
     <string name="chat_approval_decline">Not now</string>
+    <string name="chat_trust_title">Trust this workspace?</string>
+    <string name="chat_trust_body">Trusting lets the assistant use CLAUDE.md and AGENTS.md from this workspace. You can change this later in settings.</string>
+    <string name="chat_trust_files">Instruction files: %1$s</string>
+    <string name="chat_trust_accept">Trust</string>
+    <string name="chat_trust_decline">Not now</string>
+    <string name="chat_trust_waiting">Needs your answer</string>
+    <string name="chat_trust_trusted">Trusted</string>
+    <string name="chat_trust_declined">Not trusted</string>
     <string name="chat_ask_title">A few questions</string>
     <string name="chat_ask_waiting">Needs your answer</string>
     <string name="chat_ask_answered">Answered</string>

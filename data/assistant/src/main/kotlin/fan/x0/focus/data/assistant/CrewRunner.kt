@@ -203,6 +203,10 @@ class CrewRunner(
         engine.answerAsk(askId, answers, skipped)
     }
 
+    fun decideTrust(id: String, trusted: Boolean) {
+        engine.decideTrust(id, trusted)
+    }
+
     suspend fun announce(groupId: String, text: String) {
         if (text.isBlank()) return
         append(
@@ -392,6 +396,18 @@ class CrewRunner(
                         }
                         is CrewSpeechEvent.AskResolved -> {
                             runs.askResolved(groupId, event.request, event.reply)
+                            notifier.cancel(conversationId(groupId))
+                        }
+                        is CrewSpeechEvent.TrustRequested -> {
+                            runs.trustRequested(groupId, event.request)
+                            notifier.notifyAction(
+                                conversationId = conversationId(groupId),
+                                title = group.name,
+                                kind = NotifyActionKind.Workspace,
+                            )
+                        }
+                        is CrewSpeechEvent.TrustResolved -> {
+                            runs.trustResolved(groupId, event.request.id, event.trusted)
                             notifier.cancel(conversationId(groupId))
                         }
                         is CrewSpeechEvent.TodoUpdated -> runs.setTodos(groupId, event.todos)

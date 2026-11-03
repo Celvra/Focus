@@ -27,6 +27,7 @@ import fan.x0.focus.data.assistant.ChatTurnRunner
 import fan.x0.focus.data.assistant.ChatTurnState
 import fan.x0.focus.data.assistant.ChatTurnStep
 import fan.x0.focus.data.assistant.ChatTurnStepStatus
+import fan.x0.focus.data.assistant.ChatTurnTrustPhase
 import fan.x0.focus.data.assistant.CommandPolicy
 import fan.x0.focus.data.assistant.ConversationCompaction
 import fan.x0.focus.data.assistant.ConversationTodo
@@ -187,6 +188,7 @@ class ChatViewModel(
             ChatAction.Send -> send()
             ChatAction.Stop -> stop()
             is ChatAction.Decide -> decide(action)
+            is ChatAction.DecideTrust -> decideTrust(action)
             is ChatAction.DecidePlan -> decidePlan(action)
             is ChatAction.AskSelect -> selectAskOption(action)
             is ChatAction.AskConfirm -> updateDraft(action.askId, action.questionId) {
@@ -798,6 +800,19 @@ class ChatViewModel(
         turns.decide(action.approvalId, action.approve)
     }
 
+    private fun decideTrust(action: ChatAction.DecideTrust) {
+        val card = currentState.trust ?: return
+        if (card.id != action.id || card.phase != TrustPhase.Waiting) return
+        updateState {
+            copy(
+                live = live.updateTrust(
+                    card.copy(phase = if (action.trusted) TrustPhase.Trusted else TrustPhase.Declined),
+                ),
+            )
+        }
+        turns.decideTrust(action.id, action.trusted)
+    }
+
     private fun selectAskOption(action: ChatAction.AskSelect) {
         val question = askQuestion(action.askId, action.questionId) ?: return
         updateDraft(action.askId, action.questionId) { draft ->
@@ -1289,6 +1304,16 @@ class ChatViewModel(
             key = "$prefix-ask-${card.id}",
             card = card.toUi(),
         )
+        is ChatTurnEntry.Trust -> ChatEntry.Trust(
+            key = "$prefix-trust-${card.id}",
+            card = TrustCardUi(
+                id = card.id,
+                label = card.label,
+                kind = card.kind,
+                files = card.files,
+                phase = card.phase.toUi(),
+            ),
+        )
         is ChatTurnEntry.Compaction -> ChatEntry.Compaction(
             key = "$prefix-compaction-$index",
             summary = summary,
@@ -1336,6 +1361,12 @@ class ChatViewModel(
         ChatTurnApprovalPhase.Running -> ApprovalPhase.Running
         ChatTurnApprovalPhase.Finished -> ApprovalPhase.Finished
         ChatTurnApprovalPhase.Declined -> ApprovalPhase.Declined
+    }
+
+    private fun ChatTurnTrustPhase.toUi(): TrustPhase = when (this) {
+        ChatTurnTrustPhase.Waiting -> TrustPhase.Waiting
+        ChatTurnTrustPhase.Trusted -> TrustPhase.Trusted
+        ChatTurnTrustPhase.Declined -> TrustPhase.Declined
     }
 
     private suspend fun List<ChatMessage>.toEntries(compaction: ConversationCompaction?): List<ChatEntry> {

@@ -13,6 +13,7 @@
     <string name="notification_action_approval">助手正在等待你的确认。</string>
     <string name="notification_action_plan">助手提出了一个计划。</string>
     <string name="notification_action_question">助手有问题想问你。</string>
+    <string name="notification_action_workspace">助手需要你允许使用一个工作区。</string>
     <string name="notification_feed_title">新文章</string>
     <plurals name="notification_feed_body">
         <item quantity="other">%1$d 篇新文章</item>

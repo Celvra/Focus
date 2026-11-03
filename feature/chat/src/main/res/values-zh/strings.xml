@@ -32,6 +32,14 @@
     <string name="chat_approval_declined">已拒绝</string>
     <string name="chat_approval_approve">批准</string>
     <string name="chat_approval_decline">先不做</string>
+    <string name="chat_trust_title">信任这个工作区？</string>
+    <string name="chat_trust_body">信任后，助手会读取并使用这个工作区里的 CLAUDE.md 和 AGENTS.md。之后可以在设置里修改。</string>
+    <string name="chat_trust_files">说明文件：%1$s</string>
+    <string name="chat_trust_accept">信任</string>
+    <string name="chat_trust_decline">先不信任</string>
+    <string name="chat_trust_waiting">等你回答</string>
+    <string name="chat_trust_trusted">已信任</string>
+    <string name="chat_trust_declined">未信任</string>
     <string name="chat_ask_title">几个问题</string>
     <string name="chat_ask_waiting">等你回答</string>
     <string name="chat_ask_answered">已回答</string>

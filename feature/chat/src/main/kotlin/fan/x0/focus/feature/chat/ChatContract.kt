@@ -17,6 +17,7 @@ import fan.x0.focus.data.assistant.PlanStatus
 import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ProviderModel
 import fan.x0.focus.data.assistant.ReasoningLevel
+import fan.x0.focus.data.assistant.WorkspaceKind
 
 enum class TraceStatus { Pending, Running, Done, Failed }
 
@@ -83,6 +84,16 @@ data class AskCardUi(
     val questions: List<AskQuestionUi>,
     val phase: AskPhase,
     val answers: List<AskAnswerUi> = emptyList(),
+)
+
+enum class TrustPhase { Waiting, Trusted, Declined }
+
+data class TrustCardUi(
+    val id: String,
+    val label: String,
+    val kind: WorkspaceKind,
+    val files: List<String> = emptyList(),
+    val phase: TrustPhase,
 )
 
 data class AskDraft(
@@ -220,6 +231,8 @@ sealed interface ChatEntry {
 
     data class Ask(override val key: String, val card: AskCardUi) : ChatEntry
 
+    data class Trust(override val key: String, val card: TrustCardUi) : ChatEntry
+
     data class Failure(override val key: String, val message: String, val retryable: Boolean) : ChatEntry
 
     data class Notice(override val key: String, val text: String) : ChatEntry
@@ -324,6 +337,9 @@ data class ChatUiState(
     val ask: AskCardUi?
         get() = live.filterIsInstance<ChatEntry.Ask>().lastOrNull()?.card
 
+    val trust: TrustCardUi?
+        get() = live.filterIsInstance<ChatEntry.Trust>().lastOrNull()?.card
+
     val subAgent: SubAgentRunUi?
         get() = subAgentOpenId?.let { subAgentRuns[it] }
 
@@ -342,6 +358,7 @@ sealed interface ChatAction : UiAction {
     data object Send : ChatAction
     data object Stop : ChatAction
     data class Decide(val approvalId: String, val approve: Boolean) : ChatAction
+    data class DecideTrust(val id: String, val trusted: Boolean) : ChatAction
     data class DecidePlan(val approvalId: String, val approve: Boolean, val policy: fan.x0.focus.data.assistant.CommandPolicy) : ChatAction
     data class AskSelect(val askId: String, val questionId: String, val label: String) : ChatAction
     data class AskConfirm(val askId: String, val questionId: String, val value: Boolean) : ChatAction

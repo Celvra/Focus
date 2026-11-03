@@ -258,6 +258,7 @@ class CrewViewModel(
             CrewAction.ClearSelection -> updateState { copy(selectionKey = null) }
             CrewAction.ClearFocus -> updateState { copy(focusMessageId = null) }
             is CrewAction.Approve -> runner.decide(action.approvalId, action.approved)
+            is CrewAction.DecideTrust -> runner.decideTrust(action.id, action.trusted)
         }
     }
 

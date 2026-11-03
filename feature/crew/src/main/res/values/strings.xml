@@ -54,6 +54,14 @@
     <string name="crew_approval_running">Running</string>
     <string name="crew_approval_done">Done</string>
     <string name="crew_approval_declined">Declined</string>
+    <string name="crew_trust_title">Trust this workspace?</string>
+    <string name="crew_trust_body">Trusting lets the group use CLAUDE.md and AGENTS.md from this workspace.</string>
+    <string name="crew_trust_files">Instruction files: %1$s</string>
+    <string name="crew_trust_accept">Trust</string>
+    <string name="crew_trust_decline">Not now</string>
+    <string name="crew_trust_waiting">Needs your answer</string>
+    <string name="crew_trust_trusted">Trusted</string>
+    <string name="crew_trust_declined">Not trusted</string>
     <string name="crew_reply">Reply</string>
     <string name="crew_copy">Copy</string>
     <string name="crew_you">You</string>

@@ -12,8 +12,10 @@ import fan.x0.focus.data.assistant.ConversationTodo
 import fan.x0.focus.data.assistant.CrewApprovalPhase
 import fan.x0.focus.data.assistant.CrewAskPhase
 import fan.x0.focus.data.assistant.CrewToolStatus
+import fan.x0.focus.data.assistant.CrewTrustPhase
 import fan.x0.focus.data.assistant.MessageStats
 import fan.x0.focus.data.assistant.ProviderModelGroup
+import fan.x0.focus.data.assistant.WorkspaceKind
 
 data class CrewGroupUi(
     val id: String,
@@ -111,6 +113,15 @@ sealed interface CrewEntryUi {
         val summary: String,
         val steps: List<String>,
         val phase: CrewApprovalPhase,
+    ) : CrewEntryUi
+
+    data class Trust(
+        override val key: String,
+        val id: String,
+        val label: String,
+        val kind: WorkspaceKind,
+        val files: List<String>,
+        val phase: CrewTrustPhase,
     ) : CrewEntryUi
 }
 
@@ -308,6 +319,7 @@ sealed interface CrewAction : UiAction {
     data object ClearSelection : CrewAction
     data object ClearFocus : CrewAction
     data class Approve(val approvalId: String, val approved: Boolean) : CrewAction
+    data class DecideTrust(val id: String, val trusted: Boolean) : CrewAction
 }
 
 sealed interface CrewEffect : UiEffect {

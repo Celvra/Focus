@@ -38,6 +38,16 @@ data class ChatTurnAsk(
     val answers: List<AskAnswer> = emptyList(),
 )
 
+enum class ChatTurnTrustPhase { Waiting, Trusted, Declined }
+
+data class ChatTurnTrust(
+    val id: String,
+    val label: String,
+    val kind: WorkspaceKind,
+    val files: List<String>,
+    val phase: ChatTurnTrustPhase,
+)
+
 sealed interface ChatTurnEntry {
     data class Answer(
         val text: String,
@@ -49,6 +59,7 @@ sealed interface ChatTurnEntry {
     data class Approval(val card: ChatTurnApproval) : ChatTurnEntry
     data class Plan(val plan: ProposedPlan, val card: ChatTurnApproval) : ChatTurnEntry
     data class Ask(val card: ChatTurnAsk) : ChatTurnEntry
+    data class Trust(val card: ChatTurnTrust) : ChatTurnEntry
     data class Compaction(
         val summary: String,
         val streaming: Boolean,

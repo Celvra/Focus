@@ -9,6 +9,7 @@ class CrewPrompt(private val locale: LocaleController) {
         group: AgentGroup,
         member: CrewMember,
         members: List<CrewMember>,
+        instructions: String = "",
     ): String {
         val builder = StringBuilder()
         builder.appendLine("You are ${member.name}, a member of the agent group \"${group.name}\".")
@@ -34,6 +35,10 @@ class CrewPrompt(private val locale: LocaleController) {
         builder.appendLine("- When the group has a clear answer, call finish_group_discussion.")
         builder.appendLine("- ${language()}")
         builder.appendLine("Current time: ${ToolTime.full(ToolTime.now())}.")
+        if (instructions.isNotBlank()) {
+            builder.appendLine("Workspace instructions:")
+            builder.appendLine(instructions)
+        }
         return builder.toString()
     }
 

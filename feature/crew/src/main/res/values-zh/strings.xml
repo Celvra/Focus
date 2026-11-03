@@ -54,6 +54,14 @@
     <string name="crew_approval_running">执行中</string>
     <string name="crew_approval_done">已完成</string>
     <string name="crew_approval_declined">已拒绝</string>
+    <string name="crew_trust_title">信任这个工作区？</string>
+    <string name="crew_trust_body">信任后，群组会读取并使用这个工作区里的 CLAUDE.md 和 AGENTS.md。</string>
+    <string name="crew_trust_files">说明文件：%1$s</string>
+    <string name="crew_trust_accept">信任</string>
+    <string name="crew_trust_decline">先不信任</string>
+    <string name="crew_trust_waiting">等你回答</string>
+    <string name="crew_trust_trusted">已信任</string>
+    <string name="crew_trust_declined">未信任</string>
     <string name="crew_reply">回复</string>
     <string name="crew_copy">复制</string>
     <string name="crew_you">你</string>

@@ -12,6 +12,7 @@ enum class SettingsDestination : NavKey {
     WebSearch,
     Mcp,
     WorkspaceIndex,
+    WorkspaceTrust,
     ChatDetail,
     Appearance,
     Notifications,
