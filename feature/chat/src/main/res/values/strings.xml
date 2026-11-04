@@ -69,6 +69,7 @@
     <string name="chat_attach_remove">Remove attachment</string>
     <string name="chat_attachment_preview">Preview %1$s</string>
     <string name="chat_attach_title">Add attachment</string>
+    <string name="chat_mention_workspace">Workspace</string>
     <string name="chat_attach_camera">Camera</string>
     <string name="chat_attach_photos">Photos</string>
     <string name="chat_attach_files">Files</string>

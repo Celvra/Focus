@@ -51,6 +51,7 @@ class SubAgentRunner(
     private val agent: AgentSettings,
     private val tools: ToolExecutor,
     private val runs: SubAgentRunStore,
+    private val skills: SkillRepository,
 ) {
     suspend fun run(request: SubAgentRequest): SubAgentResult {
         if (request.task.isBlank()) return SubAgentResult("", emptyList(), emptyList(), "Task is empty")
@@ -98,6 +99,8 @@ class SubAgentRunner(
                     appendLine("Do not ask questions. Do not spawn another agent.")
                     appendLine("Use the provided tools only when needed. Read before you claim anything.")
                     appendLine("Return a compact summary, the files you touched or inspected, and any error.")
+                    val skillSection = skills.promptSection()
+                    if (skillSection.isNotBlank()) appendLine(skillSection)
                     appendLine("Task: ${request.task}")
                 },
             ),

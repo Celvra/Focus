@@ -31,12 +31,23 @@ import fan.x0.focus.data.assistant.ChatTurnTrustPhase
 import fan.x0.focus.data.assistant.CommandPolicy
 import fan.x0.focus.data.assistant.ConversationCompaction
 import fan.x0.focus.data.assistant.ConversationTodo
+import fan.x0.focus.data.assistant.FileMentionBinding
+import fan.x0.focus.data.assistant.FileMentionEntry
+import fan.x0.focus.data.assistant.FileMentionService
 import fan.x0.focus.data.assistant.MessageStats
+import fan.x0.focus.data.assistant.MentionItemUi
+import fan.x0.focus.data.assistant.MentionKind
+import fan.x0.focus.data.assistant.MentionText
+import fan.x0.focus.data.assistant.MentionUi
+import fan.x0.focus.data.assistant.WORKSPACE_BIND_PREFIX
+import fan.x0.focus.data.assistant.WORKSPACE_SWITCH_ID
 import fan.x0.focus.data.assistant.PlanStatus
 import fan.x0.focus.data.assistant.PolicySettings
 import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ProviderModelCatalog
 import fan.x0.focus.data.assistant.ReasoningLevel
+import fan.x0.focus.data.assistant.SkillEntry
+import fan.x0.focus.data.assistant.SkillRepository
 import fan.x0.focus.data.assistant.SubAgentRunState
 import fan.x0.focus.data.assistant.SubAgentRunStatus
 import fan.x0.focus.data.assistant.SubAgentRunStore
@@ -54,12 +65,17 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.annotation.KoinViewModel
+import java.util.Locale
 
 private const val REVEAL_FRAME_MS = 33L
 private const val REVEAL_CATCHUP_FRAMES = 18
 private const val REVEAL_MIN_GROUP = 3
 private const val REVEAL_HANDOFF_MS = 280L
 private const val REVEAL_JOIN_TIMEOUT_MS = 4_000L
+private const val MENTION_TTL_MS = 30_000L
+private const val MENTION_FILE_DELAY_MS = 140L
+private const val MAX_MENTION_ITEMS = 50
+private const val DEFAULT_SCOPE = "default"
 
 @KoinViewModel
 class ChatViewModel(
@@ -75,6 +91,8 @@ class ChatViewModel(
     private val policy: PolicySettings,
     private val btw: BtwRunner,
     private val subAgents: SubAgentRunStore,
+    private val skills: SkillRepository,
+    private val fileMentions: FileMentionService,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
@@ -83,6 +101,19 @@ class ChatViewModel(
     private var btwJob: Job? = null
     private var statsJob: Job? = null
     private var displayJob: Job? = null
+    private var mentionJob: Job? = null
+    private var mentionSkills: List<SkillEntry> = emptyList()
+    private var mentionLoadedAt = 0L
+    private var mentionFileJob: Job? = null
+    private var mentionFiles: List<FileMentionEntry> = emptyList()
+    private var mentionFileQuery: String? = null
+    private var mentionFileLoadedAt = 0L
+    private var mentionBinding: FileMentionBinding? = null
+    private var mentionBindings: List<FileMentionBinding> = emptyList()
+    private var mentionBindingsJob: Job? = null
+    private var mentionBindingsScope = ""
+    private var mentionBindingsLoadedAt = 0L
+    private var mentionPickingWorkspace = false
     private var displayConversationId = ""
     private var displayTurnId = 0L
     private var displayTarget = ""
@@ -92,6 +123,8 @@ class ChatViewModel(
     private var redoEntry: PendingSend? = null
 
     init {
+        ensureMentionSkills()
+        ensureMentionBindings()
         viewModelScope.launch {
             val conversation = switcher.current.value
                 ?.let { chats.conversation(it) }
@@ -241,6 +274,12 @@ class ChatViewModel(
             is ChatAction.SlashPick -> pickSlash(action.id)
             ChatAction.SlashSelect -> selectSlash()
             ChatAction.SlashClose -> updateState { copy(slash = slash.copy(open = false)) }
+            is ChatAction.MentionMove -> moveMention(action.delta)
+            is ChatAction.MentionPick -> pickMention(action.id)
+            ChatAction.MentionDismiss -> {
+                mentionPickingWorkspace = false
+                updateState { copy(mention = MentionUi()) }
+            }
             ChatAction.RetryLast -> retryLast()
             ChatAction.OpenSessions -> sendEffect(ChatEffect.OpenSessions)
             ChatAction.OpenSettings -> sendEffect(ChatEffect.OpenSettings)
@@ -252,11 +291,15 @@ class ChatViewModel(
 
     private fun inputChanged(value: String) {
         val state = currentState
+        mentionPickingWorkspace = false
         if (state.slash.visible && !state.input.contains('\n') && value.contains('\n')) {
             selectSlash()
             return
         }
-        val slash = if (value.startsWith("/") && !value.contains('\n')) {
+        val mention = mentionFor(value)
+        val slash = if (mention.visible) {
+            state.slash.copy(open = false)
+        } else if (value.startsWith("/") && !value.contains('\n')) {
             val query = value.substringBefore(' ')
             val matches = SlashCommands.filter(query)
             if (query.contains(' ') || matches.isEmpty() || value.count { it == ' ' } > 0) {
@@ -272,7 +315,260 @@ class ChatViewModel(
         } else {
             state.slash.copy(open = false)
         }
-        updateState { copy(input = value, slash = slash) }
+        updateState { copy(input = value, slash = slash, mention = mention) }
+    }
+
+    private fun mentionFor(value: String): MentionUi {
+        val active = MentionText.active(value) ?: return MentionUi()
+        if (System.currentTimeMillis() - mentionLoadedAt > MENTION_TTL_MS) {
+            ensureMentionSkills()
+        }
+        val query = active.query
+        if (mentionPickingWorkspace) {
+            ensureMentionBindings()
+            val items = mentionBindings.map { binding ->
+                MentionItemUi(
+                    id = WORKSPACE_BIND_PREFIX + binding.key,
+                    kind = MentionKind.Workspace,
+                    label = binding.label,
+                    description = binding.path,
+                    action = true,
+                )
+            }
+            return if (items.isEmpty()) {
+                MentionUi()
+            } else {
+                MentionUi(
+                    open = true,
+                    query = query,
+                    start = active.start,
+                    items = items,
+                    selected = 0,
+                )
+            }
+        }
+        if (query.isBlank()) {
+            ensureMentionBindings()
+        }
+        ensureMentionFiles(query)
+        val scope = bindingScope()
+        val key = mentionQueryKey(scope, query)
+        val items = buildList {
+            if (query.isBlank()) {
+                mentionBinding?.let { binding ->
+                    add(
+                        MentionItemUi(
+                            id = WORKSPACE_SWITCH_ID,
+                            kind = MentionKind.Workspace,
+                            label = binding.label,
+                            description = binding.path,
+                            action = true,
+                        ),
+                    )
+                }
+            }
+            addAll(skillMentions(query))
+            if (mentionFileQuery == key) {
+                mentionFiles.forEach { entry ->
+                    add(
+                        MentionItemUi(
+                            id = entry.id,
+                            kind = MentionKind.File,
+                            label = entry.relative,
+                            description = entry.path,
+                            insert = entry.insert,
+                            directory = entry.directory,
+                        ),
+                    )
+                }
+            }
+        }
+        return if (items.isEmpty()) {
+            MentionUi()
+        } else {
+            MentionUi(
+                open = true,
+                query = query,
+                start = active.start,
+                items = items,
+                selected = 0,
+            )
+        }
+    }
+
+    private fun skillMentions(query: String): List<MentionItemUi> =
+        mentionSkills.asSequence()
+            .filter { it.enabled }
+            .filter {
+                query.isBlank() ||
+                    it.name.contains(query, ignoreCase = true) ||
+                    it.description.contains(query, ignoreCase = true)
+            }
+            .sortedWith(
+                compareByDescending<SkillEntry> { it.name.startsWith(query, ignoreCase = true) }
+                    .thenBy { it.name.lowercase(Locale.ROOT) },
+            )
+            .take(MAX_MENTION_ITEMS)
+            .map { skill ->
+                MentionItemUi(
+                    id = skill.id,
+                    kind = MentionKind.Skill,
+                    label = skill.name,
+                    description = skill.description,
+                )
+            }
+            .toList()
+
+    private fun ensureMentionFiles(query: String) {
+        val scope = bindingScope()
+        val key = mentionQueryKey(scope, query)
+        val now = System.currentTimeMillis()
+        if (mentionFileQuery == key && now - mentionFileLoadedAt < MENTION_TTL_MS) return
+        if (mentionPickingWorkspace) return
+        mentionFileJob?.cancel()
+        mentionFileJob = viewModelScope.launch {
+            delay(MENTION_FILE_DELAY_MS)
+            try {
+                val entries = fileMentions.search(scope, query)
+                val binding = fileMentions.current(scope)
+                if (bindingScope() == scope &&
+                    MentionText.active(currentState.input)?.query == query &&
+                    !mentionPickingWorkspace
+                ) {
+                    mentionFiles = entries
+                    mentionBinding = binding
+                    mentionFileQuery = key
+                    mentionFileLoadedAt = System.currentTimeMillis()
+                    refreshMention()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun ensureMentionBindings() {
+        val scope = bindingScope()
+        val now = System.currentTimeMillis()
+        if (mentionBindingsScope == scope && now - mentionBindingsLoadedAt < MENTION_TTL_MS) return
+        if (mentionBindingsJob?.isActive == true) return
+        mentionBindingsJob = viewModelScope.launch {
+            try {
+                val binding = fileMentions.current(scope)
+                if (bindingScope() == scope && binding != null) {
+                    mentionBinding = binding
+                    refreshMention()
+                }
+                val candidates = fileMentions.candidates(scope)
+                if (bindingScope() == scope) {
+                    mentionBindings = candidates
+                    mentionBindingsScope = scope
+                    mentionBindingsLoadedAt = System.currentTimeMillis()
+                    refreshMention()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun bindingScope(): String = currentState.conversationId.ifBlank { DEFAULT_SCOPE }
+
+    private fun mentionQueryKey(scope: String, query: String): String = "$scope\u0000$query"
+
+    private fun mentionedSkillNames(text: String): List<String> =
+        MentionText.mentionedNames(text, mentionSkills.filter { it.enabled }.map { it.name })
+
+    private fun ensureMentionSkills() {
+        if (mentionJob?.isActive == true) return
+        mentionJob = viewModelScope.launch {
+            try {
+                mentionSkills = skills.appEntries()
+                syncMentionNames()
+                refreshMention()
+                mentionSkills = skills.entries()
+                mentionLoadedAt = System.currentTimeMillis()
+                syncMentionNames()
+                refreshMention()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                mentionLoadedAt = System.currentTimeMillis()
+            }
+        }
+    }
+
+    private fun syncMentionNames() {
+        val names = mentionSkills.filter { it.enabled }.map { it.name }
+        updateState { copy(mentionNames = names) }
+    }
+
+    private fun refreshMention() {
+        val input = currentState.input
+        if (MentionText.active(input) != null) {
+            updateState { copy(mention = mentionFor(input)) }
+        }
+    }
+
+    private fun moveMention(delta: Int) {
+        val state = currentState
+        if (!state.mention.visible) return
+        val count = state.mention.items.size
+        val next = (state.mention.selected + delta).mod(count)
+        updateState { copy(mention = mention.copy(selected = next)) }
+    }
+
+    private fun pickMention(id: String) {
+        val state = currentState
+        if (!state.mention.visible) return
+        if (id == WORKSPACE_SWITCH_ID) {
+            mentionPickingWorkspace = true
+            ensureMentionBindings()
+            updateState { copy(mention = mentionFor(state.input)) }
+            return
+        }
+        if (id.startsWith(WORKSPACE_BIND_PREFIX)) {
+            val binding = mentionBindings.firstOrNull { WORKSPACE_BIND_PREFIX + it.key == id } ?: return
+            mentionPickingWorkspace = false
+            val scope = bindingScope()
+            viewModelScope.launch {
+                try {
+                    fileMentions.bind(scope, binding)
+                    mentionBinding = binding
+                    mentionFiles = emptyList()
+                    mentionFileQuery = null
+                    mentionFileLoadedAt = 0
+                    refreshMention()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                }
+            }
+            return
+        }
+        val item = state.mention.items.firstOrNull { it.id == id } ?: return
+        if (item.directory) {
+            val prefix = state.input.substring(0, state.mention.start)
+            val text = prefix + "@" + item.insert.trimEnd('/') + "/"
+            updateState { copy(input = text, mention = mentionFor(text)) }
+            return
+        }
+        val next = MentionText.insert(state.input, state.mention.start, item.insert)
+        val tokens = if (item.kind == MentionKind.File) {
+            (state.fileMentionTokens + item.insert).distinct().takeLast(64)
+        } else {
+            state.fileMentionTokens
+        }
+        updateState {
+            copy(
+                input = next,
+                mention = MentionUi(),
+                fileMentionTokens = tokens,
+                slash = slash.copy(open = false),
+            )
+        }
     }
 
     private fun moveSlash(delta: Int) {
@@ -293,7 +589,7 @@ class ChatViewModel(
         } else {
             updateState {
                 copy(
-                    input = spec.command,
+                    input = if (spec.acceptsArgument) "${spec.command} " else spec.command,
                     slash = slash.copy(
                         open = true,
                         query = spec.command,
@@ -336,6 +632,10 @@ class ChatViewModel(
     private fun send() {
         val state = currentState
         val text = state.input.trim()
+        if (state.mention.visible) {
+            state.mention.items.getOrNull(state.mention.selected)?.let { pickMention(it.id) }
+            return
+        }
         if (state.slash.visible) {
             selectSlash()
             return
@@ -355,6 +655,7 @@ class ChatViewModel(
             text = text,
             attachments = state.attachments,
             replyToId = state.reply?.messageId,
+            mentionedSkills = mentionedSkillNames(text),
         )
     }
 
@@ -363,6 +664,7 @@ class ChatViewModel(
         attachments: List<AttachmentUi>,
         replyToId: Long?,
         displayText: String = text,
+        mentionedSkills: List<String> = emptyList(),
     ) {
         val state = currentState
         val conversationId = state.conversationId
@@ -376,8 +678,9 @@ class ChatViewModel(
             attachments = attachments.map { it.toModel() },
             agentMode = state.mode,
             replyToId = replyToId,
+            mentionedSkills = mentionedSkills,
         )
-        lastSend = PendingSend(text, attachments, replyToId)
+        lastSend = PendingSend(text, attachments, replyToId, mentionedSkills)
         redoEntry = null
         suggestionJob?.cancel()
         val reply = state.reply
@@ -392,6 +695,8 @@ class ChatViewModel(
                 askDrafts = emptyMap(),
                 reply = null,
                 retry = null,
+                slash = SlashUi(open = false),
+                mention = MentionUi(),
                 liveStats = MessageStats(
                     providerId = state.providerId,
                     providerName = state.providerName,
@@ -550,6 +855,7 @@ class ChatViewModel(
                 text = lastUser.content,
                 attachments = lastUser.attachments.map { it.toUi() },
                 replyToId = lastUser.replyToId,
+                mentionedSkills = mentionedSkillNames(lastUser.content),
             )
             chats.deleteMessage(lastUser.id)
             chats.deleteAfter(id, lastUser.id)
@@ -561,7 +867,7 @@ class ChatViewModel(
     private fun redo() {
         val entry = redoEntry ?: return
         redoEntry = null
-        sendText(entry.text, entry.attachments, entry.replyToId)
+        sendText(entry.text, entry.attachments, entry.replyToId, mentionedSkills = entry.mentionedSkills)
     }
 
     private fun resume(argument: String) {
@@ -659,6 +965,7 @@ class ChatViewModel(
                     model = currentState.model,
                     reasoning = currentState.reasoningLevel,
                     agentMode = currentState.mode,
+                    mentionedSkills = mentionedSkillNames(draft),
                 ),
                 appendUser = false,
             )
@@ -703,6 +1010,7 @@ class ChatViewModel(
                     reasoning = currentState.reasoningLevel,
                     agentMode = currentState.mode,
                     replyToId = lastUser.replyToId,
+                    mentionedSkills = mentionedSkillNames(lastUser.content),
                 ),
                 appendUser = false,
             )
@@ -1024,6 +1332,7 @@ class ChatViewModel(
                 reply = null,
                 pendingDelete = null,
                 slash = SlashUi(open = false),
+                mention = MentionUi(),
                 btw = BtwUi(),
                 subAgentOpenId = null,
                 highlightKey = null,
@@ -1276,6 +1585,7 @@ class ChatViewModel(
         is ChatTurnEntry.Trace -> ChatEntry.Trace(
             key = "$prefix-trace-$index",
             steps = steps.map { it.toUi() },
+            live = true,
         )
         is ChatTurnEntry.Approval -> ChatEntry.Approval(
             key = "$prefix-approval-${card.id}",
@@ -1556,5 +1866,6 @@ class ChatViewModel(
         val text: String,
         val attachments: List<AttachmentUi>,
         val replyToId: Long?,
+        val mentionedSkills: List<String> = emptyList(),
     )
 }

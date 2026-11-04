@@ -13,6 +13,7 @@ import fan.x0.focus.data.assistant.CommandPolicy
 import fan.x0.focus.data.assistant.ConversationTodo
 import fan.x0.focus.data.assistant.FileDiff
 import fan.x0.focus.data.assistant.MessageStats
+import fan.x0.focus.data.assistant.MentionUi
 import fan.x0.focus.data.assistant.PlanStatus
 import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ProviderModel
@@ -214,7 +215,11 @@ sealed interface ChatEntry {
         val stats: MessageStats? = null,
     ) : ChatEntry
 
-    data class Trace(override val key: String, val steps: List<TraceStep>) : ChatEntry
+    data class Trace(
+        override val key: String,
+        val steps: List<TraceStep>,
+        val live: Boolean = false,
+    ) : ChatEntry
 
     data class Activity(
         override val key: String,
@@ -223,6 +228,7 @@ sealed interface ChatEntry {
         val reasoningMs: Long = 0,
         val reasoningStartedAt: Long = 0,
         val steps: List<TraceStep>,
+        val live: Boolean = false,
     ) : ChatEntry
 
     data class Approval(override val key: String, val card: ApprovalUi) : ChatEntry
@@ -277,6 +283,8 @@ data class ChatUiState(
     val live: List<ChatEntry> = emptyList(),
     val suggestions: List<SuggestionUi> = emptyList(),
     val input: String = "",
+    val mentionNames: List<String> = emptyList(),
+    val fileMentionTokens: List<String> = emptyList(),
     val sending: Boolean = false,
     val compacting: Boolean = false,
     val turn: Int = 0,
@@ -302,6 +310,7 @@ data class ChatUiState(
     val reply: ReplyUi? = null,
     val pendingDelete: ChatMenuUi? = null,
     val slash: SlashUi = SlashUi(),
+    val mention: MentionUi = MentionUi(),
     val btw: BtwUi = BtwUi(),
     val subAgentRuns: Map<String, SubAgentRunUi> = emptyMap(),
     val subAgentOpenId: String? = null,
@@ -401,6 +410,9 @@ sealed interface ChatAction : UiAction {
     data class SlashPick(val id: SlashCommandId) : ChatAction
     data object SlashSelect : ChatAction
     data object SlashClose : ChatAction
+    data class MentionMove(val delta: Int) : ChatAction
+    data class MentionPick(val id: String) : ChatAction
+    data object MentionDismiss : ChatAction
     data object RetryLast : ChatAction
     data object OpenSessions : ChatAction
     data object OpenSettings : ChatAction

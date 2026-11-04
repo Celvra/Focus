@@ -10,6 +10,7 @@ class CrewPrompt(private val locale: LocaleController) {
         member: CrewMember,
         members: List<CrewMember>,
         instructions: String = "",
+        skills: String = "",
     ): String {
         val builder = StringBuilder()
         builder.appendLine("You are ${member.name}, a member of the agent group \"${group.name}\".")
@@ -38,6 +39,9 @@ class CrewPrompt(private val locale: LocaleController) {
         if (instructions.isNotBlank()) {
             builder.appendLine("Workspace instructions:")
             builder.appendLine(instructions)
+        }
+        if (skills.isNotBlank()) {
+            builder.appendLine(skills)
         }
         return builder.toString()
     }

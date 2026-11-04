@@ -91,33 +91,59 @@ internal fun Composer(
             onHeightChange = {},
             onAdd = { attachSheet = true },
             addContentDescription = stringResource(R.string.chat_attach),
+            highlightTokens = state.mentionNames.map { "@$it" } +
+                state.fileMentionTokens.map { "@$it" } +
+                SlashCommands.all.map { it.command },
             onKeyEvent = { event ->
-                if (!state.slash.visible || event.type != KeyEventType.KeyDown) {
-                    false
-                } else {
-                    when (event.key) {
-                        Key.DirectionUp -> {
-                            onAction(ChatAction.SlashMove(-1))
-                            true
+                when {
+                    state.mention.visible && event.type == KeyEventType.KeyDown -> {
+                        when (event.key) {
+                            Key.DirectionUp -> {
+                                onAction(ChatAction.MentionMove(-1))
+                                true
+                            }
+                            Key.DirectionDown -> {
+                                onAction(ChatAction.MentionMove(1))
+                                true
+                            }
+                            Key.Enter, Key.NumPadEnter -> {
+                                val item = state.mention.items.getOrNull(state.mention.selected)
+                                if (item != null) onAction(ChatAction.MentionPick(item.id))
+                                true
+                            }
+                            Key.Escape -> {
+                                onAction(ChatAction.MentionDismiss)
+                                true
+                            }
+                            else -> false
                         }
-                        Key.DirectionDown -> {
-                            onAction(ChatAction.SlashMove(1))
-                            true
-                        }
-                        Key.Enter -> {
-                            onAction(ChatAction.SlashSelect)
-                            true
-                        }
-                        Key.NumPadEnter -> {
-                            onAction(ChatAction.SlashSelect)
-                            true
-                        }
-                        Key.Escape -> {
-                            onAction(ChatAction.SlashClose)
-                            true
-                        }
-                        else -> false
                     }
+                    state.slash.visible && event.type == KeyEventType.KeyDown -> {
+                        when (event.key) {
+                            Key.DirectionUp -> {
+                                onAction(ChatAction.SlashMove(-1))
+                                true
+                            }
+                            Key.DirectionDown -> {
+                                onAction(ChatAction.SlashMove(1))
+                                true
+                            }
+                            Key.Enter -> {
+                                onAction(ChatAction.SlashSelect)
+                                true
+                            }
+                            Key.NumPadEnter -> {
+                                onAction(ChatAction.SlashSelect)
+                                true
+                            }
+                            Key.Escape -> {
+                                onAction(ChatAction.SlashClose)
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    else -> false
                 }
             },
             attachments = {

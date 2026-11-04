@@ -50,11 +50,13 @@ class WorkspaceTrustService(
     private val store: WorkspaceTrustStore,
     private val bridge: BridgeRepository,
     private val files: FileRepository,
+    private val bindings: WorkspaceBindingStore,
 ) {
     private val rootsCache = ConcurrentHashMap<String, CachedRoots>()
 
-    suspend fun gate(tool: String, args: JsonObject): TrustGate {
+    suspend fun gate(tool: String, args: JsonObject, scope: String = ""): TrustGate {
         val target = targetFor(tool, args) ?: return TrustGate.Allowed
+        rememberBinding(scope, target, args)
         return when (state(target)) {
             WorkspaceTrustState.Unknown -> TrustGate.NeedsTrust(request(target))
             WorkspaceTrustState.Trusted -> TrustGate.Allowed
@@ -110,6 +112,9 @@ class WorkspaceTrustService(
         }
         return builder.toString().trim().take(MAX_PROMPT_CHARS)
     }
+
+    suspend fun trustedTargets(): List<WorkspaceTarget> =
+        currentTargets().filter { state(it) == WorkspaceTrustState.Trusted }
 
     suspend fun entries(): List<WorkspaceTrustEntry> {
         val current = currentTargets()
@@ -310,6 +315,49 @@ class WorkspaceTrustService(
         }
         rootsCache[endpoint.id] = CachedRoots(roots, now)
         return roots
+    }
+
+    private suspend fun rememberBinding(scope: String, target: WorkspaceTarget, args: JsonObject) {
+        val current = bindings.current(scope)
+        if (current?.manual == true) return
+        val next = when (target.kind) {
+            WorkspaceKind.Bridge -> {
+                val endpoint = endpointFor(target) ?: return
+                val roots = bridgeRoots(endpoint)
+                if (roots.isEmpty()) return
+                val touched = args.text("path") ?: args.text("cwd") ?: args.text("root")
+                val root = roots.firstOrNull { touched != null && underRoot(touched, it) }
+                    ?: roots.first()
+                bridgeBinding(endpoint, root)
+            }
+            WorkspaceKind.Local -> {
+                if (target.treeUri.isBlank()) return
+                FileMentionBinding(
+                    key = "local:${target.treeUri}",
+                    label = target.label,
+                    kind = WorkspaceKind.Local,
+                    treeUri = target.treeUri,
+                )
+            }
+        }
+        if (current?.key == next.key) return
+        bindings.set(scope, next)
+    }
+
+    private fun bridgeBinding(endpoint: BridgeEndpoint, root: String): FileMentionBinding {
+        val path = root.trimEnd('/').ifBlank { "/" }
+        return FileMentionBinding(
+            key = "bridge:${endpoint.id}:$path",
+            label = endpoint.name,
+            kind = WorkspaceKind.Bridge,
+            endpointId = endpoint.id,
+            root = path,
+        )
+    }
+
+    private fun underRoot(path: String, root: String): Boolean {
+        val base = root.trimEnd('/').ifBlank { "/" }
+        return path == base || path.startsWith(if (base == "/") "/" else "$base/")
     }
 
     private suspend fun readBridgeFile(endpoint: BridgeEndpoint, path: String): String? = try {

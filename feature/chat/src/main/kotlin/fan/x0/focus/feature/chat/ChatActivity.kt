@@ -8,6 +8,7 @@ internal fun List<ChatEntry>.toActivities(): List<ChatEntry> {
     var anchor: String? = null
     var reasoning = ""
     var running = false
+    var live = false
     var reasoningMs = 0L
     var reasoningStartedAt = 0L
     val steps = mutableListOf<TraceStep>()
@@ -22,12 +23,14 @@ internal fun List<ChatEntry>.toActivities(): List<ChatEntry> {
                 reasoningMs = reasoningMs,
                 reasoningStartedAt = reasoningStartedAt,
                 steps = steps.toList(),
+                live = live,
             )
         }
         result += answers
         anchor = null
         reasoning = ""
         running = false
+        live = false
         reasoningMs = 0
         reasoningStartedAt = 0
         steps.clear()
@@ -43,6 +46,7 @@ internal fun List<ChatEntry>.toActivities(): List<ChatEntry> {
                     reasoning += entry.reasoning
                 }
                 running = running || entry.live && entry.reasoningStartedAt > 0
+                live = live || entry.live
                 reasoningMs += entry.reasoningMs
                 if (entry.reasoningStartedAt > 0) reasoningStartedAt = entry.reasoningStartedAt
                 if (entry.text.isNotBlank()) answers += entry
@@ -50,6 +54,7 @@ internal fun List<ChatEntry>.toActivities(): List<ChatEntry> {
             is ChatEntry.Trace -> {
                 if (anchor == null) anchor = entry.key
                 steps += entry.steps
+                live = live || entry.live
             }
             else -> {
                 flush()

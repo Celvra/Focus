@@ -32,8 +32,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,7 +46,14 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeInput
@@ -68,6 +78,7 @@ fun FocusComposer(
     onAdd: (() -> Unit)? = null,
     addContentDescription: String? = null,
     onKeyEvent: (KeyEvent) -> Boolean = { false },
+    highlightTokens: List<String> = emptyList(),
     attachments: @Composable ColumnScope.() -> Unit = {},
     pills: @Composable RowScope.() -> Unit = {},
 ) {
@@ -95,6 +106,28 @@ fun FocusComposer(
         }
     }
     val active = canSend || sending
+    var fieldValue by remember { mutableStateOf(TextFieldValue(input)) }
+    LaunchedEffect(input) {
+        if (fieldValue.text != input) {
+            fieldValue = TextFieldValue(input, selection = TextRange(input.length))
+        }
+    }
+    val highlight = remember(highlightTokens, scheme.primary) {
+        VisualTransformation { text ->
+            val ranges = tokenRanges(text.text, highlightTokens)
+            if (ranges.isEmpty()) {
+                TransformedText(text, OffsetMapping.Identity)
+            } else {
+                val styled = buildAnnotatedString {
+                    append(text)
+                    ranges.forEach { range ->
+                        addStyle(SpanStyle(color = scheme.primary), range.first, range.last + 1)
+                    }
+                }
+                TransformedText(styled, OffsetMapping.Identity)
+            }
+        }
+    }
     val buttonContainer by animateColorAsState(
         targetValue = when {
             sending && !canSend -> scheme.errorContainer
@@ -130,8 +163,12 @@ fun FocusComposer(
         Column(modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 6.dp)) {
             attachments()
             TextField(
-                value = input,
-                onValueChange = onInputChange,
+                value = fieldValue,
+                onValueChange = { value ->
+                    val next = atomicDelete(fieldValue, value, highlightTokens)
+                    fieldValue = next
+                    onInputChange(next.text)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .onPreviewKeyEvent(onKeyEvent),
@@ -139,6 +176,7 @@ fun FocusComposer(
                     Text(placeholder)
                 },
                 maxLines = 5,
+                visualTransformation = highlight,
                 interactionSource = fieldInteraction,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
@@ -271,4 +309,83 @@ fun FocusComposerPill(
             }
         }
     }
+}
+
+private fun tokenRanges(text: String, tokens: List<String>): List<IntRange> {
+    if (text.isEmpty() || tokens.isEmpty()) return emptyList()
+    val ranges = mutableListOf<IntRange>()
+    tokens.asSequence()
+        .filter { it.length > 1 }
+        .distinct()
+        .sortedByDescending { it.length }
+        .forEach { token ->
+            var from = 0
+            while (from <= text.length - token.length) {
+                val index = text.indexOf(token, from, ignoreCase = true)
+                if (index < 0) break
+                val end = index + token.length
+                val before = text.getOrNull(index - 1)
+                val after = text.getOrNull(end)
+                val bounded = !blocksBefore(before) &&
+                    !blocksAfter(after) &&
+                    !(token.startsWith("/") && before == '/') &&
+                    ranges.none { it.first < end && index <= it.last }
+                if (bounded) {
+                    ranges += index until end
+                    from = end
+                } else {
+                    from = index + 1
+                }
+            }
+        }
+    return ranges.sortedBy { it.first }
+}
+
+private fun blocksBefore(char: Char?): Boolean =
+    char != null && (char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9')
+
+private fun blocksAfter(char: Char?): Boolean =
+    char != null && (char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '_')
+
+private fun atomicDelete(
+    old: TextFieldValue,
+    next: TextFieldValue,
+    tokens: List<String>,
+): TextFieldValue {
+    if (next.text.length >= old.text.length || tokens.isEmpty()) return next
+    val oldText = old.text
+    val newText = next.text
+    val shared = minOf(oldText.length, newText.length)
+    var prefix = 0
+    while (prefix < shared && oldText[prefix] == newText[prefix]) prefix++
+    var suffix = 0
+    while (suffix < shared - prefix && oldText[oldText.length - 1 - suffix] == newText[newText.length - 1 - suffix]) suffix++
+    val from = prefix
+    val to = oldText.length - suffix
+    if (oldText.removeRange(from, to) != newText) return next
+    val ranges = tokenRanges(oldText, tokens)
+    var hit = ranges.filter { it.first < to && it.last + 1 > from }
+    if (hit.isEmpty() && to == from + 1 && oldText[from] == ' ') {
+        val trailing = ranges.firstOrNull { it.last + 1 == from }
+        if (trailing != null) hit = listOf(trailing)
+    }
+    if (hit.isEmpty()) return next
+    val tokenStart = hit.minOf { it.first }
+    val tokenEnd = hit.maxOf { it.last + 1 }
+    var start = minOf(from, tokenStart)
+    var end = maxOf(to, tokenEnd)
+    val before = oldText.getOrNull(start - 1)
+    val after = oldText.getOrNull(end)
+    if (end <= tokenEnd) {
+        if (after == ' ' && (before == null || !before.isLetterOrDigit())) {
+            end++
+        } else if (before == ' ') {
+            start--
+        }
+    }
+    val text = oldText.removeRange(start, end)
+    return TextFieldValue(
+        text = text,
+        selection = TextRange(start.coerceIn(0, text.length)),
+    )
 }

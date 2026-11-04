@@ -23,14 +23,26 @@ import fan.x0.focus.data.assistant.CrewRunState
 import fan.x0.focus.data.assistant.CrewRunner
 import fan.x0.focus.data.assistant.CrewStore
 import fan.x0.focus.data.assistant.CrewSwitcher
+import fan.x0.focus.data.assistant.FileMentionBinding
+import fan.x0.focus.data.assistant.FileMentionEntry
+import fan.x0.focus.data.assistant.FileMentionService
 import fan.x0.focus.data.assistant.MessageStats
+import fan.x0.focus.data.assistant.MentionItemUi
+import fan.x0.focus.data.assistant.MentionKind
+import fan.x0.focus.data.assistant.MentionText
+import fan.x0.focus.data.assistant.MentionUi
 import fan.x0.focus.data.assistant.ProviderModelCatalog
+import fan.x0.focus.data.assistant.SkillEntry
+import fan.x0.focus.data.assistant.SkillRepository
+import fan.x0.focus.data.assistant.WORKSPACE_BIND_PREFIX
+import fan.x0.focus.data.assistant.WORKSPACE_SWITCH_ID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.annotation.KoinViewModel
+import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
 
@@ -39,6 +51,10 @@ private const val REVEAL_CATCHUP_FRAMES = 18
 private const val REVEAL_MIN_GROUP = 3
 private const val REVEAL_HANDOFF_MS = 280L
 private const val REVEAL_JOIN_TIMEOUT_MS = 4_000L
+private const val MENTION_TTL_MS = 30_000L
+private const val MENTION_FILE_DELAY_MS = 140L
+private const val MAX_MENTION_SKILLS = 50
+private const val DEFAULT_SCOPE = "default"
 
 @KoinViewModel
 class CrewViewModel(
@@ -52,11 +68,26 @@ class CrewViewModel(
     private val presence: AppPresence,
     private val details: ChatDetailSettings,
     private val providerModels: ProviderModelCatalog,
+    private val skills: SkillRepository,
+    private val fileMentions: FileMentionService,
 ) : BaseViewModel<CrewAction, CrewUiState, CrewEffect>(CrewUiState()) {
 
     private var loadJob: Job? = null
     private var groupJob: Job? = null
     private var modelJob: Job? = null
+    private var mentionJob: Job? = null
+    private var mentionSkills: List<SkillEntry> = emptyList()
+    private var mentionLoadedAt = 0L
+    private var mentionFileJob: Job? = null
+    private var mentionFiles: List<FileMentionEntry> = emptyList()
+    private var mentionFileQuery: String? = null
+    private var mentionFileLoadedAt = 0L
+    private var mentionBinding: FileMentionBinding? = null
+    private var mentionBindings: List<FileMentionBinding> = emptyList()
+    private var mentionBindingsJob: Job? = null
+    private var mentionBindingsScope = ""
+    private var mentionBindingsLoadedAt = 0L
+    private var mentionPickingWorkspace = false
     private var allMembers: List<CrewMember> = emptyList()
     private var messagesById: Map<Long, CrewMessage> = emptyMap()
     private var wasRunning = false
@@ -69,6 +100,8 @@ class CrewViewModel(
     private var revealText = ""
 
     init {
+        ensureMentionSkills()
+        ensureMentionBindings()
         refreshGroups()
         viewModelScope.launch {
             details.config.collect { config ->
@@ -226,8 +259,12 @@ class CrewViewModel(
             is CrewAction.RemoveAttachment -> updateState {
                 copy(attachments = attachments.filterNot { it.id == action.id })
             }
+            is CrewAction.MentionMove -> moveMention(action.delta)
             is CrewAction.MentionPick -> pickMention(action.id)
-            CrewAction.MentionDismiss -> updateState { copy(mention = CrewMentionUi()) }
+            CrewAction.MentionDismiss -> {
+                mentionPickingWorkspace = false
+                updateState { copy(mention = MentionUi()) }
+            }
             CrewAction.Send -> send()
             CrewAction.Stop -> runner.stop(currentState.group?.id.orEmpty())
             is CrewAction.AskSelect -> askSelect(action.askId, action.questionId, action.choice)
@@ -380,7 +417,7 @@ class CrewViewModel(
                 running = false,
                 working = "",
                 input = "",
-                mention = CrewMentionUi(),
+                mention = MentionUi(),
                 reply = null,
                 menu = null,
                 edit = null,
@@ -979,43 +1016,289 @@ class CrewViewModel(
     }
 
     private fun inputChanged(value: String) {
+        mentionPickingWorkspace = false
         updateState { copy(input = value, mention = mentionFor(value)) }
     }
 
-    private fun mentionFor(value: String): CrewMentionUi {
-        val query = CrewMentions.query(value) ?: return CrewMentionUi()
-        val members = currentState.members.filter { member ->
-            query.isBlank() || member.name.startsWith(query, ignoreCase = true)
+    private fun mentionFor(value: String): MentionUi {
+        val active = MentionText.active(value) ?: return MentionUi()
+        if (System.currentTimeMillis() - mentionLoadedAt > MENTION_TTL_MS) {
+            ensureMentionSkills()
         }
-        return if (members.isEmpty()) CrewMentionUi() else CrewMentionUi(
-            open = true,
-            members = members,
-        )
+        val query = active.query
+        if (mentionPickingWorkspace) {
+            ensureMentionBindings()
+            val items = mentionBindings.map { binding ->
+                MentionItemUi(
+                    id = WORKSPACE_BIND_PREFIX + binding.key,
+                    kind = MentionKind.Workspace,
+                    label = binding.label,
+                    description = binding.path,
+                    action = true,
+                )
+            }
+            return if (items.isEmpty()) {
+                MentionUi()
+            } else {
+                MentionUi(
+                    open = true,
+                    query = query,
+                    start = active.start,
+                    items = items,
+                    selected = 0,
+                )
+            }
+        }
+        if (query.isBlank()) {
+            ensureMentionBindings()
+        }
+        ensureMentionFiles(query)
+        val scope = bindingScope()
+        val key = mentionQueryKey(scope, query)
+        val members = currentState.members
+            .filter { member -> query.isBlank() || member.name.startsWith(query, ignoreCase = true) }
+            .map { member ->
+                MentionItemUi(
+                    id = member.id,
+                    kind = MentionKind.Member,
+                    label = member.name,
+                    description = member.duty,
+                )
+            }
+        val items = buildList {
+            if (query.isBlank()) {
+                mentionBinding?.let { binding ->
+                    add(
+                        MentionItemUi(
+                            id = WORKSPACE_SWITCH_ID,
+                            kind = MentionKind.Workspace,
+                            label = binding.label,
+                            description = binding.path,
+                            action = true,
+                        ),
+                    )
+                }
+            }
+            addAll(members)
+            addAll(skillMentions(query))
+            if (mentionFileQuery == key) {
+                mentionFiles.forEach { entry ->
+                    add(
+                        MentionItemUi(
+                            id = entry.id,
+                            kind = MentionKind.File,
+                            label = entry.relative,
+                            description = entry.path,
+                            insert = entry.insert,
+                            directory = entry.directory,
+                        ),
+                    )
+                }
+            }
+        }
+        return if (items.isEmpty()) {
+            MentionUi()
+        } else {
+            MentionUi(
+                open = true,
+                query = query,
+                start = active.start,
+                items = items,
+                selected = 0,
+            )
+        }
+    }
+
+    private fun skillMentions(query: String): List<MentionItemUi> =
+        mentionSkills.asSequence()
+            .filter { it.enabled }
+            .filter {
+                query.isBlank() ||
+                    it.name.contains(query, ignoreCase = true) ||
+                    it.description.contains(query, ignoreCase = true)
+            }
+            .sortedWith(
+                compareByDescending<SkillEntry> { it.name.startsWith(query, ignoreCase = true) }
+                    .thenBy { it.name.lowercase(Locale.ROOT) },
+            )
+            .take(MAX_MENTION_SKILLS)
+            .map { skill ->
+                MentionItemUi(
+                    id = skill.id,
+                    kind = MentionKind.Skill,
+                    label = skill.name,
+                    description = skill.description,
+                )
+            }
+            .toList()
+
+    private fun ensureMentionFiles(query: String) {
+        val scope = bindingScope()
+        val key = mentionQueryKey(scope, query)
+        val now = System.currentTimeMillis()
+        if (mentionFileQuery == key && now - mentionFileLoadedAt < MENTION_TTL_MS) return
+        if (mentionPickingWorkspace) return
+        mentionFileJob?.cancel()
+        mentionFileJob = viewModelScope.launch {
+            delay(MENTION_FILE_DELAY_MS)
+            try {
+                val entries = fileMentions.search(scope, query)
+                val binding = fileMentions.current(scope)
+                if (bindingScope() == scope &&
+                    MentionText.active(currentState.input)?.query == query &&
+                    !mentionPickingWorkspace
+                ) {
+                    mentionFiles = entries
+                    mentionBinding = binding
+                    mentionFileQuery = key
+                    mentionFileLoadedAt = System.currentTimeMillis()
+                    refreshMention()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun ensureMentionBindings() {
+        val scope = bindingScope()
+        val now = System.currentTimeMillis()
+        if (mentionBindingsScope == scope && now - mentionBindingsLoadedAt < MENTION_TTL_MS) return
+        if (mentionBindingsJob?.isActive == true) return
+        mentionBindingsJob = viewModelScope.launch {
+            try {
+                val binding = fileMentions.current(scope)
+                if (bindingScope() == scope && binding != null) {
+                    mentionBinding = binding
+                    refreshMention()
+                }
+                val candidates = fileMentions.candidates(scope)
+                if (bindingScope() == scope) {
+                    mentionBindings = candidates
+                    mentionBindingsScope = scope
+                    mentionBindingsLoadedAt = System.currentTimeMillis()
+                    refreshMention()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun bindingScope(): String = currentState.group?.id.orEmpty().ifBlank { DEFAULT_SCOPE }
+
+    private fun mentionQueryKey(scope: String, query: String): String = "$scope\u0000$query"
+
+    private fun ensureMentionSkills() {
+        if (mentionJob?.isActive == true) return
+        mentionJob = viewModelScope.launch {
+            try {
+                mentionSkills = skills.appEntries()
+                syncMentionNames()
+                refreshMention()
+                mentionSkills = skills.entries()
+                mentionLoadedAt = System.currentTimeMillis()
+                syncMentionNames()
+                refreshMention()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                mentionLoadedAt = System.currentTimeMillis()
+            }
+        }
+    }
+
+    private fun syncMentionNames() {
+        val names = mentionSkills.filter { it.enabled }.map { it.name }
+        updateState { copy(mentionNames = names) }
+    }
+
+    private fun refreshMention() {
+        val input = currentState.input
+        if (MentionText.active(input) != null) {
+            updateState { copy(mention = mentionFor(input)) }
+        }
+    }
+
+    private fun moveMention(delta: Int) {
+        val state = currentState
+        if (!state.mention.visible) return
+        val count = state.mention.items.size
+        val next = (state.mention.selected + delta).mod(count)
+        updateState { copy(mention = mention.copy(selected = next)) }
     }
 
     private fun pickMention(id: String) {
-        val member = currentState.members.firstOrNull { it.id == id } ?: return
-        val input = currentState.input
-        val at = input.lastIndexOf('@')
-        if (at < 0) return
-        val next = input.substring(0, at) + "@${member.name} "
-        updateState { copy(input = next, mention = mentionFor(next)) }
+        val state = currentState
+        if (!state.mention.visible) return
+        if (id == WORKSPACE_SWITCH_ID) {
+            mentionPickingWorkspace = true
+            ensureMentionBindings()
+            updateState { copy(mention = mentionFor(state.input)) }
+            return
+        }
+        if (id.startsWith(WORKSPACE_BIND_PREFIX)) {
+            val binding = mentionBindings.firstOrNull { WORKSPACE_BIND_PREFIX + it.key == id } ?: return
+            mentionPickingWorkspace = false
+            val scope = bindingScope()
+            viewModelScope.launch {
+                try {
+                    fileMentions.bind(scope, binding)
+                    mentionBinding = binding
+                    mentionFiles = emptyList()
+                    mentionFileQuery = null
+                    mentionFileLoadedAt = 0
+                    refreshMention()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Throwable) {
+                }
+            }
+            return
+        }
+        val item = state.mention.items.firstOrNull { it.id == id } ?: return
+        if (item.directory) {
+            val prefix = state.input.substring(0, state.mention.start)
+            val text = prefix + "@" + item.insert.trimEnd('/') + "/"
+            updateState { copy(input = text, mention = mentionFor(text)) }
+            return
+        }
+        val next = MentionText.insert(state.input, state.mention.start, item.insert)
+        val tokens = if (item.kind == MentionKind.File) {
+            (state.fileMentionTokens + item.insert).distinct().takeLast(64)
+        } else {
+            state.fileMentionTokens
+        }
+        updateState {
+            copy(
+                input = next,
+                mention = MentionUi(),
+                fileMentionTokens = tokens,
+            )
+        }
     }
 
     private fun send() {
-        val group = currentState.group ?: return
-        val text = currentState.input.trim()
-        val attachments = currentState.attachments
-        if ((text.isBlank() && attachments.isEmpty()) || currentState.sending) return
-        val replyTo = currentState.reply?.messageId
-        val restore = currentState.input
+        val state = currentState
+        if (state.mention.visible) {
+            state.mention.items.getOrNull(state.mention.selected)?.let { pickMention(it.id) }
+            return
+        }
+        val group = state.group ?: return
+        val text = state.input.trim()
+        val attachments = state.attachments
+        if ((text.isBlank() && attachments.isEmpty()) || state.sending) return
+        val replyTo = state.reply?.messageId
+        val restore = state.input
         val restoreAttachments = attachments
-        val restoreReply = currentState.reply
+        val restoreReply = state.reply
         updateState {
             copy(
                 input = "",
                 attachments = emptyList(),
-                mention = CrewMentionUi(),
+                mention = MentionUi(),
                 reply = null,
                 sending = true,
             )

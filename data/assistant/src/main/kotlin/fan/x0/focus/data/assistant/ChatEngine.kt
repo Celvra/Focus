@@ -43,6 +43,7 @@ data class TurnOptions(
     val attachments: List<ChatAttachment> = emptyList(),
     val agentMode: AgentMode = AgentMode.Build,
     val replyToId: Long? = null,
+    val mentionedSkills: List<String> = emptyList(),
 )
 
 sealed interface ChatEvent {
@@ -227,6 +228,7 @@ class ChatEngine(
                     ChatMode.Chat -> prompt.chatPrompt(
                         title = chats.conversation(conversationId)?.title.orEmpty(),
                         mode = agentMode,
+                        mentionedSkills = options.mentionedSkills,
                     )
                     ChatMode.Onboarding -> prompt.onboardingPrompt(
                         turn = context.messages.count { it.role == ChatRole.User },

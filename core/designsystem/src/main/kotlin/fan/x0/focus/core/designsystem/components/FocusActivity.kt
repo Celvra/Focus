@@ -67,16 +67,18 @@ fun FocusActivity(
     reasoningStartedAt: Long = 0,
     steps: List<FocusTraceStep>,
     onOpen: ((String) -> Unit)? = null,
+    live: Boolean = false,
 ) {
     if (reasoning.isBlank() && steps.isEmpty()) return
     val motion = LocalFocusMotion.current
     val scheme = MaterialTheme.colorScheme
-    val active = running || steps.any {
+    val active = live || running || steps.any {
         it.status == FocusStepStatus.Running || it.status == FocusStepStatus.Pending
     }
     var expanded by remember { mutableStateOf(active) }
+    var touched by remember { mutableStateOf(false) }
     LaunchedEffect(active) {
-        expanded = active
+        if (!touched) expanded = active
     }
     val chevron by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -104,7 +106,10 @@ fun FocusActivity(
                     interactionSource = interaction,
                     indication = null,
                     role = Role.Button,
-                    onClick = hapticTap { expanded = !expanded },
+                    onClick = hapticTap {
+                        touched = true
+                        expanded = !expanded
+                    },
                 )
                 .heightIn(min = 44.dp)
                 .padding(horizontal = 4.dp, vertical = 2.dp),

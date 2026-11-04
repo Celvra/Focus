@@ -79,6 +79,7 @@ class CrewEngine(
     private val approvals: ApprovalStore,
     private val agent: AgentSettings,
     private val workspaceTrust: WorkspaceTrustService,
+    private val skills: SkillRepository,
 ) {
     private val waivers = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     private val askReplies = ConcurrentHashMap<String, CompletableDeferred<AskReply>>()
@@ -142,9 +143,19 @@ class CrewEngine(
         }
         val conversation = mutableListOf<ChatMessageDto>()
         var workspaceInstructions = workspaceTrust.promptSection()
+        val lastUserText = history.asReversed()
+            .firstOrNull { it.authorType == CrewAuthorType.User }
+            ?.content
+            .orEmpty()
+        val skillNames = MentionText.mentionedNames(
+            lastUserText,
+            skills.entries().filter { it.enabled }.map { it.name },
+        )
+        val referencedSkills = skills.mentionSection(skillNames)
+        var skillInstructions = combineSkills(skills.promptSection(), referencedSkills)
         conversation += ChatMessageDto(
             role = "system",
-            content = prompt.agentPrompt(group, member, members, workspaceInstructions),
+            content = prompt.agentPrompt(group, member, members, workspaceInstructions, skillInstructions),
         )
         conversation += buildTranscript(history, quotes, member.id)
         conversation += ChatMessageDto(role = "user", content = prompt.turnPrompt(member))
@@ -162,9 +173,10 @@ class CrewEngine(
         try {
             for (round in 0 until MAX_ROUNDS) {
                 workspaceInstructions = workspaceTrust.promptSection()
+                skillInstructions = combineSkills(skills.promptSection(), referencedSkills)
                 conversation[0] = ChatMessageDto(
                     role = "system",
-                    content = prompt.agentPrompt(group, member, members, workspaceInstructions),
+                    content = prompt.agentPrompt(group, member, members, workspaceInstructions, skillInstructions),
                 )
                 if (round > 0) {
                     val fresh = store.messagesAfter(group.id, lastSeenId)
@@ -511,6 +523,9 @@ class CrewEngine(
         }
         return result
     }
+
+    private fun combineSkills(base: String, referenced: String): String =
+        listOf(base, referenced).filter { it.isNotBlank() }.joinToString("\n\n")
 
     private fun hasContent(message: CrewMessage, text: String): Boolean =
         text.isNotBlank() || message.attachments.any { it.kind == AttachmentKind.Image && it.dataUrl != null }

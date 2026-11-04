@@ -16,6 +16,8 @@
     <string name="crew_stop">Stop</string>
     <string name="crew_typing">Typing</string>
     <string name="crew_call_agent">Call an agent</string>
+    <string name="crew_mention_files">Files</string>
+    <string name="crew_mention_workspace">Workspace</string>
     <string name="crew_replying_to">Replying to %1$s</string>
     <string name="crew_cancel_reply">Cancel reply</string>
     <string name="crew_members">Members</string>

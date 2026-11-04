@@ -74,8 +74,9 @@ fun FocusReasoningCard(
 ) {
     val motion = LocalFocusMotion.current
     var expanded by remember { mutableStateOf(running) }
+    var touched by remember { mutableStateOf(false) }
     LaunchedEffect(running) {
-        if (!running) expanded = false
+        if (!touched && !running) expanded = false
     }
     val chevron by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -99,7 +100,10 @@ fun FocusReasoningCard(
                         interactionSource = interaction,
                         indication = null,
                         role = Role.Button,
-                        onClick = hapticTap { expanded = !expanded },
+                        onClick = hapticTap {
+                            touched = true
+                            expanded = !expanded
+                        },
                     )
                     .heightIn(min = 40.dp)
                     .padding(vertical = 2.dp),

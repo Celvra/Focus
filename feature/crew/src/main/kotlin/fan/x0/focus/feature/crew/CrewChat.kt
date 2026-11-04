@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -51,6 +50,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -72,6 +75,9 @@ import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusJumpToLatest
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
+import fan.x0.focus.core.designsystem.components.FocusMentionGroup
+import fan.x0.focus.core.designsystem.components.FocusMentionItem
+import fan.x0.focus.core.designsystem.components.FocusMentionPanel
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusActivity
@@ -85,6 +91,8 @@ import fan.x0.focus.data.assistant.ChatAttachment
 import fan.x0.focus.data.assistant.CrewApprovalPhase
 import fan.x0.focus.data.assistant.CrewToolStatus
 import fan.x0.focus.data.assistant.CrewTrustPhase
+import fan.x0.focus.data.assistant.MentionKind
+import fan.x0.focus.data.assistant.MentionUi
 import fan.x0.focus.data.assistant.ToolPayload
 import fan.x0.focus.data.assistant.WorkspaceKind
 import kotlinx.coroutines.flow.first
@@ -270,6 +278,7 @@ fun CrewChatScreen(
             ) {
                 CrewMentionPanel(
                     mention = state.mention,
+                    members = state.members,
                     onPick = { onAction(CrewAction.MentionPick(it)) },
                 )
             }
@@ -306,6 +315,38 @@ fun CrewChatScreen(
                 onHeightChange = { composerHeight = it },
                 onAdd = { attachSheet = true },
                 addContentDescription = stringResource(R.string.crew_attach),
+                highlightTokens = buildList {
+                    add("@all")
+                    addAll(state.members.map { "@${it.name}" })
+                    addAll(state.mentionNames.map { "@$it" })
+                    addAll(state.fileMentionTokens.map { "@$it" })
+                },
+                onKeyEvent = { event ->
+                    if (!state.mention.visible || event.type != KeyEventType.KeyDown) {
+                        false
+                    } else {
+                        when (event.key) {
+                            Key.DirectionUp -> {
+                                onAction(CrewAction.MentionMove(-1))
+                                true
+                            }
+                            Key.DirectionDown -> {
+                                onAction(CrewAction.MentionMove(1))
+                                true
+                            }
+                            Key.Enter, Key.NumPadEnter -> {
+                                val item = state.mention.items.getOrNull(state.mention.selected)
+                                if (item != null) onAction(CrewAction.MentionPick(item.id))
+                                true
+                            }
+                            Key.Escape -> {
+                                onAction(CrewAction.MentionDismiss)
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                },
                 attachments = {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         state.reply?.let { reply ->
@@ -518,6 +559,7 @@ private fun CrewMessageRow(
                             durationMs = 0,
                         )
                     },
+                    live = entry.streaming,
                 )
             }
             if (entry.streaming && entry.text.isBlank()) {
@@ -924,61 +966,70 @@ private fun LazyListState.atBottom(): Boolean {
 }
 
 @Composable
-private fun CrewMentionPanel(mention: CrewMentionUi, onPick: (String) -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 260.dp),
-        shape = FocusShapeTokens.card,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shadowElevation = 4.dp,
-    ) {
-        Column(modifier = Modifier.padding(vertical = 8.dp)) {
-            Text(
-                text = stringResource(R.string.crew_call_agent),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
-            )
-            LazyColumn {
-                items(
-                    items = mention.members,
-                    key = { it.id },
-                    contentType = { "member" },
-                ) { member ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.medium)
-                            .clickable(onClick = hapticTap { onPick(member.id) })
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
+private fun CrewMentionPanel(
+    mention: MentionUi,
+    members: List<CrewMemberUi>,
+    onPick: (String) -> Unit,
+) {
+    val groups = mention.items.groupBy { it.kind }.map { (kind, items) ->
+        FocusMentionGroup(
+            id = kind.name,
+            title = when (kind) {
+                MentionKind.Skill -> null
+                MentionKind.Member -> stringResource(R.string.crew_call_agent)
+                MentionKind.File -> stringResource(R.string.crew_mention_files)
+                MentionKind.Workspace -> stringResource(R.string.crew_mention_workspace)
+            },
+            items = items.map { item ->
+                FocusMentionItem(
+                    id = item.id,
+                    label = item.label,
+                    description = item.description,
+                    kind = item.kind.name,
+                    action = item.action,
+                )
+            },
+        )
+    }
+    FocusMentionPanel(
+        groups = groups,
+        selectedId = mention.items.getOrNull(mention.selected)?.id,
+        onPick = { onPick(it.id) },
+        leading = { item ->
+            when (item.kind) {
+                MentionKind.Member.name -> {
+                    val member = members.firstOrNull { it.id == item.id }
+                    if (member != null) {
                         CrewAvatar(
                             preset = member.avatarPreset,
                             palette = member.avatarPalette,
                             path = member.avatarPath,
                             size = 34.dp,
                         )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = member.name,
-                                style = MaterialTheme.typography.titleSmallEmphasized,
-                            )
-                            if (member.duty.isNotBlank()) {
-                                Text(
-                                    text = member.duty,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
+                        true
+                    } else {
+                        false
                     }
                 }
+                MentionKind.Skill.name -> {
+                    Surface(
+                        modifier = Modifier.size(30.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = FocusIcons.Assistant,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                    true
+                }
+                else -> false
             }
-        }
-    }
+        },
+    )
 }

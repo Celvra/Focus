@@ -340,7 +340,22 @@ fun ChatScreen(
                     }
                 }
                 AnimatedVisibility(
-                    visible = state.slash.visible,
+                    visible = state.mention.visible,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(start = 12.dp, end = 12.dp, bottom = composerOffset),
+                    enter = slideInVertically(motion.spatialDefault()) { it } +
+                        fadeIn(motion.effectsDefault()),
+                    exit = slideOutVertically(motion.spatialDefault()) { it } +
+                        fadeOut(motion.effectsFast()),
+                ) {
+                    ChatMentionPanel(
+                        mention = state.mention,
+                        onPick = { onAction(ChatAction.MentionPick(it)) },
+                    )
+                }
+                AnimatedVisibility(
+                    visible = state.slash.visible && !state.mention.visible,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(start = 12.dp, end = 12.dp, bottom = composerOffset),
@@ -352,7 +367,8 @@ fun ChatScreen(
                     SlashCommandPanel(slash = state.slash, onAction = onAction)
                 }
                 AnimatedVisibility(
-                    visible = state.selectionKey != null && !state.slash.visible,
+                    visible = state.selectionKey != null && !state.slash.visible &&
+                        !state.mention.visible,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(start = 12.dp, end = 12.dp, bottom = composerOffset),
@@ -377,7 +393,7 @@ fun ChatScreen(
                 )
             }
         }
-        if (!state.isEmpty && !state.slash.visible) {
+        if (!state.isEmpty && !state.slash.visible && !state.mention.visible) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -737,6 +753,7 @@ private fun ChatThread(
                             reasoningStartedAt = entry.reasoningStartedAt,
                             steps = entry.steps.map { it.toFocusStep() },
                             onOpen = { onAction(ChatAction.OpenSubAgent(it)) },
+                            live = entry.live,
                         )
                         is ChatEntry.Approval -> FocusApprovalCard(
                             card = entry.card,

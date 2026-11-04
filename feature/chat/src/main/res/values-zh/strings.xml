@@ -68,6 +68,7 @@
     <string name="chat_attach_remove">移除附件</string>
     <string name="chat_attachment_preview">预览 %1$s</string>
     <string name="chat_attach_title">添加附件</string>
+    <string name="chat_mention_workspace">工作区</string>
     <string name="chat_attach_camera">拍照</string>
     <string name="chat_attach_photos">照片</string>
     <string name="chat_attach_files">文件</string>

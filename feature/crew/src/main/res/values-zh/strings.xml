@@ -16,6 +16,8 @@
     <string name="crew_stop">停止</string>
     <string name="crew_typing">正在输入</string>
     <string name="crew_call_agent">唤起智能体</string>
+    <string name="crew_mention_files">文件</string>
+    <string name="crew_mention_workspace">工作区</string>
     <string name="crew_replying_to">回复 %1$s</string>
     <string name="crew_cancel_reply">取消回复</string>
     <string name="crew_members">成员</string>

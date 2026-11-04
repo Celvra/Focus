@@ -14,6 +14,7 @@ import fan.x0.focus.data.assistant.CrewAskPhase
 import fan.x0.focus.data.assistant.CrewToolStatus
 import fan.x0.focus.data.assistant.CrewTrustPhase
 import fan.x0.focus.data.assistant.MessageStats
+import fan.x0.focus.data.assistant.MentionUi
 import fan.x0.focus.data.assistant.ProviderModelGroup
 import fan.x0.focus.data.assistant.WorkspaceKind
 
@@ -143,13 +144,6 @@ data class CrewEditUi(
     val draft: String,
 )
 
-data class CrewMentionUi(
-    val open: Boolean = false,
-    val members: List<CrewMemberUi> = emptyList(),
-) {
-    val visible: Boolean get() = open && members.isNotEmpty()
-}
-
 data class MemberDraft(
     val key: String,
     val id: String? = null,
@@ -196,9 +190,11 @@ data class CrewUiState(
     val running: Boolean = false,
     val working: String = "",
     val input: String = "",
+    val mentionNames: List<String> = emptyList(),
+    val fileMentionTokens: List<String> = emptyList(),
     val attachments: List<ChatAttachment> = emptyList(),
     val sending: Boolean = false,
-    val mention: CrewMentionUi = CrewMentionUi(),
+    val mention: MentionUi = MentionUi(),
     val reply: CrewQuoteUi? = null,
     val menu: CrewMessageMenuUi? = null,
     val edit: CrewEditUi? = null,
@@ -293,6 +289,7 @@ sealed interface CrewAction : UiAction {
     data class InputChanged(val value: String) : CrewAction
     data class AttachPicked(val uris: List<String>) : CrewAction
     data class RemoveAttachment(val id: String) : CrewAction
+    data class MentionMove(val delta: Int) : CrewAction
     data class MentionPick(val id: String) : CrewAction
     data object MentionDismiss : CrewAction
     data object Send : CrewAction

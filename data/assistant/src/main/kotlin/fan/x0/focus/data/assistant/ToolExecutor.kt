@@ -85,6 +85,7 @@ class ToolExecutor(
     private val media: MediaLoader,
     private val crew: CrewToolHandler,
     private val workspaceTrust: WorkspaceTrustService,
+    private val skills: SkillsToolHandler,
 ) {
     val specs: List<ToolSpec> = ToolCatalog.chat()
 
@@ -108,7 +109,7 @@ class ToolExecutor(
                 StepOutcome(step.label, false, "Unknown step")
             args == null -> StepOutcome(step.label, false, "Invalid arguments")
             else -> {
-                val trust = workspaceTrust.gate(spec.name, args)
+                val trust = workspaceTrust.gate(spec.name, args, conversationId)
                 if (trust is TrustGate.NeedsTrust) {
                     return StepOutcome(
                         label = step.label,
@@ -135,7 +136,7 @@ class ToolExecutor(
         if (mode == AgentMode.Plan && spec.kind !in setOf(ToolKind.Read, ToolKind.Ask, ToolKind.Plan)) {
             return fail("Plan mode only allows read-only tools. $name would change something. Ask the user to approve the plan first.")
         }
-        val trust = workspaceTrust.gate(name, args)
+        val trust = workspaceTrust.gate(name, args, conversationId)
         if (trust is TrustGate.NeedsTrust) {
             return ToolResult(
                 ok = false,
@@ -215,6 +216,7 @@ class ToolExecutor(
     }
 
     private suspend fun runTool(spec: ToolSpec, args: JsonObject, conversationId: String): ToolResult = try {
+        skills.handle(spec.name, args)?.let { return it }
         when (spec.name) {
             "list_calendar_events" -> {
                 val days = (args.number("days") ?: 7).coerceIn(1, 60)
@@ -1627,6 +1629,14 @@ class ToolExecutor(
                 summary = (if (roots.isEmpty()) "No limit" else roots.joinToString("\n")) +
                     device?.let { "\non $it" }.orEmpty(),
                 label = if (roots.isEmpty()) "Workspace: no limit" else "Workspace: ${roots.size} folders",
+            )
+        }
+        SkillToolCatalog.DELETE -> {
+            val name = args.text("name") ?: return null
+            SimpleDraft(
+                title = "Delete skill",
+                summary = name,
+                label = "Delete skill: $name",
             )
         }
         else -> null

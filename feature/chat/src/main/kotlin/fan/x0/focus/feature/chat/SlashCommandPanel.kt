@@ -40,6 +40,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.hapticTap
+import fan.x0.focus.core.designsystem.theme.FocusRadii
+import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 
 @Composable
@@ -73,7 +75,7 @@ internal fun SlashCommandPanel(
                 modifier = Modifier
                     .heightIn(max = 252.dp)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
             ) {
                 SlashCommands.all.forEach { spec ->
                     AnimatedVisibility(
@@ -134,7 +136,7 @@ private fun SlashCommandRow(
     )
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
+        shape = FocusShapeTokens.inner(FocusRadii.extraLarge, 12.dp),
         color = container,
         contentColor = if (selected) scheme.onSecondaryContainer else scheme.onSurface,
         onClick = hapticTap(onClick),

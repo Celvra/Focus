@@ -30,6 +30,7 @@ class ToolCatalogPolicyTest {
                 "mcp_call_tool",
                 "bridge_bg_start",
                 "bridge_bg_kill",
+                "delete_skill",
             ),
             gated,
         )

@@ -7,8 +7,13 @@ class PromptBuilder(
     private val workspace: WorkspaceStore,
     private val locale: LocaleController,
     private val workspaceTrust: WorkspaceTrustService,
+    private val skills: SkillRepository,
 ) {
-    suspend fun chatPrompt(title: String = "", mode: AgentMode = AgentMode.Build): String {
+    suspend fun chatPrompt(
+        title: String = "",
+        mode: AgentMode = AgentMode.Build,
+        mentionedSkills: List<String> = emptyList(),
+    ): String {
         val name = workspace.assistantName()
         val documents = workspace.readAll()
         val builder = StringBuilder()
@@ -54,6 +59,14 @@ class PromptBuilder(
         if (trust.isNotBlank()) {
             builder.appendLine("Workspace instructions:")
             builder.appendLine(trust)
+        }
+        val skillSection = skills.promptSection()
+        if (skillSection.isNotBlank()) {
+            builder.appendLine(skillSection)
+        }
+        val mentioned = skills.mentionSection(mentionedSkills)
+        if (mentioned.isNotBlank()) {
+            builder.appendLine(mentioned)
         }
         appendDocuments(builder, documents)
         return builder.toString()

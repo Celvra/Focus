@@ -48,6 +48,8 @@ internal fun SettingsToolsPage(
                 val searchBody = stringResource(R.string.settings_tools_search_body)
                 val mcpTitle = stringResource(R.string.settings_tools_mcp_title)
                 val mcpBody = stringResource(R.string.settings_tools_mcp_body)
+                val skillsTitle = stringResource(R.string.settings_tools_skills_title)
+                val skillsBody = stringResource(R.string.settings_tools_skills_body)
                 val indexTitle = stringResource(R.string.settings_tools_index_title)
                 val indexBody = stringResource(R.string.settings_tools_index_body)
                 val trustTitle = stringResource(R.string.settings_tools_trust_title)
@@ -64,6 +66,12 @@ internal fun SettingsToolsPage(
                         body = mcpBody,
                         icon = FocusIcons.Tool,
                         onClick = { onOpen(SettingsDestination.Mcp) },
+                    )
+                    toolItem(
+                        title = skillsTitle,
+                        body = skillsBody,
+                        icon = FocusIcons.Assistant,
+                        onClick = { onOpen(SettingsDestination.Skills) },
                     )
                     toolItem(
                         title = indexTitle,

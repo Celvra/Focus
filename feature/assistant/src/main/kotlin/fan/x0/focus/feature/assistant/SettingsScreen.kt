@@ -30,6 +30,7 @@ import fan.x0.focus.feature.assistant.settings.SettingsHomePage
 import fan.x0.focus.feature.assistant.settings.SettingsMcpRoute
 import fan.x0.focus.feature.assistant.settings.SettingsModelPickerSheet
 import fan.x0.focus.feature.assistant.settings.SettingsNotificationsPage
+import fan.x0.focus.feature.assistant.settings.SettingsSkillsRoute
 import fan.x0.focus.feature.assistant.settings.SettingsToolsPage
 import fan.x0.focus.feature.assistant.settings.ProviderEditorSheet
 import fan.x0.focus.feature.assistant.settings.SettingsWebSearchRoute
@@ -149,6 +150,10 @@ internal fun SettingsScreen(
                         snackbar = snackbar,
                     )
                     SettingsDestination.Mcp -> SettingsMcpRoute(
+                        onBack = { backStack.removeLastOrNull() },
+                        snackbar = snackbar,
+                    )
+                    SettingsDestination.Skills -> SettingsSkillsRoute(
                         onBack = { backStack.removeLastOrNull() },
                         snackbar = snackbar,
                     )
