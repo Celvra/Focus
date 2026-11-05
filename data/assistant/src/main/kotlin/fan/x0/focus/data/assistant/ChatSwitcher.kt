@@ -46,7 +46,7 @@ class ChatSwitcher {
         _current.value = conversationId
     }
 
-    fun consume() {
-        _command.value = null
+    fun consume(command: ChatCommand) {
+        _command.compareAndSet(command, null)
     }
 }

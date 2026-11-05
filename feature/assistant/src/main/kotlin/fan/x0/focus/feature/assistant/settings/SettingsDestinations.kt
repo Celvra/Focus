@@ -15,6 +15,7 @@ enum class SettingsDestination : NavKey {
     WorkspaceIndex,
     WorkspaceTrust,
     ChatDetail,
+    Im,
     Appearance,
     Notifications,
     Data,

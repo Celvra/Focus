@@ -27,6 +27,7 @@ import fan.x0.focus.feature.assistant.settings.SettingsChatDetailRoute
 import fan.x0.focus.feature.assistant.settings.SettingsDataPage
 import fan.x0.focus.feature.assistant.settings.SettingsDestination
 import fan.x0.focus.feature.assistant.settings.SettingsHomePage
+import fan.x0.focus.feature.assistant.settings.SettingsImRoute
 import fan.x0.focus.feature.assistant.settings.SettingsMcpRoute
 import fan.x0.focus.feature.assistant.settings.SettingsModelPickerSheet
 import fan.x0.focus.feature.assistant.settings.SettingsNotificationsPage
@@ -165,6 +166,10 @@ internal fun SettingsScreen(
                         onBack = { backStack.removeLastOrNull() },
                     )
                     SettingsDestination.ChatDetail -> SettingsChatDetailRoute(
+                        onBack = { backStack.removeLastOrNull() },
+                        snackbar = snackbar,
+                    )
+                    SettingsDestination.Im -> SettingsImRoute(
                         onBack = { backStack.removeLastOrNull() },
                         snackbar = snackbar,
                     )

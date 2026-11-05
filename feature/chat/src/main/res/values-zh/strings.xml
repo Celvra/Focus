@@ -203,4 +203,5 @@
     <string name="chat_subagent_done">已完成</string>
     <string name="chat_subagent_failed">已失败</string>
     <string name="chat_subagent_close">关闭</string>
+    <string name="chat_im_source">%1$s / %2$s</string>
 </resources>

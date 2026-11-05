@@ -1,17 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="onboarding_title">Focus</string>
-    <string name="onboarding_subtitle">Setting up</string>
-    <string name="onboarding_ready_subtitle">Ready to finish</string>
-    <string name="onboarding_skip">Skip</string>
-    <string name="onboarding_finish">Finish setup</string>
+    <string name="onboarding_subtitle">Connect a model</string>
+    <string name="onboarding_ready_subtitle">Set up your assistant</string>
     <string name="onboarding_input_hint">Message %1$s</string>
-    <string name="onboarding_connect_model">Connect your own</string>
-    <string name="onboarding_connected_title">Model connected</string>
-    <string name="onboarding_connected_body">You can finish setup now.</string>
+    <string name="onboarding_connect_model">Connect your own model</string>
+    <string name="onboarding_gate_title">Connect a model first</string>
+    <string name="onboarding_gate_body">Add your own endpoint and key. Setup continues after it is saved.</string>
     <string name="onboarding_model_settings">Model settings</string>
     <string name="onboarding_provider_title">Connect your model</string>
-    <string name="onboarding_provider_body">Setup runs on a public model. Add your own endpoint to keep using Focus afterward.</string>
+    <string name="onboarding_provider_body">Add your own endpoint and key. The model is required before setup can continue.</string>
     <string name="onboarding_provider_name">Name</string>
     <string name="onboarding_base_url">Base URL</string>
     <string name="onboarding_protocol">Protocol</string>

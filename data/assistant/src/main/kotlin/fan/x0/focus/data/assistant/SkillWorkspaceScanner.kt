@@ -193,6 +193,6 @@ class SkillWorkspaceScanner(
         private const val MAX_LINES = 2000
         private const val MAX_FILES = 100
         private const val MAX_DEPTH = 4
-        private const val SCAN_TIMEOUT_MS = 20_000L
+        private const val SCAN_TIMEOUT_MS = 4_000L
     }
 }

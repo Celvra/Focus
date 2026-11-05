@@ -17,6 +17,7 @@ dependencies {
     implementation(projects.data.assistant)
     implementation(projects.data.sources)
     implementation(projects.data.bridge)
+    implementation(projects.data.im)
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)
     implementation(libs.koin.compose)
@@ -37,6 +38,7 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.zxing.core)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }

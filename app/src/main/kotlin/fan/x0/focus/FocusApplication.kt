@@ -7,6 +7,7 @@ import fan.x0.focus.app.AndroidMessageNotifier
 import fan.x0.focus.app.AppModule
 import fan.x0.focus.app.AppPresenceCallbacks
 import fan.x0.focus.app.ChatTurnService
+import fan.x0.focus.app.ImGatewayService
 import fan.x0.focus.core.network.NetworkModule
 import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.NotifyModule
@@ -15,6 +16,7 @@ import fan.x0.focus.data.assistant.ApprovalStore
 import fan.x0.focus.data.assistant.AssistantModule
 import fan.x0.focus.data.assistant.CrewRunner
 import fan.x0.focus.data.assistant.ReminderWorker
+import fan.x0.focus.data.im.ImModule
 import fan.x0.focus.data.sources.FeedRefreshScheduler
 import fan.x0.focus.data.sources.SourcePreferences
 import fan.x0.focus.data.sources.SourcesModule
@@ -44,6 +46,7 @@ import org.koin.plugin.module.dsl.startKoin
         NotifyModule::class,
         SourcesModule::class,
         AssistantModule::class,
+        ImModule::class,
         AppModule::class,
         OnboardingModule::class,
         ChatModule::class,
@@ -94,6 +97,13 @@ class FocusApplication : Application() {
                 AndroidMessageNotifier.CHANNEL_ID,
                 getString(R.string.notification_channel_messages),
                 NotificationManager.IMPORTANCE_DEFAULT,
+            ),
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ImGatewayService.CHANNEL_ID,
+                getString(R.string.notification_channel_im),
+                NotificationManager.IMPORTANCE_LOW,
             ),
         )
     }

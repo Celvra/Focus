@@ -1,5 +1,8 @@
 package fan.x0.focus.data.assistant
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.annotation.Single
 
 @Single
@@ -9,11 +12,24 @@ class PromptBuilder(
     private val workspaceTrust: WorkspaceTrustService,
     private val skills: SkillRepository,
 ) {
+    @Volatile
+    private var trustCache: CachedSection? = null
+
+    @Volatile
+    private var skillCache: CachedSection? = null
+
     suspend fun chatPrompt(
         title: String = "",
         mode: AgentMode = AgentMode.Build,
         mentionedSkills: List<String> = emptyList(),
-    ): String {
+    ): String = coroutineScope {
+        val trustJob = async { trustedWorkspaceSection() }
+        val skillJob = async { skillsSection() }
+        val mentionJob = if (mentionedSkills.isEmpty()) {
+            null
+        } else {
+            async { mentionedSkillsSection(mentionedSkills) }
+        }
         val name = workspace.assistantName()
         val documents = workspace.readAll()
         val builder = StringBuilder()
@@ -55,22 +71,58 @@ class PromptBuilder(
         builder.appendLine("- Delete a feed card or idea only when the user asks, using delete_update or delete_idea with the id from list_updates or list_ideas.")
         builder.appendLine("- You choose the category label and the icon key for every card, idea, and goal. Call list_icons before picking an icon.")
         builder.appendLine("- Categories are yours to name. Reuse a label that list_updates, list_ideas, or list_goals already shows when it fits, and group related items under the same label.")
-        val trust = workspaceTrust.promptSection()
+        val trust = trustJob.await()
         if (trust.isNotBlank()) {
             builder.appendLine("Workspace instructions:")
             builder.appendLine(trust)
         }
-        val skillSection = skills.promptSection()
+        val skillSection = skillJob.await()
         if (skillSection.isNotBlank()) {
             builder.appendLine(skillSection)
         }
-        val mentioned = skills.mentionSection(mentionedSkills)
+        val mentioned = mentionJob?.await().orEmpty()
         if (mentioned.isNotBlank()) {
             builder.appendLine(mentioned)
         }
         appendDocuments(builder, documents)
-        return builder.toString()
+        return@coroutineScope builder.toString()
     }
+
+    private suspend fun trustedWorkspaceSection(): String {
+        val cached = trustCache
+        if (cached != null && fresh(cached)) return cached.text
+        val timeout = if (cached == null) FIRST_SECTION_TIMEOUT_MS else SECTION_TIMEOUT_MS
+        val loaded = withTimeoutOrNull(timeout) { workspaceTrust.promptSection() }
+        if (loaded == null) {
+            val fallback = cached?.text.orEmpty()
+            trustCache = CachedSection(fallback, System.currentTimeMillis())
+            return fallback
+        }
+        trustCache = CachedSection(loaded, System.currentTimeMillis())
+        return loaded
+    }
+
+    private suspend fun skillsSection(): String {
+        val cached = skillCache
+        if (cached != null && fresh(cached)) return cached.text
+        val timeout = if (cached == null) FIRST_SECTION_TIMEOUT_MS else SECTION_TIMEOUT_MS
+        val loaded = withTimeoutOrNull(timeout) { skills.promptSection() }
+        if (loaded == null) {
+            val fallback = cached?.text.orEmpty()
+            skillCache = CachedSection(fallback, System.currentTimeMillis())
+            return fallback
+        }
+        skillCache = CachedSection(loaded, System.currentTimeMillis())
+        return loaded
+    }
+
+    private suspend fun mentionedSkillsSection(names: List<String>): String =
+        withTimeoutOrNull(SECTION_TIMEOUT_MS) { skills.mentionSection(names) }.orEmpty()
+
+    private fun fresh(section: CachedSection): Boolean =
+        System.currentTimeMillis() - section.at < SECTION_TTL_MS
+
+    private data class CachedSection(val text: String, val at: Long)
 
     suspend fun btwPrompt(): String {
         val name = workspace.assistantName()
@@ -93,15 +145,15 @@ class PromptBuilder(
         val tone = workspace.field(WorkspaceFile.User, "Tone")
         val builder = StringBuilder()
         builder.appendLine("You are $name, meeting the user for the first time on their Android phone.")
-        builder.appendLine("This conversation runs on a temporary public model. It is only available during setup and stops working afterward.")
-        builder.appendLine("Goal: make setup feel like a normal first conversation, learn about the user, agree on what to call you, and help them connect their own model.")
+        builder.appendLine("The user has already connected their own model, so this conversation runs on it.")
+        builder.appendLine("Goal: make setup feel like a normal first conversation, learn about the user, and agree on your name, persona, and voice.")
         builder.appendLine("Rules:")
         builder.appendLine("- Ask one thing at a time and follow the user's lead. There is no turn limit.")
         builder.appendLine("- Learn what to call them, their main focus, and how they want replies to sound. Save durable facts with save_profile.")
-        builder.appendLine("- The user needs their own provider after setup. When they are ready, ask for a base URL, API key, and model. Never guess model ids from memory: always call list_models to fetch the provider's live model list first, it returns ids with context window, price, and capability metadata. test_provider checks the connection, save_provider stores it and makes it active, switch_model with default=true saves the model as the app default.")
-        builder.appendLine("- If the user pastes a key, pass it to save_provider and never repeat it back.")
         builder.appendLine("- Near the start, ask what the user wants to call you. Your current name is $name; offer it as the default when they have no preference. Save their choice with set_assistant_name and never rename yourself without their input.")
-        builder.appendLine("- Do not call complete_onboarding until the user is ready to start or asks to finish. When you call it, say one short goodbye.")
+        builder.appendLine("- Once you agree on your role and voice, write a short PERSONA.md with write_workspace_file. Keep the Name line.")
+        builder.appendLine("- Do not ask for API keys or provider details again. The model connection is already set.")
+        builder.appendLine("- Do not call complete_onboarding until the user's profile, your name, and your persona are settled, or the user asks to finish. When you call it, say one short goodbye.")
         builder.appendLine("- Do not discuss unrelated topics and do not invent tools.")
         builder.appendLine("- This is user turn $turn. ${language()} Current time: ${ToolTime.full(ToolTime.now())}.")
         builder.appendLine("- Current USER.md content:")
@@ -131,5 +183,11 @@ class PromptBuilder(
             tag.startsWith("en") -> "Reply in English."
             else -> "Reply in the user's language."
         }
+    }
+
+    companion object {
+        private const val SECTION_TTL_MS = 30_000L
+        private const val SECTION_TIMEOUT_MS = 2_000L
+        private const val FIRST_SECTION_TIMEOUT_MS = 5_000L
     }
 }

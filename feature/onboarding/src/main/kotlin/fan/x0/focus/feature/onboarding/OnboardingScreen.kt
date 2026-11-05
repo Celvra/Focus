@@ -69,7 +69,6 @@ import fan.x0.focus.core.designsystem.components.FocusPickerItem
 import fan.x0.focus.core.designsystem.components.FocusPickerSelection
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusReasoningCard
-import fan.x0.focus.core.designsystem.components.FocusTextButton
 import fan.x0.focus.core.designsystem.components.FocusTraceCard
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
@@ -122,18 +121,6 @@ fun OnboardingScreen(
                         },
                     ),
                     onMenu = null,
-                    actions = {
-                        FocusTextButton(
-                            text = stringResource(
-                                if (state.providerReady) {
-                                    R.string.onboarding_finish
-                                } else {
-                                    R.string.onboarding_skip
-                                },
-                            ),
-                            onClick = { onAction(OnboardingAction.Finish) },
-                        )
-                    },
                 )
             },
         ) { padding ->
@@ -145,6 +132,8 @@ fun OnboardingScreen(
             ) {
                 if (state.loading) {
                     FocusLoadingBlock()
+                } else if (!state.providerReady) {
+                    ProviderGate(onAction = onAction)
                 } else {
                     Conversation(
                         state = state,
@@ -153,14 +142,16 @@ fun OnboardingScreen(
                         hazeState = hazeState,
                     )
                 }
-                ComposerArea(
-                    state = state,
-                    onAction = onAction,
-                    hazeState = hazeState,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .onSizeChanged { overlayHeight = it.height },
-                )
+                if (state.providerReady) {
+                    ComposerArea(
+                        state = state,
+                        onAction = onAction,
+                        hazeState = hazeState,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .onSizeChanged { overlayHeight = it.height },
+                    )
+                }
             }
         }
         if (state.providerSheetOpen) {
@@ -289,6 +280,38 @@ private fun OnboardingNotice(text: String) {
 }
 
 @Composable
+private fun ProviderGate(onAction: (OnboardingAction) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 28.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = stringResource(R.string.onboarding_gate_title),
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Text(
+            text = stringResource(R.string.onboarding_gate_body),
+            modifier = Modifier.padding(top = 12.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FocusPrimaryButton(
+            text = stringResource(R.string.onboarding_connect_model),
+            onClick = { onAction(OnboardingAction.OpenProviderSheet) },
+            icon = FocusIcons.Tune,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 28.dp)
+                .height(56.dp),
+        )
+    }
+}
+
+@Composable
 private fun ComposerArea(
     state: OnboardingUiState,
     onAction: (OnboardingAction) -> Unit,
@@ -297,9 +320,6 @@ private fun ComposerArea(
 ) {
     val name = state.assistantName.ifBlank { stringResource(R.string.onboarding_title) }
     Column(modifier = modifier.fillMaxWidth()) {
-        if (state.providerReady) {
-            ConnectedBanner()
-        }
         FocusComposer(
             input = state.input,
             onInputChange = { onAction(OnboardingAction.InputChanged(it)) },
@@ -311,55 +331,13 @@ private fun ComposerArea(
             hazeState = hazeState,
             pills = {
                 FocusComposerPill(
-                    label = stringResource(
-                        if (state.providerReady) {
-                            R.string.onboarding_model_settings
-                        } else {
-                            R.string.onboarding_connect_model
-                        },
-                    ),
+                    label = stringResource(R.string.onboarding_model_settings),
                     icon = FocusIcons.Tune,
                     compact = true,
                     onClick = { onAction(OnboardingAction.OpenProviderSheet) },
                 )
             },
         )
-    }
-}
-
-@Composable
-private fun ConnectedBanner() {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                imageVector = FocusIcons.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.onboarding_connected_title),
-                    style = MaterialTheme.typography.titleSmallEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = stringResource(R.string.onboarding_connected_body),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
     }
 }
 
@@ -483,13 +461,6 @@ private fun ProviderSheet(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (state.providerReady) {
-                FocusTextButton(
-                    text = stringResource(R.string.onboarding_finish),
-                    onClick = { onAction(OnboardingAction.Finish) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
         }
     }
 }

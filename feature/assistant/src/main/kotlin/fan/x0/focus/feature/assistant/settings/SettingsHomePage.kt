@@ -48,6 +48,8 @@ internal fun SettingsHomePage(onOpen: (SettingsDestination) -> Unit) {
                 val toolsBody = stringResource(R.string.settings_page_tools_body)
                 val detailTitle = stringResource(R.string.settings_page_chat_detail)
                 val detailBody = stringResource(R.string.settings_page_chat_detail_body)
+                val imTitle = stringResource(R.string.settings_page_im)
+                val imBody = stringResource(R.string.settings_page_im_body)
                 val appearanceTitle = stringResource(R.string.settings_page_appearance)
                 val appearanceBody = stringResource(R.string.settings_page_appearance_body)
                 val notificationsTitle = stringResource(R.string.settings_page_notifications)
@@ -78,6 +80,12 @@ internal fun SettingsHomePage(onOpen: (SettingsDestination) -> Unit) {
                         body = detailBody,
                         icon = FocusIcons.Chat,
                         onClick = { onOpen(SettingsDestination.ChatDetail) },
+                    )
+                    pageItem(
+                        title = imTitle,
+                        body = imBody,
+                        icon = FocusIcons.Link,
+                        onClick = { onOpen(SettingsDestination.Im) },
                     )
                     pageItem(
                         title = appearanceTitle,

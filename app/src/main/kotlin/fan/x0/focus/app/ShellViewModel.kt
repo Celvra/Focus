@@ -9,6 +9,7 @@ import fan.x0.focus.data.assistant.WorkspaceStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
 
@@ -33,6 +34,9 @@ class ShellViewModel(
 
     init {
         refresh()
+        viewModelScope.launch {
+            chats.changes.collect { load() }
+        }
     }
 
     fun refresh() {

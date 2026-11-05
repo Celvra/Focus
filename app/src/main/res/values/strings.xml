@@ -4,6 +4,8 @@
     <string name="notification_channel_reminders">Reminders</string>
     <string name="notification_channel_chat_turns">Chat replies</string>
     <string name="notification_channel_messages">Messages</string>
+    <string name="notification_channel_im">IM channels</string>
+    <string name="notification_im_running">%1$d channels running, %2$d connected</string>
     <string name="chat_turn_running">Reply in progress</string>
     <string name="notification_reply_title">Reply ready</string>
     <string name="notification_reply_failed_title">Reply failed</string>

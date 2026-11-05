@@ -4,6 +4,9 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -18,6 +21,8 @@ class ChatStore(private val database: AssistantDatabase) {
     private val attachmentsSerializer = ListSerializer(ChatAttachment.serializer())
     private val reactionsSerializer = ListSerializer(String.serializer())
     private val diffsSerializer = ListSerializer(ListSerializer(FileDiff.serializer()))
+    private val _changes = MutableSharedFlow<String>(extraBufferCapacity = 32)
+    val changes: SharedFlow<String> = _changes.asSharedFlow()
 
     suspend fun conversations(archived: Boolean = false): List<Conversation> = withContext(Dispatchers.IO) {
         database.readableDatabase.rawQuery(
@@ -69,12 +74,14 @@ class ChatStore(private val database: AssistantDatabase) {
                 put("mode", mode.wire)
             }
             database.writableDatabase.insertOrThrow("conversations", null, values)
+            _changes.tryEmit(conversation.id)
             conversation
         }
 
     suspend fun rename(id: String, title: String) = withContext(Dispatchers.IO) {
         val values = ContentValues().apply { put("title", title.take(80)) }
         database.writableDatabase.update("conversations", values, "id = ?", arrayOf(id))
+        _changes.tryEmit(id)
     }
 
     suspend fun setProvider(id: String, providerId: String, model: String, reasoning: String) =
@@ -117,6 +124,7 @@ class ChatStore(private val database: AssistantDatabase) {
     private fun setArchived(id: String, archived: Boolean) {
         val values = ContentValues().apply { put("archived", if (archived) 1 else 0) }
         database.writableDatabase.update("conversations", values, "id = ?", arrayOf(id))
+        _changes.tryEmit(id)
     }
 
     suspend fun deleteConversation(id: String) = withContext(Dispatchers.IO) {
@@ -131,6 +139,7 @@ class ChatStore(private val database: AssistantDatabase) {
         } finally {
             db.endTransaction()
         }
+        _changes.tryEmit(id)
     }
 
     suspend fun messages(conversationId: String, limit: Int = 80): List<ChatMessage> =
@@ -288,6 +297,7 @@ class ChatStore(private val database: AssistantDatabase) {
         val id = database.writableDatabase.insertOrThrow("messages", null, values)
         val touch = ContentValues().apply { put("updated_at", now) }
         database.writableDatabase.update("conversations", touch, "id = ?", arrayOf(conversationId))
+        _changes.tryEmit(conversationId)
         id
     }
 
@@ -340,6 +350,7 @@ class ChatStore(private val database: AssistantDatabase) {
         } finally {
             db.endTransaction()
         }
+        _changes.tryEmit(conversationId)
     }
 
     suspend fun todos(conversationId: String): List<ConversationTodo> = withContext(Dispatchers.IO) {

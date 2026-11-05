@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import fan.x0.focus.app.AndroidMessageNotifier
 import fan.x0.focus.app.AndroidLocaleController
+import fan.x0.focus.app.ImGatewayService
 import fan.x0.focus.core.designsystem.theme.FocusTheme
 import fan.x0.focus.data.assistant.ChatSwitcher
 import fan.x0.focus.data.assistant.CrewSwitcher
@@ -22,6 +23,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        ImGatewayService.start(this)
         KoinPlatform.getKoin().get<AndroidLocaleController>().bind(this)
         openConversationFrom(intent)
         setContent {

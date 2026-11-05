@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 
@@ -62,6 +63,7 @@ private data class GroupItem(
     val formContent: (@Composable ColumnScope.() -> Unit)? = null,
     val hasHeader: Boolean = true,
     val expanded: Boolean = true,
+    val verticalPadding: Dp = 12.dp,
 )
 
 @DslMarker
@@ -83,6 +85,7 @@ interface FocusCardGroupScope {
         headlineContent: (@Composable () -> Unit)? = null,
         supportingContent: (@Composable () -> Unit)? = null,
         leadingContent: (@Composable () -> Unit)? = null,
+        verticalPadding: Dp = 12.dp,
         content: @Composable ColumnScope.() -> Unit,
     )
 
@@ -91,6 +94,7 @@ interface FocusCardGroupScope {
         headlineContent: (@Composable () -> Unit)? = null,
         supportingContent: (@Composable () -> Unit)? = null,
         leadingContent: (@Composable () -> Unit)? = null,
+        verticalPadding: Dp = 12.dp,
         content: @Composable ColumnScope.() -> Unit,
     )
 }
@@ -122,6 +126,7 @@ private class CardGroupScopeImpl : FocusCardGroupScope {
         headlineContent: (@Composable () -> Unit)?,
         supportingContent: (@Composable () -> Unit)?,
         leadingContent: (@Composable () -> Unit)?,
+        verticalPadding: Dp,
         content: @Composable ColumnScope.() -> Unit,
     ) {
         pushFormItem(
@@ -129,6 +134,7 @@ private class CardGroupScopeImpl : FocusCardGroupScope {
             headlineContent = headlineContent,
             supportingContent = supportingContent,
             leadingContent = leadingContent,
+            verticalPadding = verticalPadding,
             content = content,
         )
     }
@@ -138,6 +144,7 @@ private class CardGroupScopeImpl : FocusCardGroupScope {
         headlineContent: (@Composable () -> Unit)?,
         supportingContent: (@Composable () -> Unit)?,
         leadingContent: (@Composable () -> Unit)?,
+        verticalPadding: Dp,
         content: @Composable ColumnScope.() -> Unit,
     ) {
         pushFormItem(
@@ -145,6 +152,7 @@ private class CardGroupScopeImpl : FocusCardGroupScope {
             headlineContent = headlineContent,
             supportingContent = supportingContent,
             leadingContent = leadingContent,
+            verticalPadding = verticalPadding,
             content = content,
         )
     }
@@ -154,6 +162,7 @@ private class CardGroupScopeImpl : FocusCardGroupScope {
         headlineContent: (@Composable () -> Unit)?,
         supportingContent: (@Composable () -> Unit)?,
         leadingContent: (@Composable () -> Unit)?,
+        verticalPadding: Dp,
         content: @Composable ColumnScope.() -> Unit,
     ) {
         items += GroupItem(
@@ -166,6 +175,7 @@ private class CardGroupScopeImpl : FocusCardGroupScope {
             formContent = content,
             hasHeader = headlineContent != null,
             expanded = expanded,
+            verticalPadding = verticalPadding,
         )
     }
 }
@@ -303,7 +313,7 @@ private fun GroupFormItem(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = item.verticalPadding),
             verticalArrangement = Arrangement.spacedBy(if (item.hasHeader) 12.dp else 0.dp),
         ) {
             if (item.hasHeader) GroupHeader(item)

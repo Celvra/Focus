@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 17) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 19) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -256,6 +256,57 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             )
             """.trimIndent(),
         )
+        db.execSQL(
+            """
+            CREATE TABLE im_accounts(
+                id TEXT PRIMARY KEY,
+                channel TEXT NOT NULL,
+                name TEXT NOT NULL,
+                config_json TEXT NOT NULL DEFAULT '{}',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'Disabled',
+                status_detail TEXT NOT NULL DEFAULT '',
+                platform_user_id TEXT NOT NULL DEFAULT '',
+                owner_id TEXT NOT NULL DEFAULT '',
+                cursor TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE im_chats(
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL,
+                external_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                conversation_id TEXT,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                send_thinking INTEGER NOT NULL DEFAULT 1,
+                send_tools INTEGER NOT NULL DEFAULT 1,
+                platform_context TEXT NOT NULL DEFAULT '',
+                last_message_at INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                UNIQUE(account_id, external_id, kind)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX idx_im_chats_account ON im_chats(account_id, last_message_at)")
+        db.execSQL("CREATE INDEX idx_im_chats_conversation ON im_chats(conversation_id)")
+        db.execSQL(
+            """
+            CREATE TABLE im_seen(
+                account_id TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                seen_at INTEGER NOT NULL,
+                PRIMARY KEY(account_id, message_id)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX idx_im_seen_time ON im_seen(seen_at)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -500,6 +551,61 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
         }
         if (oldVersion < 17) {
             db.execSQL("ALTER TABLE crew_messages ADD COLUMN stats_json TEXT")
+        }
+        if (oldVersion < 18) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS im_accounts(
+                    id TEXT PRIMARY KEY,
+                    channel TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    config_json TEXT NOT NULL DEFAULT '{}',
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    status TEXT NOT NULL DEFAULT 'Disabled',
+                    status_detail TEXT NOT NULL DEFAULT '',
+                    platform_user_id TEXT NOT NULL DEFAULT '',
+                    owner_id TEXT NOT NULL DEFAULT '',
+                    cursor TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS im_chats(
+                    id TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL,
+                    external_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    title TEXT NOT NULL DEFAULT '',
+                    conversation_id TEXT,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    platform_context TEXT NOT NULL DEFAULT '',
+                    last_message_at INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    UNIQUE(account_id, external_id, kind)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_im_chats_account ON im_chats(account_id, last_message_at)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_im_chats_conversation ON im_chats(conversation_id)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS im_seen(
+                    account_id TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    seen_at INTEGER NOT NULL,
+                    PRIMARY KEY(account_id, message_id)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_im_seen_time ON im_seen(seen_at)")
+        }
+        if (oldVersion < 19) {
+            db.execSQL("ALTER TABLE im_chats ADD COLUMN send_thinking INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE im_chats ADD COLUMN send_tools INTEGER NOT NULL DEFAULT 1")
         }
     }
 

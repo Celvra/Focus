@@ -667,7 +667,7 @@ object ToolCatalog {
         ),
         ToolSpec(
             name = "complete_onboarding",
-            description = "Finish first-run setup. Only for onboarding.",
+            description = "Finish first-run setup only after the user's profile, your name, and your persona are settled. Only for onboarding.",
             kind = ToolKind.Write,
             parameters = schema {},
         ),
@@ -885,6 +885,63 @@ object ToolCatalog {
                 put("device_id", deviceId())
             },
         ),
+        ToolSpec(
+            name = "im_list_accounts",
+            description = "List IM channel accounts with their connection status.",
+            kind = ToolKind.Read,
+            parameters = schema {},
+        ),
+        ToolSpec(
+            name = "im_list_chats",
+            description = "List IM chats and the Focus conversation each one is bound to. Use account_id to filter.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("account_id", string("Optional IM account id"))
+            },
+        ),
+        ToolSpec(
+            name = "im_list_conversations",
+            description = "List recent Focus conversations with ids, so an IM chat can be bound to one.",
+            kind = ToolKind.Read,
+            parameters = schema {},
+        ),
+        ToolSpec(
+            name = "im_bind_chat",
+            description = "Bind an IM chat to a Focus conversation. New messages from that chat will use the conversation.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("chat_id", "conversation_id")) {
+                put("chat_id", string("IM chat id from im_list_chats"))
+                put("conversation_id", string("Conversation id to bind"))
+            },
+        ),
+        ToolSpec(
+            name = "im_set_chat_enabled",
+            description = "Pause or resume one IM chat. Paused chats keep their binding but ignore new messages.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("chat_id", "enabled")) {
+                put("chat_id", string("IM chat id from im_list_chats"))
+                put("enabled", boolean("True to resume, false to pause"))
+            },
+        ),
+        ToolSpec(
+            name = "im_set_chat_progress",
+            description = "Choose whether one IM chat receives live thinking and tool call progress.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("chat_id", "thinking", "tools")) {
+                put("chat_id", string("IM chat id from im_list_chats"))
+                put("thinking", boolean("True to send live thinking"))
+                put("tools", boolean("True to send tool call progress"))
+            },
+        ),
+        ToolSpec(
+            name = "im_send_text",
+            description = "Send a text message to one IM chat. Requires the user's approval.",
+            kind = ToolKind.Gated,
+            parameters = schema(required = listOf("chat_id", "text")) {
+                put("chat_id", string("IM chat id from im_list_chats"))
+                put("text", string("Message text"))
+            },
+        ),
     ) + SkillToolCatalog.specs + CrewToolCatalog.assistantSpecs
 
     private val byName = all.associateBy { it.name }
@@ -911,6 +968,7 @@ object ToolCatalog {
         "save_provider",
         "test_provider",
         "list_models",
+        "write_workspace_file",
         "complete_onboarding",
     )
 

@@ -425,7 +425,7 @@ class CrewEngine(
                     outcome = tools.runStep(step, conversationId = group.id, mode = AgentMode.Build)
                 }
                 if (!outcome.ok) ok = false
-                lines += "${step.label}: ${if (outcome.ok) "done" else "failed"}. ${outcome.summary}"
+                lines += outcome.describe()
             }
             approvals.decide(approval.id, ApprovalStatus.Approved, lines.joinToString("\n").take(500))
         } else {

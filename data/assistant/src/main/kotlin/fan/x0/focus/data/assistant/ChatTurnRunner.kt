@@ -5,12 +5,15 @@ import fan.x0.focus.core.error.toAppError
 import fan.x0.focus.core.notify.MessageNotifier
 import fan.x0.focus.core.notify.NotifyActionKind
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,13 +22,28 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.annotation.Single
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+
+data class ChatAction(
+    val conversationId: String,
+    val kind: NotifyActionKind,
+)
+
+class ChatTurnHandle(
+    val conversationId: String,
+    val turnId: Long,
+    private val completion: CompletableDeferred<ChatTurnResult?>,
+) {
+    suspend fun await(): ChatTurnResult? = completion.await()
+}
 
 @Single
 class ChatTurnRunner(
@@ -39,6 +57,8 @@ class ChatTurnRunner(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, Job>()
     private val titleJobs = ConcurrentHashMap<String, Job>()
+    private val handles = ConcurrentHashMap<String, CompletableDeferred<ChatTurnResult?>>()
+    private val progressChannels = ConcurrentHashMap<String, Channel<ChatTurnProgress>>()
     private val nextTurnId = AtomicLong()
 
     private val _states = MutableStateFlow<Map<String, ChatTurnState>>(emptyMap())
@@ -49,6 +69,9 @@ class ChatTurnRunner(
 
     private val _titleUpdates = MutableSharedFlow<String>(extraBufferCapacity = 16)
     val titleUpdates: SharedFlow<String> = _titleUpdates.asSharedFlow()
+
+    private val _actions = MutableSharedFlow<ChatAction>(extraBufferCapacity = 16)
+    val actions: SharedFlow<ChatAction> = _actions.asSharedFlow()
 
     init {
         scope.launch {
@@ -78,10 +101,32 @@ class ChatTurnRunner(
         text: String,
         options: TurnOptions,
         appendUser: Boolean = true,
+        progress: Channel<ChatTurnProgress>? = null,
+    ): ChatTurnHandle? = launch(
+        conversationId = conversationId,
+        manualCompact = false,
+        options = options,
+        userText = text,
+        progress = progress,
     ) {
-        launch(conversationId, manualCompact = false, options = options) {
-            engine.send(conversationId, text, ChatMode.Chat, options, appendUser)
+        engine.send(conversationId, text, ChatMode.Chat, options, appendUser)
+    }
+
+    suspend fun startAndAwait(
+        conversationId: String,
+        text: String,
+        options: TurnOptions,
+        appendUser: Boolean = true,
+        timeoutMs: Long = 20 * 60_000,
+        progress: Channel<ChatTurnProgress>? = null,
+    ): ChatTurnResult? = withTimeoutOrNull(timeoutMs) {
+        while (true) {
+            val handle = start(conversationId, text, options, appendUser, progress)
+            if (handle != null) return@withTimeoutOrNull handle.await()
+            states.first { it[conversationId]?.running != true }
+            delay(50)
         }
+        null
     }
 
     fun compact(conversationId: String, options: TurnOptions) {
@@ -94,19 +139,27 @@ class ChatTurnRunner(
         conversationId: String,
         manualCompact: Boolean,
         options: TurnOptions,
+        userText: String = "",
+        progress: Channel<ChatTurnProgress>? = null,
         flow: () -> Flow<ChatEvent>,
-    ) {
-        if (conversationId.isBlank() || isRunning(conversationId)) return
+    ): ChatTurnHandle? {
+        if (conversationId.isBlank() || isRunning(conversationId)) return null
         val turnId = nextTurnId.incrementAndGet()
         _results.update { it - conversationId }
         val state = ChatTurnState(
             conversationId = conversationId,
             turnId = turnId,
             running = true,
+            userText = userText,
             compacting = manualCompact,
         )
         _states.update { it + (conversationId to state) }
+        if (progress != null) {
+            progressChannels.put(conversationId, progress)?.close()
+        }
         keepAlive.start()
+        val completion = CompletableDeferred<ChatTurnResult?>()
+        handles[conversationId] = completion
         var compactionFailed = false
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
@@ -115,23 +168,44 @@ class ChatTurnRunner(
                         is ChatEvent.Delta -> updateEntries(conversationId, turnId) { entries ->
                             entries.appendAnswer(event.text, reasoning = false, now = System.currentTimeMillis())
                         }
-                        is ChatEvent.ReasoningDelta -> updateEntries(conversationId, turnId) { entries ->
-                            entries.appendAnswer(event.text, reasoning = true, now = System.currentTimeMillis())
+                        is ChatEvent.ReasoningDelta -> {
+                            updateEntries(conversationId, turnId) { entries ->
+                                entries.appendAnswer(event.text, reasoning = true, now = System.currentTimeMillis())
+                            }
+                            emitProgress(
+                                conversationId,
+                                ChatTurnProgress.Reasoning(event.text, progressStats(conversationId)),
+                            )
                         }
-                        is ChatEvent.ReasoningTimed -> updateEntries(conversationId, turnId) { entries ->
-                            entries.finishReasoning(event.durationMs)
+                        is ChatEvent.ReasoningTimed -> {
+                            updateEntries(conversationId, turnId) { entries ->
+                                entries.finishReasoning(event.durationMs)
+                            }
+                            emitProgress(conversationId, ChatTurnProgress.ReasoningEnded)
                         }
                         is ChatEvent.UserMessageAppended -> scheduleTitle(conversationId, event.turns, options)
                         is ChatEvent.WorkingTextChanged -> updateState(conversationId, turnId) { state ->
                             state.copy(workingText = event.text)
                         }
-                        is ChatEvent.ToolStarted -> updateEntries(conversationId, turnId) { entries ->
-                            entries.startStep(
-                                id = event.id,
-                                label = event.label,
-                                tool = event.tool,
-                                arguments = event.arguments,
-                                startedAt = System.currentTimeMillis(),
+                        is ChatEvent.ToolStarted -> {
+                            updateEntries(conversationId, turnId) { entries ->
+                                entries.startStep(
+                                    id = event.id,
+                                    label = event.label,
+                                    tool = event.tool,
+                                    arguments = event.arguments,
+                                    startedAt = System.currentTimeMillis(),
+                                )
+                            }
+                            emitProgress(
+                                conversationId,
+                                ChatTurnProgress.ToolStarted(
+                                    id = event.id,
+                                    label = event.label,
+                                    tool = event.tool,
+                                    arguments = event.arguments,
+                                    stats = progressStats(conversationId),
+                                ),
                             )
                         }
                         is ChatEvent.ToolFinished -> {
@@ -221,8 +295,11 @@ class ChatTurnRunner(
                         is ChatEvent.TodoUpdated -> updateState(conversationId, turnId) { state ->
                             state.copy(todos = event.todos)
                         }
-                        is ChatEvent.StatsUpdated -> updateState(conversationId, turnId) { state ->
-                            state.copy(stats = event.stats)
+                        is ChatEvent.StatsUpdated -> {
+                            updateState(conversationId, turnId) { state ->
+                                state.copy(stats = event.stats)
+                            }
+                            emitProgress(conversationId, ChatTurnProgress.Stats(event.stats))
                         }
                         is ChatEvent.CompactionStarted -> {
                             updateState(conversationId, turnId) { state ->
@@ -267,7 +344,7 @@ class ChatTurnRunner(
                             val finished = _states.value[conversationId]
                             finish(conversationId, turnId, null, compactionFailed)
                             if (finished != null && !manualCompact) {
-                                pushReply(finished, null, failed = false)
+                                pushReply(finished, null, failed = false, silent = options.silentReply)
                             }
                         }
                         is ChatEvent.Failed -> {
@@ -275,7 +352,7 @@ class ChatTurnRunner(
                             val finished = _states.value[conversationId]
                             finish(conversationId, turnId, event.error, compactionFailed)
                             if (finished != null && !manualCompact) {
-                                pushReply(finished, event.error, failed = true)
+                                pushReply(finished, event.error, failed = true, silent = options.silentReply)
                             }
                         }
                     }
@@ -290,11 +367,19 @@ class ChatTurnRunner(
                 persistPartial(conversationId, turnId)
                 finish(conversationId, turnId, e.toAppError(), compactionFailed)
             } finally {
-                jobs.remove(conversationId)
+                val self = coroutineContext[Job]
+                if (self != null) jobs.remove(conversationId, self)
+                if (progress != null && progressChannels.remove(conversationId, progress)) {
+                    progress.close()
+                }
+                if (handles.remove(conversationId, completion)) {
+                    completion.complete(_results.value[conversationId])
+                }
             }
         }
         jobs[conversationId] = job
         job.start()
+        return ChatTurnHandle(conversationId, turnId, completion)
     }
 
     fun stop(conversationId: String) {
@@ -318,6 +403,25 @@ class ChatTurnRunner(
             if (results[conversationId]?.turnId == turnId) results - conversationId else results
         }
         return previous[conversationId]?.turnId == turnId
+    }
+
+    private fun emitProgress(conversationId: String, progress: ChatTurnProgress) {
+        progressChannels[conversationId]?.trySend(progress)
+    }
+
+    private fun progressStats(conversationId: String): MessageStats {
+        val state = _states.value[conversationId] ?: return MessageStats()
+        val answers = state.entries.count { it is ChatTurnEntry.Answer }
+        val steps = state.entries.sumOf { entry ->
+            when (entry) {
+                is ChatTurnEntry.Trace -> entry.steps.count { it.status != ChatTurnStepStatus.Pending }
+                else -> 0
+            }
+        }
+        return state.stats.copy(
+            round = maxOf(state.stats.round, answers),
+            step = maxOf(state.stats.step, steps),
+        )
     }
 
     private fun updateEntries(
@@ -347,13 +451,25 @@ class ChatTurnRunner(
     private fun finish(conversationId: String, turnId: Long, error: AppError?, compactionFailed: Boolean) {
         val state = _states.value[conversationId] ?: return
         if (state.turnId != turnId) return
+        val answer = state.entries
+            .filterIsInstance<ChatTurnEntry.Answer>()
+            .lastOrNull()
+            ?.text
+            ?.trim()
+            .orEmpty()
         _states.update { it - conversationId }
-        _results.update {
-            it + (conversationId to ChatTurnResult(conversationId, turnId, error, compactionFailed))
-        }
+        val result = ChatTurnResult(conversationId, turnId, error, compactionFailed, answer)
+        _results.update { it + (conversationId to result) }
+        handles.remove(conversationId)?.complete(result)
     }
 
-    private fun pushReply(state: ChatTurnState, error: AppError?, failed: Boolean) {
+    private fun pushReply(
+        state: ChatTurnState,
+        error: AppError?,
+        failed: Boolean,
+        silent: Boolean,
+    ) {
+        if (silent) return
         scope.launch {
             val errorText = error?.let { it.serverMessage ?: it.serverTitle ?: it.type.name }.orEmpty()
             val answer = state.entries
@@ -372,6 +488,7 @@ class ChatTurnRunner(
     }
 
     private fun pushAction(conversationId: String, kind: NotifyActionKind) {
+        _actions.tryEmit(ChatAction(conversationId, kind))
         scope.launch {
             notifier.notifyAction(conversationId, titleOf(conversationId), kind)
         }
@@ -386,6 +503,7 @@ class ChatTurnRunner(
     }
 
     private suspend fun scheduleTitle(conversationId: String, turns: Int, options: TurnOptions) {
+        if (!options.autoTitle) return
         val due = turns == 1 || turns % TITLE_REFRESH_TURNS == 0
         val blank = chats.conversation(conversationId)?.title.isNullOrBlank()
         if (!due && !blank) return

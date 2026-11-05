@@ -32,6 +32,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.koin.core.annotation.Single
+import org.koin.mp.KoinPlatform
 import java.util.UUID
 
 data class ToolResult(
@@ -57,7 +58,23 @@ data class StepOutcome(
     val summary: String,
     val diffs: List<FileDiff> = emptyList(),
     val trust: WorkspaceTrustRequest? = null,
-)
+    val content: String = "",
+) {
+    fun describe(): String = buildString {
+        append(label).append(": ")
+        if (ok) {
+            append("done. ").append(summary)
+            if (content.isNotBlank() && content != summary) append('\n').append(content)
+        } else {
+            append("failed.")
+            if (content.isNotBlank()) {
+                append('\n').append(content)
+            } else {
+                append(' ').append(summary)
+            }
+        }
+    }
+}
 
 @Single
 class ToolExecutor(
@@ -119,7 +136,7 @@ class ToolExecutor(
                     )
                 }
                 val result = runToolGated(spec, args, conversationId, trust)
-                StepOutcome(step.label, result.ok, result.summary, result.diffs, result.trust)
+                StepOutcome(step.label, result.ok, result.summary, result.diffs, result.trust, result.content)
             }
         }
     }
@@ -1457,6 +1474,43 @@ class ToolExecutor(
                 bridge.backgroundClear(endpoint, args.text("id"))
                 ok("Cleared background commands", "Background command logs cleared.")
             }
+            "im_list_accounts" -> {
+                val bridge = imBridge() ?: return fail("IM channels are not available")
+                ok("IM accounts", bridge.listAccounts())
+            }
+            "im_list_chats" -> {
+                val bridge = imBridge() ?: return fail("IM channels are not available")
+                ok("IM chats", bridge.listChats(args.text("account_id")))
+            }
+            "im_list_conversations" -> {
+                val bridge = imBridge() ?: return fail("IM channels are not available")
+                ok("Conversations", bridge.listConversations())
+            }
+            "im_bind_chat" -> {
+                val bridge = imBridge() ?: return fail("IM channels are not available")
+                val chatId = args.text("chat_id") ?: return fail("chat_id is required")
+                val conversationId = args.text("conversation_id") ?: return fail("conversation_id is required")
+                ok("IM chat bound", bridge.bindChat(chatId, conversationId))
+            }
+            "im_set_chat_enabled" -> {
+                val bridge = imBridge() ?: return fail("IM channels are not available")
+                val chatId = args.text("chat_id") ?: return fail("chat_id is required")
+                val enabled = args.flag("enabled") ?: return fail("enabled is required")
+                ok("IM chat updated", bridge.setChatEnabled(chatId, enabled))
+            }
+            "im_set_chat_progress" -> {
+                val bridge = imBridge() ?: return fail("IM channels are not available")
+                val chatId = args.text("chat_id") ?: return fail("chat_id is required")
+                val thinking = args.flag("thinking") ?: return fail("thinking is required")
+                val tools = args.flag("tools") ?: return fail("tools is required")
+                ok("IM chat updated", bridge.setChatProgress(chatId, thinking, tools))
+            }
+            "im_send_text" -> {
+                val bridge = imBridge() ?: return fail("IM channels are not available")
+                val chatId = args.text("chat_id") ?: return fail("chat_id is required")
+                val text = args.text("text") ?: return fail("text is required")
+                ok("IM message sent", bridge.sendText(chatId, text))
+            }
             "spawn_agent" -> fail("The subagent runner is only available from a chat turn")
             else -> fail("Unsupported tool: ${spec.name}")
         }
@@ -1483,6 +1537,9 @@ class ToolExecutor(
         }
         return result
     }
+
+    private fun imBridge(): ImToolBridge? =
+        runCatching { KoinPlatform.getKoin().get<ImToolBridge>() }.getOrNull()
 
     private sealed interface Draft {
         val title: String
@@ -1543,6 +1600,15 @@ class ToolExecutor(
             val name = runCatching { files.nameOf(uri) }.getOrNull()
             SimpleDraft("Delete file", name ?: uri, "Delete file: ${name ?: uri}")
         }
+        "im_send_text" -> {
+            val chatId = args.text("chat_id") ?: return null
+            val text = args.text("text") ?: return null
+            SimpleDraft(
+                title = "Send IM message",
+                summary = "Chat $chatId\n${text.take(400)}",
+                label = "Send: ${text.take(60)}",
+            )
+        }
         "bridge_run_command" -> {
             val command = args.text("command") ?: return null
             val cwd = args.text("cwd")
@@ -1586,6 +1652,42 @@ class ToolExecutor(
                 "Close session",
                 "Close session $sessionId${device?.let { " on $it" }.orEmpty()}",
                 "Close session $sessionId",
+            )
+        }
+        "bridge_bg_start" -> {
+            val command = args.text("command") ?: return null
+            val cwd = args.text("cwd")
+            val device = bridgeTarget(args)?.name
+            SimpleDraft(
+                title = "Start background command",
+                summary = buildString {
+                    append(command.take(400))
+                    if (!cwd.isNullOrBlank()) append("\nin ").append(cwd)
+                    if (!device.isNullOrBlank()) append("\non ").append(device)
+                },
+                label = "Start: ${command.take(80)}",
+            )
+        }
+        "bridge_bg_kill" -> {
+            val id = args.text("id") ?: return null
+            val device = bridgeTarget(args)?.name
+            SimpleDraft(
+                title = "Stop background command",
+                summary = "Stop $id" + device?.let { " on $it" }.orEmpty(),
+                label = "Stop: $id",
+            )
+        }
+        "mcp_call_tool" -> {
+            val server = mcpServer(args) ?: return null
+            val tool = args.text("tool") ?: return null
+            val detail = args.jsonObject("arguments")?.toString().orEmpty()
+            SimpleDraft(
+                title = "Call MCP tool",
+                summary = buildString {
+                    append(server.name).append(": ").append(tool)
+                    if (detail.isNotBlank() && detail != "{}") append('\n').append(detail.take(400))
+                },
+                label = "MCP: ${tool.take(60)}",
             )
         }
         "bridge_fs_write" -> {

@@ -204,4 +204,5 @@
     <string name="chat_subagent_done">Finished</string>
     <string name="chat_subagent_failed">Failed</string>
     <string name="chat_subagent_close">Close</string>
+    <string name="chat_im_source">%1$s / %2$s</string>
 </resources>

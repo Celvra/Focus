@@ -172,7 +172,7 @@ data class ChatMessageDto(
 
 @Serializable
 data class StreamOptionsDto(
-    @SerialName("include_usage") val includeUsage: Boolean = true,
+    @SerialName("include_usage") val includeUsage: Boolean = false,
 )
 
 @Serializable

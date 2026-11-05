@@ -114,7 +114,10 @@ fun FocusApprovalCard(
                             FocusTimelineStep(
                                 label = step.label,
                                 status = step.status.toStepStatus(),
-                                summary = step.summary,
+                                summary = listOfNotNull(
+                                    step.summary?.takeIf { it.isNotBlank() },
+                                    step.output?.takeIf { it.isNotBlank() && it != step.summary },
+                                ).joinToString("\n\n").ifBlank { null },
                                 isFirst = index == 0,
                                 isLast = index == card.steps.lastIndex,
                                 durationMs = step.durationMs,

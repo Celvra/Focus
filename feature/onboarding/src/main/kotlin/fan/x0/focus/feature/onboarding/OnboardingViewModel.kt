@@ -13,12 +13,12 @@ import fan.x0.focus.core.network.openai.ConnectionTestException
 import fan.x0.focus.core.network.openai.ModelConnectionTester
 import fan.x0.focus.core.network.openai.ModelEndpoint
 import fan.x0.focus.core.network.openai.OpenAiModelCatalog
+import fan.x0.focus.data.assistant.AssistantConfig
 import fan.x0.focus.data.assistant.AssistantSettings
 import fan.x0.focus.data.assistant.ChatEngine
 import fan.x0.focus.data.assistant.ChatEvent
 import fan.x0.focus.data.assistant.ChatMode
 import fan.x0.focus.data.assistant.ChatStore
-import fan.x0.focus.data.assistant.OnboardingDefaults
 import fan.x0.focus.data.assistant.ProviderCatalog
 import fan.x0.focus.data.assistant.ProviderConfig
 import fan.x0.focus.data.assistant.SecretStore
@@ -46,13 +46,22 @@ class OnboardingViewModel(
     private var fetchJob: Job? = null
     private var fetchToken = 0
     private var nextId = 0L
-    private var finishing = false
+    private var started = false
 
     init {
         viewModelScope.launch {
             chats.clear(ONBOARDING_CONVERSATION)
             updateState { copy(loading = false, restored = false) }
-            send("")
+            settings.config.collect { config ->
+                val ready = providerReady(config)
+                updateState {
+                    copy(
+                        providerReady = ready,
+                        providerSheetOpen = if (ready) providerSheetOpen else true,
+                    )
+                }
+                if (ready) startConversation()
+            }
         }
         viewModelScope.launch {
             workspace.revision.collect {
@@ -60,15 +69,19 @@ class OnboardingViewModel(
                 updateState { copy(assistantName = name) }
             }
         }
-        viewModelScope.launch {
-            settings.config.collect { config ->
-                val provider = config.activeProvider
-                val ready = provider != null &&
-                    provider.model.isNotBlank() &&
-                    (!provider.requiresKey || !secrets.apiKey(provider.id).isNullOrBlank())
-                updateState { copy(providerReady = ready) }
-            }
-        }
+    }
+
+    private fun startConversation() {
+        if (started) return
+        started = true
+        send("")
+    }
+
+    private suspend fun providerReady(config: AssistantConfig): Boolean {
+        val provider = config.activeProvider ?: return false
+        return provider.baseUrl.isNotBlank() &&
+            provider.model.isNotBlank() &&
+            (!provider.requiresKey || !secrets.apiKey(provider.id).isNullOrBlank())
     }
 
     override fun onAction(action: OnboardingAction) {
@@ -76,7 +89,6 @@ class OnboardingViewModel(
             is OnboardingAction.InputChanged -> updateState { copy(input = action.value) }
             OnboardingAction.Send -> send(currentState.input)
             OnboardingAction.Stop -> stop()
-            OnboardingAction.Finish -> finishSetup()
             OnboardingAction.OpenProviderSheet -> openProviderSheet()
             OnboardingAction.CloseProviderSheet -> closeProviderSheet()
             is OnboardingAction.ApplyPreset -> applyPreset(action.id)
@@ -162,21 +174,8 @@ class OnboardingViewModel(
         if (value.isBlank() && state.entries.isNotEmpty()) return
         turnJob?.cancel()
         turnJob = viewModelScope.launch {
-            val config = settings.configOnce()
-            val active = config.activeProvider
-            val customWithoutKey = active != null &&
-                active.id != OnboardingDefaults.PROVIDER_ID &&
-                active.model.isNotBlank() &&
-                active.requiresKey &&
-                secrets.apiKey(active.id).isNullOrBlank()
-            if (customWithoutKey) {
-                updateState {
-                    copy(
-                        sending = false,
-                        providerSheetOpen = true,
-                        providerFailure = ProviderFailure.Validation(ProviderFailure.Field.ApiKey),
-                    )
-                }
+            if (!providerReady(settings.configOnce())) {
+                updateState { copy(sending = false, providerSheetOpen = true) }
                 return@launch
             }
             val user = if (value.isBlank()) null else OnboardingEntry.User("u-${nextId++}", value)
@@ -300,17 +299,6 @@ class OnboardingViewModel(
             }
         }
         return toMutableList().also { it[index] = trace.copy(steps = steps) }
-    }
-
-    private fun finishSetup() {
-        if (finishing) return
-        finishing = true
-        turnJob?.cancel()
-        turnJob = null
-        viewModelScope.launch {
-            chats.clear(ONBOARDING_CONVERSATION)
-            settings.completeOnboarding()
-        }
     }
 
     private fun openProviderSheet() {
@@ -465,6 +453,7 @@ class OnboardingViewModel(
                         modelQuery = "",
                     )
                 }
+                startConversation()
                 sendEffect(OnboardingEffect.ProviderSaved)
             } catch (e: CancellationException) {
                 throw e

@@ -1,17 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="onboarding_title">Focus</string>
-    <string name="onboarding_subtitle">正在设置</string>
-    <string name="onboarding_ready_subtitle">可以完成了</string>
-    <string name="onboarding_skip">跳过</string>
-    <string name="onboarding_finish">完成设置</string>
+    <string name="onboarding_subtitle">连接模型</string>
+    <string name="onboarding_ready_subtitle">设置助手</string>
     <string name="onboarding_input_hint">给 %1$s 发消息</string>
     <string name="onboarding_connect_model">连接自己的模型</string>
-    <string name="onboarding_connected_title">模型已连接</string>
-    <string name="onboarding_connected_body">现在可以完成设置了。</string>
+    <string name="onboarding_gate_title">先连接你的模型</string>
+    <string name="onboarding_gate_body">填写你自己的接口和密钥，保存后继续设置。</string>
     <string name="onboarding_model_settings">模型设置</string>
     <string name="onboarding_provider_title">连接模型</string>
-    <string name="onboarding_provider_body">设置阶段使用公共模型。添加你自己的接口后可以继续使用 Focus。</string>
+    <string name="onboarding_provider_body">填写你自己的接口和密钥。连接模型后才能继续设置。</string>
     <string name="onboarding_provider_name">名称</string>
     <string name="onboarding_base_url">接口地址</string>
     <string name="onboarding_protocol">协议</string>

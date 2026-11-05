@@ -59,6 +59,7 @@ dependencies {
     implementation(projects.data.assistant)
     implementation(projects.data.sources)
     implementation(projects.data.bridge)
+    implementation(projects.data.im)
     implementation(projects.feature.onboarding)
     implementation(projects.feature.chat)
     implementation(projects.feature.crew)

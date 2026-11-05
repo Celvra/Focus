@@ -68,7 +68,6 @@ sealed interface OnboardingAction : UiAction {
     data class InputChanged(val value: String) : OnboardingAction
     data object Send : OnboardingAction
     data object Stop : OnboardingAction
-    data object Finish : OnboardingAction
     data object OpenProviderSheet : OnboardingAction
     data object CloseProviderSheet : OnboardingAction
     data class ApplyPreset(val id: String) : OnboardingAction

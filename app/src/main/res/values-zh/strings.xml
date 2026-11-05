@@ -4,6 +4,8 @@
     <string name="notification_channel_reminders">提醒</string>
     <string name="notification_channel_chat_turns">回复</string>
     <string name="notification_channel_messages">消息</string>
+    <string name="notification_channel_im">IM 渠道</string>
+    <string name="notification_im_running">%1$d 个渠道运行中，%2$d 个已连接</string>
     <string name="chat_turn_running">正在回复</string>
     <string name="notification_reply_title">回复完成</string>
     <string name="notification_reply_failed_title">回复失败</string>

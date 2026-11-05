@@ -72,6 +72,7 @@ data class ChatTurnState(
     val conversationId: String = "",
     val turnId: Long = 0,
     val running: Boolean = false,
+    val userText: String = "",
     val workingText: String = "",
     val entries: List<ChatTurnEntry> = emptyList(),
     val retry: RetryState? = null,
@@ -93,4 +94,21 @@ data class ChatTurnResult(
     val turnId: Long,
     val error: AppError? = null,
     val compactionFailed: Boolean = false,
+    val answer: String = "",
 )
+
+sealed interface ChatTurnProgress {
+    data class Reasoning(val text: String, val stats: MessageStats) : ChatTurnProgress
+
+    data object ReasoningEnded : ChatTurnProgress
+
+    data class Stats(val stats: MessageStats) : ChatTurnProgress
+
+    data class ToolStarted(
+        val id: String,
+        val label: String,
+        val tool: String,
+        val arguments: String,
+        val stats: MessageStats,
+    ) : ChatTurnProgress
+}

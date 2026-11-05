@@ -271,6 +271,11 @@ fun ChatScreen(
                         state.sending -> state.workingText.ifBlank {
                             stringResource(R.string.chat_working)
                         }
+                        state.imSource != null -> stringResource(
+                            R.string.chat_im_source,
+                            state.imSource.accountName,
+                            state.imSource.chatTitle,
+                        )
                         state.title.isBlank() -> stringResource(R.string.chat_subtitle)
                         else -> null
                     },

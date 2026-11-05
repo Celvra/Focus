@@ -17,6 +17,7 @@ import fan.x0.focus.core.network.openai.MessageContent
 import fan.x0.focus.core.network.openai.ModelEndpoint
 import fan.x0.focus.core.network.openai.ModelProtocolException
 import fan.x0.focus.core.network.openai.StreamAccumulator
+import fan.x0.focus.core.network.openai.StreamOptionsDto
 import fan.x0.focus.core.network.openai.ToolCallDto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -44,6 +45,8 @@ data class TurnOptions(
     val agentMode: AgentMode = AgentMode.Build,
     val replyToId: Long? = null,
     val mentionedSkills: List<String> = emptyList(),
+    val silentReply: Boolean = false,
+    val autoTitle: Boolean = true,
 )
 
 sealed interface ChatEvent {
@@ -132,39 +135,18 @@ class ChatEngine(
         appendUser: Boolean = true,
     ): Flow<ChatEvent> = flow {
         val config = settings.configOnce()
-        val savedActive = config.activeProvider
-        val hasUsableSaved = savedActive != null &&
-            savedActive.baseUrl.isNotBlank() &&
-            savedActive.model.isNotBlank() &&
-            (!savedActive.requiresKey || !secrets.apiKey(savedActive.id).isNullOrBlank())
-        val useSaved = mode == ChatMode.Chat || hasUsableSaved
-        val provider = config.providers.firstOrNull { it.id == options.providerId } ?: savedActive
-        val providerId = when {
-            !useSaved -> OnboardingDefaults.PROVIDER_ID
-            else -> provider?.id ?: config.activeProviderId.orEmpty()
-        }
-        val baseUrl = when {
-            !useSaved -> OnboardingDefaults.BASE_URL
-            else -> provider?.baseUrl ?: config.baseUrl.orEmpty()
-        }
-        val protocol = when {
-            !useSaved -> ChatProtocol.ChatCompletions
-            else -> provider?.protocol ?: ChatProtocol.ChatCompletions
-        }
-        val model = when {
-            !useSaved -> OnboardingDefaults.MODEL
-            else -> options.model.ifBlank { provider?.model.orEmpty() }
-        }
+        val provider = config.providers.firstOrNull { it.id == options.providerId } ?: config.activeProvider
+        val providerId = provider?.id ?: config.activeProviderId.orEmpty()
+        val baseUrl = provider?.baseUrl ?: config.baseUrl.orEmpty()
+        val protocol = provider?.protocol ?: ChatProtocol.ChatCompletions
+        val model = options.model.ifBlank { provider?.model.orEmpty() }
         val endpoint = ModelEndpoint(baseUrl, model)
         if (!endpoint.isUsable) {
             emit(ChatEvent.Failed(AppError(AppErrorType.Generic, serverMessage = "Set the model connection first.")))
             return@flow
         }
-        val apiKey = when {
-            !useSaved -> OnboardingDefaults.API_KEY
-            else -> secrets.apiKey(providerId).orEmpty()
-        }
-        if (apiKey.isBlank() && (provider?.requiresKey != false || !useSaved)) {
+        val apiKey = secrets.apiKey(providerId).orEmpty()
+        if (apiKey.isBlank() && provider?.requiresKey != false) {
             emit(ChatEvent.Failed(AppError(AppErrorType.Unauthorized, serverMessage = "Set the API key first.")))
             return@flow
         }
@@ -255,6 +237,7 @@ class ChatEngine(
                     model = endpoint.model,
                     messages = messages,
                     stream = true,
+                    streamOptions = StreamOptionsDto(includeUsage = true),
                     tools = specs.map { it.toDto() },
                     toolChoice = "auto",
                     temperature = 0.4,
@@ -462,11 +445,12 @@ class ChatEngine(
                                     ok = outcome.ok,
                                     summary = outcome.summary,
                                     tool = step.tool,
+                                    output = outcome.content,
                                     durationMs = System.currentTimeMillis() - stepStartedAt,
                                     diffs = outcome.diffs,
                                 ),
                             )
-                            lines += "${step.label}: ${if (outcome.ok) "done" else "failed"}. ${outcome.summary}"
+                            lines += outcome.describe()
                         }
                         approvals.decide(approval.id, ApprovalStatus.Approved, lines.joinToString("\n").take(500))
                     } else {

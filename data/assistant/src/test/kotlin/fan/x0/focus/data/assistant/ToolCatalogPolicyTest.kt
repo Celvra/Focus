@@ -31,6 +31,7 @@ class ToolCatalogPolicyTest {
                 "bridge_bg_start",
                 "bridge_bg_kill",
                 "delete_skill",
+                "im_send_text",
             ),
             gated,
         )
@@ -54,6 +55,7 @@ class ToolCatalogPolicyTest {
                 "save_provider",
                 "test_provider",
                 "list_models",
+                "write_workspace_file",
                 "complete_onboarding",
             ),
             names,

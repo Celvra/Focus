@@ -189,6 +189,13 @@ data class SubAgentRunUi(
     val entries: List<ChatEntry>,
 )
 
+private fun ChatEntry.sameBubble(other: ChatEntry): Boolean = when {
+    this is ChatEntry.User && other is ChatEntry.User -> text == other.text
+    this is ChatEntry.Assistant && other is ChatEntry.Assistant ->
+        text == other.text && reasoning == other.reasoning
+    else -> false
+}
+
 sealed interface ChatEntry {
     val key: String
     val messageId: Long? get() = null
@@ -272,6 +279,12 @@ data class SuggestionUi(
     val icon: String = "",
 )
 
+data class ImSourceUi(
+    val accountName: String,
+    val chatTitle: String,
+    val group: Boolean,
+)
+
 data class ChatUiState(
     val loading: Boolean = true,
     val conversationId: String = "",
@@ -318,10 +331,25 @@ data class ChatUiState(
     val selectionKey: String? = null,
     val plan: ProposedPlan? = null,
     val planStatus: PlanStatus = PlanStatus.None,
+    val imSource: ImSourceUi? = null,
     val message: UiMessage? = null,
 ) : UiState {
     val entries: List<ChatEntry>
-        get() = history + live
+        get() {
+            if (history.isEmpty() || live.isEmpty()) return history + live
+            val max = minOf(history.size, live.size)
+            for (overlap in max downTo 1) {
+                var matches = true
+                for (index in 0 until overlap) {
+                    if (!history[history.size - overlap + index].sameBubble(live[index])) {
+                        matches = false
+                        break
+                    }
+                }
+                if (matches) return history + live.drop(overlap)
+            }
+            return history + live
+        }
 
     val stats: MessageStats?
         get() {

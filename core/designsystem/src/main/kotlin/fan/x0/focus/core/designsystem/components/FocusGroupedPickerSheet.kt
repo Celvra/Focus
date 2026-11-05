@@ -70,6 +70,7 @@ fun FocusGroupedPickerSheet(
     selected: FocusPickerSelection? = null,
     loading: Boolean = false,
     onRefresh: (() -> Unit)? = null,
+    header: (@Composable () -> Unit)? = null,
 ) {
     val sheetState = rememberBottomSheetState(
         initialValue = SheetValue.Hidden,
@@ -124,6 +125,7 @@ fun FocusGroupedPickerSheet(
                     }
                 }
             }
+            header?.invoke()
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,

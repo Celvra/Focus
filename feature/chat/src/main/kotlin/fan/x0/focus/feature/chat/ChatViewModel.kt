@@ -58,9 +58,12 @@ import fan.x0.focus.data.assistant.ToolLabels
 import fan.x0.focus.data.assistant.ToolPayload
 import fan.x0.focus.data.assistant.TurnOptions
 import fan.x0.focus.data.assistant.WorkspaceStore
+import fan.x0.focus.data.im.ImChatKind
+import fan.x0.focus.data.im.ImChatStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -72,6 +75,7 @@ private const val REVEAL_CATCHUP_FRAMES = 18
 private const val REVEAL_MIN_GROUP = 3
 private const val REVEAL_HANDOFF_MS = 280L
 private const val REVEAL_JOIN_TIMEOUT_MS = 4_000L
+private const val TURN_IDLE_TIMEOUT_MS = 3_000L
 private const val MENTION_TTL_MS = 30_000L
 private const val MENTION_FILE_DELAY_MS = 140L
 private const val MAX_MENTION_ITEMS = 50
@@ -93,6 +97,7 @@ class ChatViewModel(
     private val subAgents: SubAgentRunStore,
     private val skills: SkillRepository,
     private val fileMentions: FileMentionService,
+    private val imChats: ImChatStore,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
@@ -118,6 +123,10 @@ class ChatViewModel(
     private var displayTurnId = 0L
     private var displayTarget = ""
     private var displayText = ""
+    private var liveUserTurnId = 0L
+    private var liveUserText = ""
+    private var localTurnId = 0L
+    private var loadGeneration = 0
     private var awaitingUserTurn = false
     private var lastSend: PendingSend? = null
     private var redoEntry: PendingSend? = null
@@ -125,18 +134,20 @@ class ChatViewModel(
     init {
         ensureMentionSkills()
         ensureMentionBindings()
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             val conversation = switcher.current.value
                 ?.let { chats.conversation(it) }
                 ?: chats.ensureConversation()
             load(conversation.id)
+        }
+        viewModelScope.launch {
             switcher.command.filterNotNull().collect { command ->
                 when (command) {
                     is ChatCommand.Open -> switchTo(command.conversationId)
                     ChatCommand.New -> newConversation()
                     is ChatCommand.Ask -> ask(command.text)
                 }
-                switcher.consume()
+                switcher.consume(command)
             }
         }
         viewModelScope.launch {
@@ -156,6 +167,14 @@ class ChatViewModel(
         viewModelScope.launch {
             turns.titleUpdates.collect { id ->
                 if (id == currentState.conversationId && !currentState.loading) refreshTitle()
+            }
+        }
+        viewModelScope.launch {
+            chats.changes.collect { id ->
+                val conversationId = currentState.conversationId
+                if (id != conversationId || currentState.loading) return@collect
+                if (currentState.sending || turns.isRunning(conversationId)) return@collect
+                reload()
             }
         }
         viewModelScope.launch {
@@ -670,6 +689,7 @@ class ChatViewModel(
         val conversationId = state.conversationId
         if (conversationId.isBlank() || turns.isRunning(conversationId)) return
         resetDisplay(conversationId)
+        resetLiveUser()
         awaitingUserTurn = true
         val options = TurnOptions(
             providerId = state.providerId,
@@ -718,7 +738,7 @@ class ChatViewModel(
                 ),
             )
         }
-        turns.start(conversationId, text, options)
+        localTurnId = turns.start(conversationId, text, options)?.turnId ?: 0L
         startStatsTicker()
     }
 
@@ -1242,7 +1262,9 @@ class ChatViewModel(
 
     private suspend fun reload() {
         val id = currentState.conversationId
-        resetDisplay(id)
+        if (id.isBlank()) return
+        if (turns.isRunning(id)) return
+        val generation = loadGeneration
         val messages = chats.messages(id)
         val conversation = chats.conversation(id)
         val compaction = chats.compaction(id)
@@ -1254,6 +1276,10 @@ class ChatViewModel(
         val model = conversation?.model?.ifBlank { null } ?: provider?.model.orEmpty()
         val todos = chats.todos(id)
         val entries = messages.toEntries(compaction) + listOfNotNull(planEntry(conversation))
+        if (currentState.conversationId != id || generation != loadGeneration) return
+        if (turns.isRunning(id)) return
+        resetDisplay(id)
+        resetLiveUser()
         updateState {
             copy(
                 history = entries,
@@ -1276,7 +1302,9 @@ class ChatViewModel(
     }
 
     private suspend fun load(conversationId: String) {
+        val generation = ++loadGeneration
         resetDisplay(conversationId)
+        resetLiveUser()
         awaitingUserTurn = false
         suggestionJob?.cancel()
         btwJob?.cancel()
@@ -1298,7 +1326,19 @@ class ChatViewModel(
             ?.let { ReasoningLevel.fromName(it) }
             ?: ReasoningLevel.Auto
         val todos = chats.todos(conversationId)
-        val entries = messages.toEntries(compaction) + listOfNotNull(planEntry(conversation))
+        val source = imChats.bindingForConversation(conversationId)
+        if (generation != loadGeneration) return
+        val runningTurn = turns.state(conversationId)
+        val visibleMessages = if (runningTurn.running && runningTurn.userText.isNotBlank()) {
+            val index = messages.indexOfLast {
+                it.role == ChatRole.User && it.content == runningTurn.userText
+            }
+            if (index >= 0) messages.take(index) else messages
+        } else {
+            messages
+        }
+        if (runningTurn.running) localTurnId = 0
+        val entries = visibleMessages.toEntries(compaction) + listOfNotNull(planEntry(conversation))
         updateState {
             copy(
                 loading = false,
@@ -1339,6 +1379,13 @@ class ChatViewModel(
                 selectionKey = null,
                 plan = conversation?.plan,
                 planStatus = conversation?.planStatus ?: PlanStatus.None,
+                imSource = source?.let {
+                    ImSourceUi(
+                        accountName = it.accountName,
+                        chatTitle = it.title,
+                        group = it.kind == ImChatKind.Group,
+                    )
+                },
             )
         }
         switcher.markLoaded(conversationId)
@@ -1371,7 +1418,8 @@ class ChatViewModel(
     }
 
     private suspend fun switchTo(conversationId: String) {
-        if (conversationId == currentState.conversationId) return
+        if (conversationId == currentState.conversationId && loadJob?.isActive != true) return
+        loadGeneration++
         loadJob?.cancel()
         updateState { copy(loading = true) }
         loadJob = viewModelScope.launch {
@@ -1380,6 +1428,7 @@ class ChatViewModel(
     }
 
     private suspend fun newConversation() {
+        loadGeneration++
         loadJob?.cancel()
         if (currentState.history.isEmpty() && currentState.conversationId.isNotBlank()) {
             load(currentState.conversationId)
@@ -1413,6 +1462,20 @@ class ChatViewModel(
             }
             return
         }
+        if (turn.turnId != localTurnId && turn.userText.isNotBlank() &&
+            liveUserTurnId != turn.turnId
+        ) {
+            liveUserTurnId = turn.turnId
+            liveUserText = turn.userText
+        }
+        val userEntry = if (liveUserTurnId == turn.turnId && liveUserText.isNotBlank()) {
+            ChatEntry.User(
+                key = "live-user-${turn.turnId}",
+                text = liveUserText,
+            )
+        } else {
+            null
+        }
         val answer = turn.entries.filterIsInstance<ChatTurnEntry.Answer>().lastOrNull()?.text.orEmpty()
         updateDisplayTarget(turn.conversationId, turn.turnId, answer)
         val shown = displayTarget.take(displayText.length)
@@ -1421,7 +1484,7 @@ class ChatViewModel(
                 sending = true,
                 compacting = turn.compacting,
                 workingText = turn.workingText,
-                live = turn.entries
+                live = listOfNotNull(userEntry) + turn.entries
                     .mapIndexed { index, entry -> entry.toUi("live-${turn.turnId}", index) }
                     .withDisplayText(shown),
                 retry = turn.retry?.let { RetryUi(it.attempt, it.max, it.reason) },
@@ -1462,11 +1525,11 @@ class ChatViewModel(
         }
         if (currentState.conversationId != result.conversationId) return
         if (displayTurnId > result.turnId) return
-        if (turns.isRunning(result.conversationId)) return
+        if (!awaitTurnIdle(result.conversationId)) return
         if (displayTarget.isNotEmpty() && result.error == null) delay(REVEAL_HANDOFF_MS)
         if (currentState.conversationId != result.conversationId) return
         if (displayTurnId > result.turnId) return
-        if (turns.isRunning(result.conversationId)) return
+        if (!awaitTurnIdle(result.conversationId)) return
         if (displayJob === reveal) {
             displayJob?.cancel()
             displayJob = null
@@ -1475,6 +1538,14 @@ class ChatViewModel(
         result.error?.let { emitError(it) }
         if (result.compactionFailed) showMessage(R.string.chat_compact_empty)
         refreshTitle()
+    }
+
+    private suspend fun awaitTurnIdle(conversationId: String): Boolean {
+        if (!turns.isRunning(conversationId)) return true
+        return withTimeoutOrNull(TURN_IDLE_TIMEOUT_MS) {
+            while (turns.isRunning(conversationId)) delay(50)
+            true
+        } ?: false
     }
 
     private suspend fun completeDisplay(result: ChatTurnResult) {
@@ -1517,6 +1588,11 @@ class ChatViewModel(
         displayTurnId = turnId
         displayTarget = ""
         displayText = ""
+    }
+
+    private fun resetLiveUser() {
+        liveUserTurnId = 0L
+        liveUserText = ""
     }
 
     private fun ensureDisplayJob() {
