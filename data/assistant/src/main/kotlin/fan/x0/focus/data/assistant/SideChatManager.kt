@@ -202,7 +202,8 @@ class SideChatManager(
                 sideChatId = id,
                 title = conversation.title.ifBlank { "旁聊" },
                 summary = summary,
-                failed = conversation.taskStatus == TaskStatus.Failed,
+                failed = conversation.taskStatus == TaskStatus.Failed ||
+                    conversation.taskStatus == TaskStatus.Interrupted,
                 createdAt = System.currentTimeMillis(),
             ),
         )
@@ -256,6 +257,15 @@ class SideChatManager(
                     role = ChatRole.System,
                     content = "进程中断，任务已标记为中断。可以重试。",
                     label = "agent_interrupted",
+                )
+                main.appendSideResult(
+                    SideResultCard(
+                        sideChatId = conversation.id,
+                        title = conversation.title.ifBlank { "旁聊" },
+                        summary = "进程中断，任务已标记为中断。",
+                        failed = true,
+                        createdAt = System.currentTimeMillis(),
+                    ),
                 )
                 bus.publish(
                     AgentEvent.sideChatResult(
@@ -445,6 +455,4 @@ class SideChatManager(
         }
         return null
     }
-
-    private fun Throwable.message(): String = message ?: javaClass.simpleName
 }

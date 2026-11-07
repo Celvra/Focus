@@ -169,7 +169,7 @@ class RouterSession(
             )
         }
         if (allowRetry && batch.any { it.attempts + 1 >= MAX_ATTEMPTS }) {
-            main.appendNotice("Router 处理失败：${error.take(200)}")
+            main.appendWatchdog("Router 处理失败：${error.take(200)}")
         }
     }
 
