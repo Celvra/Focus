@@ -144,7 +144,7 @@ class MainChannelSession(
         )
         val preview = card.summary.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(140)
         notifier.notifyReply(
-            conversationId = conversation.id,
+            conversationId = card.sideChatId,
             title = card.title.ifBlank { MAIN_TITLE },
             preview = preview.ifBlank {
                 if (card.failed) "旁聊失败" else "旁聊完成"

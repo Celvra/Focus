@@ -9,6 +9,7 @@ enum class SettingsDestination : NavKey {
     Account,
     ChatAgent,
     Models,
+    SuperAgent,
     Tools,
     Plugins,
     WebSearch,

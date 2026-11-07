@@ -1,5 +1,6 @@
 package fan.x0.focus.data.assistant
 
+import fan.x0.focus.core.notify.MessageNotifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +30,7 @@ class SideChatManager(
     private val events: AgentEventSettings,
     private val models: ModelResolver,
     private val main: MainChannelSession,
+    private val notifier: MessageNotifier,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -363,6 +365,12 @@ class SideChatManager(
                 summary = summary.ifBlank { if (status == TaskStatus.Done) "完成" else "" },
                 failed = status == TaskStatus.Failed,
             ),
+        )
+        notifier.notifyReply(
+            conversationId = conversation.id,
+            title = conversation.title.ifBlank { "旁聊" },
+            preview = summary.ifBlank { if (status == TaskStatus.Done) "旁聊完成" else "旁聊结束" },
+            failed = status == TaskStatus.Failed,
         )
         updateCounts()
     }
