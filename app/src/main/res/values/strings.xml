@@ -25,6 +25,8 @@
     <string name="device_title">Device</string>
     <string name="drawer_recent">Recent</string>
     <string name="drawer_new_chat">New chat</string>
+    <string name="drawer_new_side_chat">New side chat</string>
+    <string name="drawer_main_session">Main session</string>
     <string name="drawer_no_conversations">No conversations yet.</string>
     <string name="drawer_default_name">You</string>
     <string name="drawer_untitled">Untitled</string>

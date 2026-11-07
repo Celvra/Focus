@@ -41,6 +41,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -224,6 +226,9 @@ fun ChatScreen(
     BackHandler(enabled = state.selectionKey != null) {
         onAction(ChatAction.ClearSelection)
     }
+    BackHandler(enabled = state.isSide && state.selectionKey == null) {
+        onAction(ChatAction.BackToMain)
+    }
     LaunchedEffect(state.message?.nonce) {
         val message = state.message ?: return@LaunchedEffect
         snackbar.showSnackbar(
@@ -262,8 +267,15 @@ fun ChatScreen(
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
                 FocusCompactTopBar(
-                    title = state.title.ifBlank {
-                        state.assistantName.ifBlank { stringResource(R.string.chat_title) }
+                    title = when {
+                        state.isMain -> stringResource(R.string.chat_main_title)
+                        state.isSide && state.title.isNotBlank() -> stringResource(
+                            R.string.chat_side_title,
+                            state.title,
+                        )
+                        else -> state.title.ifBlank {
+                            state.assistantName.ifBlank { stringResource(R.string.chat_title) }
+                        }
                     },
                     subtitle = when {
                         retry != null -> stringResource(R.string.chat_retrying, retry.attempt, retry.max)
@@ -271,15 +283,22 @@ fun ChatScreen(
                         state.sending -> state.workingText.ifBlank {
                             stringResource(R.string.chat_working)
                         }
+                        state.isMain && state.routerModel.isNotBlank() -> state.routerModel
                         state.imSource != null -> stringResource(
                             R.string.chat_im_source,
                             state.imSource.accountName,
                             state.imSource.chatTitle,
                         )
+                        state.isMain || state.isSide -> null
                         state.title.isBlank() -> stringResource(R.string.chat_subtitle)
                         else -> null
                     },
-                    onMenu = LocalFocusDrawerOpener.current,
+                    onMenu = if (state.isSide) null else LocalFocusDrawerOpener.current,
+                    onBack = if (state.isSide) {
+                        { onAction(ChatAction.BackToMain) }
+                    } else {
+                        null
+                    },
                     actions = {
                         if (!state.isEmpty) {
                             Box(
@@ -289,12 +308,35 @@ fun ChatScreen(
                                     .onGloballyPositioned { mascotTop = it.positionInRoot() },
                             )
                         }
-                        IconButton(onClick = hapticTap { onAction(ChatAction.NewConversation) }) {
-                            Icon(
-                                FocusIcons.Add,
-                                contentDescription = stringResource(R.string.chat_new),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        if (state.isMain) {
+                            val badge = if (state.sideActiveCount > 0) {
+                                state.sideActiveCount
+                            } else {
+                                state.sideUnreadCount
+                            }
+                            IconButton(onClick = hapticTap { onAction(ChatAction.OpenSidePanel) }) {
+                                BadgedBox(
+                                    badge = {
+                                        if (badge > 0) {
+                                            Badge { Text(badge.coerceAtMost(99).toString()) }
+                                        }
+                                    },
+                                ) {
+                                    Icon(
+                                        FocusIcons.Groups,
+                                        contentDescription = stringResource(R.string.chat_side_panel_title),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        } else {
+                            IconButton(onClick = hapticTap { onAction(ChatAction.NewConversation) }) {
+                                Icon(
+                                    FocusIcons.Add,
+                                    contentDescription = stringResource(R.string.chat_new),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     },
                 )
@@ -430,6 +472,14 @@ fun ChatScreen(
                 onClose = { onAction(ChatAction.CloseSubAgent) },
             )
         }
+        SideChatSheet(
+            panel = state.sidePanel,
+            onClose = { onAction(ChatAction.CloseSidePanel) },
+            onRefresh = { onAction(ChatAction.RefreshSidePanel) },
+            onOpen = { onAction(ChatAction.OpenSideChat(it)) },
+            onStop = { onAction(ChatAction.StopSideChat(it)) },
+            onRetry = { onAction(ChatAction.RetrySideChat(it)) },
+        )
         state.edit?.let { edit ->
             MessageEditSheet(
                 edit = edit,
@@ -705,6 +755,7 @@ private fun ChatThread(
                         is ChatEntry.Failure -> "failure"
                         is ChatEntry.Notice -> "notice"
                         is ChatEntry.Compaction -> "compaction"
+                        is ChatEntry.SideResult -> "side_result"
                     }
                 },
             ) { entry ->
@@ -804,6 +855,11 @@ private fun ChatThread(
                             streaming = entry.streaming,
                             tokensBefore = entry.tokensBefore,
                             tokensAfter = entry.tokensAfter,
+                        )
+                        is ChatEntry.SideResult -> ChatSideResultCard(
+                            card = entry.card,
+                            onOpen = { onAction(ChatAction.OpenSideChat(entry.card.sideChatId)) },
+                            onRetry = { onAction(ChatAction.RetrySideChat(entry.card.sideChatId)) },
                         )
                     }
                 }

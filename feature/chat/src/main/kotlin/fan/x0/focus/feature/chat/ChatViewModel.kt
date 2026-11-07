@@ -30,15 +30,20 @@ import fan.x0.focus.data.assistant.ChatTurnStepStatus
 import fan.x0.focus.data.assistant.ChatTurnTrustPhase
 import fan.x0.focus.data.assistant.CommandPolicy
 import fan.x0.focus.data.assistant.ConversationCompaction
+import fan.x0.focus.data.assistant.ConversationKind
 import fan.x0.focus.data.assistant.ConversationTodo
 import fan.x0.focus.data.assistant.FileMentionBinding
 import fan.x0.focus.data.assistant.FileMentionEntry
 import fan.x0.focus.data.assistant.FileMentionService
+import fan.x0.focus.data.assistant.MainChannelSession
 import fan.x0.focus.data.assistant.MessageStats
 import fan.x0.focus.data.assistant.MentionItemUi
 import fan.x0.focus.data.assistant.MentionKind
 import fan.x0.focus.data.assistant.MentionText
 import fan.x0.focus.data.assistant.MentionUi
+import fan.x0.focus.data.assistant.SideResultCard
+import fan.x0.focus.data.assistant.SideChatManager
+import fan.x0.focus.data.assistant.TaskStatus
 import fan.x0.focus.data.assistant.WORKSPACE_BIND_PREFIX
 import fan.x0.focus.data.assistant.WORKSPACE_SWITCH_ID
 import fan.x0.focus.data.assistant.PlanStatus
@@ -57,6 +62,7 @@ import fan.x0.focus.data.assistant.ToolCatalog
 import fan.x0.focus.data.assistant.ToolLabels
 import fan.x0.focus.data.assistant.ToolPayload
 import fan.x0.focus.data.assistant.TurnOptions
+import fan.x0.focus.data.assistant.WorkerProfile
 import fan.x0.focus.data.assistant.WorkspaceStore
 import fan.x0.focus.data.im.ImChatKind
 import fan.x0.focus.data.im.ImChatStore
@@ -98,6 +104,8 @@ class ChatViewModel(
     private val skills: SkillRepository,
     private val fileMentions: FileMentionService,
     private val imChats: ImChatStore,
+    private val mainChannel: MainChannelSession,
+    private val sideChats: SideChatManager,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
@@ -130,14 +138,17 @@ class ChatViewModel(
     private var awaitingUserTurn = false
     private var lastSend: PendingSend? = null
     private var redoEntry: PendingSend? = null
+    private var mainSubmitting = false
+    private var mainWasWorking = false
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
     init {
         ensureMentionSkills()
         ensureMentionBindings()
         loadJob = viewModelScope.launch {
-            val conversation = switcher.current.value
+            val requested = switcher.current.value
                 ?.let { chats.conversation(it) }
-                ?: chats.ensureConversation()
+            val conversation = requested ?: chats.ensureMainConversation()
             load(conversation.id)
         }
         viewModelScope.launch {
@@ -228,6 +239,40 @@ class ChatViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            mainChannel.state.collect { channel ->
+                val isMain = currentState.isMain
+                updateState {
+                    copy(
+                        routerModel = channel.routerModel,
+                        sideActiveCount = channel.activeSideChats,
+                        sideUnreadCount = channel.unreadResults,
+                    )
+                }
+                if (!isMain || currentState.loading) return@collect
+                when {
+                    channel.working -> {
+                        mainSubmitting = false
+                        mainWasWorking = true
+                        updateState {
+                            copy(
+                                sending = true,
+                                workingText = channel.workingText.ifBlank { workingText },
+                            )
+                        }
+                    }
+                    mainWasWorking -> {
+                        mainWasWorking = false
+                        mainSubmitting = false
+                        updateState { copy(sending = false, workingText = "") }
+                        reload()
+                    }
+                    !mainSubmitting -> updateState {
+                        if (sending) copy(sending = false, workingText = "") else this
+                    }
+                }
+            }
+        }
     }
 
     override fun onAction(action: ChatAction) {
@@ -305,6 +350,13 @@ class ChatViewModel(
             is ChatAction.OpenSubAgent -> updateState { copy(subAgentOpenId = action.id) }
             ChatAction.CloseSubAgent -> updateState { copy(subAgentOpenId = null) }
             ChatAction.ConsumeMessage -> updateState { copy(message = null) }
+            ChatAction.OpenSidePanel -> openSidePanel()
+            ChatAction.CloseSidePanel -> updateState { copy(sidePanel = sidePanel.copy(open = false)) }
+            ChatAction.RefreshSidePanel -> refreshSidePanel()
+            is ChatAction.OpenSideChat -> openSideChat(action.id)
+            is ChatAction.StopSideChat -> stopSideChat(action.id)
+            is ChatAction.RetrySideChat -> retrySideChat(action.id)
+            ChatAction.BackToMain -> backToMain()
         }
     }
 
@@ -738,7 +790,19 @@ class ChatViewModel(
                 ),
             )
         }
-        localTurnId = turns.start(conversationId, text, options)?.turnId ?: 0L
+        localTurnId = if (state.isMain) {
+            mainSubmitting = true
+            viewModelScope.launch {
+                mainChannel.submit(
+                    text = text,
+                    attachments = attachments.map { it.toModel() },
+                    replyToId = replyToId,
+                )
+            }
+            0L
+        } else {
+            turns.start(conversationId, text, options)?.turnId ?: 0L
+        }
         startStatsTicker()
     }
 
@@ -765,6 +829,7 @@ class ChatViewModel(
             SlashCommandId.Undo -> undo()
             SlashCommandId.Redo -> redo()
             SlashCommandId.Btw -> startBtw(argument)
+            SlashCommandId.Side -> startSideChat(argument)
             SlashCommandId.Compact -> compact()
             SlashCommandId.New -> viewModelScope.launch { newConversation() }
             SlashCommandId.Resume -> resume(argument)
@@ -783,6 +848,28 @@ class ChatViewModel(
             }
             SlashCommandId.Settings -> sendEffect(ChatEffect.OpenSettings)
             SlashCommandId.Help -> showMessage(R.string.chat_command_usage)
+        }
+    }
+
+    private fun startSideChat(task: String) {
+        val text = task.trim()
+        if (text.isBlank()) {
+            openSidePanel()
+            return
+        }
+        viewModelScope.launch {
+            val threadKey = currentState.history
+                .lastOrNull { it is ChatEntry.User }
+                ?.messageId
+                ?.let { "main:$it" }
+                .orEmpty()
+            val conversation = sideChats.create(
+                title = text.take(24),
+                task = text,
+                profile = WorkerProfile.Standard,
+                threadKey = threadKey,
+            )
+            switchTo(conversation.id)
         }
     }
 
@@ -1257,7 +1344,63 @@ class ChatViewModel(
 
     private fun stop() {
         val conversationId = currentState.conversationId
-        if (conversationId.isNotBlank()) turns.stop(conversationId)
+        if (conversationId.isBlank()) return
+        if (currentState.isMain) {
+            updateState { copy(sending = false, workingText = "") }
+            return
+        }
+        turns.stop(conversationId)
+    }
+
+    private fun openSidePanel() {
+        updateState { copy(sidePanel = sidePanel.copy(open = true)) }
+        refreshSidePanel()
+    }
+
+    private fun refreshSidePanel() {
+        viewModelScope.launch {
+            updateState { copy(sidePanel = sidePanel.copy(loading = true)) }
+            val rows = sideChats.list().map { item ->
+                SideChatRowUi(
+                    id = item.id,
+                    title = item.title,
+                    status = item.status,
+                    profile = item.profile,
+                    summary = item.latest,
+                    updatedAt = item.updatedAt,
+                    unseen = !item.resultSeen,
+                )
+            }
+            updateState { copy(sidePanel = sidePanel.copy(loading = false, items = rows)) }
+        }
+    }
+
+    private fun openSideChat(id: String) {
+        viewModelScope.launch {
+            sideChats.markSeen(id)
+            updateState { copy(sidePanel = sidePanel.copy(open = false)) }
+            switchTo(id)
+        }
+    }
+
+    private fun stopSideChat(id: String) {
+        viewModelScope.launch {
+            sideChats.stop(id)
+            refreshSidePanel()
+        }
+    }
+
+    private fun retrySideChat(id: String) {
+        viewModelScope.launch {
+            sideChats.retry(id)
+            refreshSidePanel()
+        }
+    }
+
+    private fun backToMain() {
+        viewModelScope.launch {
+            switchTo(ChatStore.MAIN_CONVERSATION_ID)
+        }
     }
 
     private suspend fun reload() {
@@ -1287,6 +1430,12 @@ class ChatViewModel(
                 sending = false,
                 compacting = false,
                 workingText = "",
+                kind = conversation?.kind ?: ConversationKind.Chat,
+                taskStatus = conversation?.taskStatus ?: TaskStatus.None,
+                workerProfile = conversation?.workerProfile ?: WorkerProfile.Standard,
+                routerModel = mainChannel.state.value.routerModel,
+                sideActiveCount = mainChannel.state.value.activeSideChats,
+                sideUnreadCount = mainChannel.state.value.unreadResults,
                 providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon, it.models) },
                 providerId = providerId,
                 model = model,
@@ -1344,6 +1493,12 @@ class ChatViewModel(
                 loading = false,
                 conversationId = conversationId,
                 title = conversation?.title.orEmpty(),
+                kind = conversation?.kind ?: ConversationKind.Chat,
+                taskStatus = conversation?.taskStatus ?: TaskStatus.None,
+                workerProfile = conversation?.workerProfile ?: WorkerProfile.Standard,
+                routerModel = mainChannel.state.value.routerModel,
+                sideActiveCount = mainChannel.state.value.activeSideChats,
+                sideUnreadCount = mainChannel.state.value.unreadResults,
                 name = name,
                 assistantName = assistantName,
                 history = entries,
@@ -1428,6 +1583,10 @@ class ChatViewModel(
     }
 
     private suspend fun newConversation() {
+        if (currentState.isMain) {
+            openSidePanel()
+            return
+        }
         loadGeneration++
         loadJob?.cancel()
         if (currentState.history.isEmpty() && currentState.conversationId.isNotBlank()) {
@@ -1813,7 +1972,7 @@ class ChatViewModel(
                     }
                 }
                 ChatRole.Tool -> {
-                    if (message.name != ToolCatalog.SET_WORKING_TEXT) {
+                    if (!currentState.isMain && message.name != ToolCatalog.SET_WORKING_TEXT) {
                         entries += ChatEntry.Trace(
                             key = "m${message.id}",
                             steps = message.toSteps(argumentsByCall[message.toolCallId.orEmpty()].orEmpty()),
@@ -1821,14 +1980,29 @@ class ChatViewModel(
                     }
                 }
                 ChatRole.System -> {
-                    if (message.label == "failure") {
-                        entries += ChatEntry.Failure(
+                    when {
+                        message.label == "failure" -> entries += ChatEntry.Failure(
                             key = "m${message.id}",
                             message = message.content,
                             retryable = true,
                         )
-                    } else {
-                        entries += ChatEntry.Notice(
+                        message.label == MainChannelSession.SIDE_RESULT_LABEL -> {
+                            val card = runCatching {
+                                json.decodeFromString(SideResultCard.serializer(), message.content)
+                            }.getOrNull()
+                            if (card != null) {
+                                entries += ChatEntry.SideResult(
+                                    key = "m${message.id}",
+                                    card = SideResultUi(
+                                        sideChatId = card.sideChatId,
+                                        title = card.title,
+                                        summary = card.summary,
+                                        failed = card.failed,
+                                    ),
+                                )
+                            }
+                        }
+                        else -> entries += ChatEntry.Notice(
                             key = "m${message.id}",
                             text = message.content,
                         )

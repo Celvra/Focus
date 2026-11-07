@@ -119,6 +119,27 @@ class SideChatManager(
         return conversation
     }
 
+    suspend fun createEmpty(profile: WorkerProfile = WorkerProfile.Standard): Conversation {
+        val role = when (profile) {
+            WorkerProfile.Light -> AgentRole.WorkerLight
+            WorkerProfile.Standard -> AgentRole.WorkerStandard
+            WorkerProfile.Heavy -> AgentRole.WorkerHeavy
+        }
+        val resolved = models.resolve(role)
+        val conversation = chats.createSideChat(
+            title = "新旁聊",
+            parentId = ChatStore.MAIN_CONVERSATION_ID,
+            profile = profile,
+            note = "",
+            providerId = resolved?.providerId.orEmpty(),
+            model = resolved?.model.orEmpty(),
+            reasoning = (resolved?.reasoning ?: ReasoningLevel.Auto).name,
+        )
+        threads.subscribe("side:${conversation.id}", conversation.id, "self")
+        updateCounts()
+        return conversation
+    }
+
     suspend fun resume(id: String): Boolean {
         val conversation = chats.conversation(id) ?: return false
         if (conversation.kind != ConversationKind.Side) return false

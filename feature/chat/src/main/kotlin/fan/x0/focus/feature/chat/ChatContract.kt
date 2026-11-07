@@ -10,6 +10,7 @@ import fan.x0.focus.data.assistant.AskKind
 import fan.x0.focus.data.assistant.AttachmentKind
 import fan.x0.focus.data.assistant.ChatDetailConfig
 import fan.x0.focus.data.assistant.CommandPolicy
+import fan.x0.focus.data.assistant.ConversationKind
 import fan.x0.focus.data.assistant.ConversationTodo
 import fan.x0.focus.data.assistant.FileDiff
 import fan.x0.focus.data.assistant.MessageStats
@@ -18,6 +19,8 @@ import fan.x0.focus.data.assistant.PlanStatus
 import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ProviderModel
 import fan.x0.focus.data.assistant.ReasoningLevel
+import fan.x0.focus.data.assistant.TaskStatus
+import fan.x0.focus.data.assistant.WorkerProfile
 import fan.x0.focus.data.assistant.WorkspaceKind
 
 enum class TraceStatus { Pending, Running, Done, Failed }
@@ -189,6 +192,29 @@ data class SubAgentRunUi(
     val entries: List<ChatEntry>,
 )
 
+data class SideResultUi(
+    val sideChatId: String,
+    val title: String,
+    val summary: String,
+    val failed: Boolean,
+)
+
+data class SideChatRowUi(
+    val id: String,
+    val title: String,
+    val status: TaskStatus,
+    val profile: WorkerProfile,
+    val summary: String,
+    val updatedAt: Long,
+    val unseen: Boolean,
+)
+
+data class SidePanelUi(
+    val open: Boolean = false,
+    val loading: Boolean = false,
+    val items: List<SideChatRowUi> = emptyList(),
+)
+
 private fun ChatEntry.sameBubble(other: ChatEntry): Boolean = when {
     this is ChatEntry.User && other is ChatEntry.User -> text == other.text
     this is ChatEntry.Assistant && other is ChatEntry.Assistant ->
@@ -257,6 +283,8 @@ sealed interface ChatEntry {
         val tokensBefore: Int = 0,
         val tokensAfter: Int = 0,
     ) : ChatEntry
+
+    data class SideResult(override val key: String, val card: SideResultUi) : ChatEntry
 }
 
 data class ProviderOption(
@@ -289,6 +317,13 @@ data class ChatUiState(
     val loading: Boolean = true,
     val conversationId: String = "",
     val title: String = "",
+    val kind: ConversationKind = ConversationKind.Chat,
+    val taskStatus: TaskStatus = TaskStatus.None,
+    val workerProfile: WorkerProfile = WorkerProfile.Standard,
+    val routerModel: String = "",
+    val sideActiveCount: Int = 0,
+    val sideUnreadCount: Int = 0,
+    val sidePanel: SidePanelUi = SidePanelUi(),
     val assistantName: String = "",
     val workingText: String = "",
     val name: String? = null,
@@ -385,6 +420,8 @@ data class ChatUiState(
 
     val canSend: Boolean get() = (input.isNotBlank() || attachments.isNotEmpty()) && !sending
     val isEmpty: Boolean get() = history.isEmpty() && !sending && streaming.isBlank() && reasoning.isBlank()
+    val isMain: Boolean get() = kind == ConversationKind.Main
+    val isSide: Boolean get() = kind == ConversationKind.Side
 }
 
 enum class ComposerPicker { Model, Reasoning }
@@ -447,6 +484,13 @@ sealed interface ChatAction : UiAction {
     data class OpenSubAgent(val id: String) : ChatAction
     data object CloseSubAgent : ChatAction
     data object ConsumeMessage : ChatAction
+    data object OpenSidePanel : ChatAction
+    data object CloseSidePanel : ChatAction
+    data object RefreshSidePanel : ChatAction
+    data class OpenSideChat(val id: String) : ChatAction
+    data class StopSideChat(val id: String) : ChatAction
+    data class RetrySideChat(val id: String) : ChatAction
+    data object BackToMain : ChatAction
 }
 
 sealed interface ChatEffect : UiEffect {

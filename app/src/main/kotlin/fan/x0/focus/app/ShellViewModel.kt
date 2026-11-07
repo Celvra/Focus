@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import fan.x0.focus.data.assistant.ChatStore
 import fan.x0.focus.data.assistant.ChatSwitcher
 import fan.x0.focus.data.assistant.Conversation
+import fan.x0.focus.data.assistant.SideChatManager
 import fan.x0.focus.data.assistant.WorkspaceStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,10 +17,12 @@ import org.koin.core.annotation.KoinViewModel
 data class ShellState(
     val loading: Boolean = true,
     val name: String? = null,
+    val main: Conversation? = null,
     val conversations: List<Conversation> = emptyList(),
+    val sides: List<Conversation> = emptyList(),
     val archived: List<Conversation> = emptyList(),
 ) {
-    val recent: List<Conversation> get() = conversations.take(5)
+    val recent: List<Conversation> get() = sides.take(6)
 }
 
 @KoinViewModel
@@ -27,6 +30,7 @@ class ShellViewModel(
     private val chats: ChatStore,
     private val workspace: WorkspaceStore,
     private val switcher: ChatSwitcher,
+    private val sideChats: SideChatManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ShellState())
@@ -74,14 +78,30 @@ class ShellViewModel(
         switcher.newChat()
     }
 
+    fun newSideChat() {
+        viewModelScope.launch {
+            val conversation = sideChats.createEmpty()
+            switcher.open(conversation.id)
+            load()
+        }
+    }
+
+    fun openMain() {
+        switcher.open(ChatStore.MAIN_CONVERSATION_ID)
+    }
+
     private suspend fun load() {
         val name = workspace.userName()
+        val main = chats.ensureMainConversation()
         val conversations = chats.conversations().filter { it.id != ONBOARDING_CHAT }
+        val sides = chats.sideChats().filter { it.id != ONBOARDING_CHAT }
         val archived = chats.conversations(archived = true).filter { it.id != ONBOARDING_CHAT }
         _state.value = ShellState(
             loading = false,
             name = name,
+            main = main,
             conversations = conversations,
+            sides = sides,
             archived = archived,
         )
     }

@@ -1,10 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="chat_title">Focus</string>
+    <string name="chat_main_title">主会话</string>
+    <string name="chat_side_title">旁聊 · %1$s</string>
+    <string name="chat_side_panel_title">旁聊</string>
+    <string name="chat_side_panel_refresh">刷新</string>
+    <string name="chat_side_panel_empty">还没有旁聊。需要工具的任务会出现在这里。</string>
+    <string name="chat_side_panel_stop">停止</string>
+    <string name="chat_side_status_queued">排队中</string>
+    <string name="chat_side_status_running">运行中</string>
+    <string name="chat_side_status_waiting">等待你</string>
+    <string name="chat_side_status_done">已完成</string>
+    <string name="chat_side_status_failed">失败</string>
+    <string name="chat_side_status_interrupted">已中断</string>
+    <string name="chat_side_status_no_result">无结果</string>
+    <string name="chat_side_status_none">空闲</string>
+    <string name="chat_side_profile_light">轻档</string>
+    <string name="chat_side_profile_standard">标准</string>
+    <string name="chat_side_profile_heavy">重档</string>
     <string name="chat_subtitle">问什么都行</string>
     <string name="chat_working">正在处理</string>
     <string name="chat_compacting">正在压缩上下文</string>
     <string name="chat_compaction_title">较早的上下文已压缩</string>
+    <string name="chat_side_result_done">旁聊完成</string>
+    <string name="chat_side_result_failed">旁聊失败</string>
+    <string name="chat_side_result_retry">重试</string>
     <string name="chat_compaction_tokens">%1$s → %2$s token</string>
     <string name="chat_compact_empty">还没有可总结的内容。</string>
     <string name="chat_input_hint">给 Focus 发消息</string>
@@ -175,6 +195,7 @@
     <string name="slash_undo_desc">撤销最后一条消息和它的回复。</string>
     <string name="slash_redo_desc">重新发送刚撤销的消息。</string>
     <string name="slash_btw_desc">问一个旁支问题，不改变主任务。</string>
+    <string name="slash_side_desc">为一个需要工具或并行运行的任务新建旁聊。</string>
     <string name="slash_compact_desc">把较早的消息总结成摘要，释放上下文。</string>
     <string name="slash_new_desc">开始新会话。</string>
     <string name="slash_resume_desc">按 id 或标题恢复会话。</string>
@@ -185,6 +206,7 @@
     <string name="slash_help_desc">查看命令列表。</string>
     <string name="slash_no_arg">不需要参数</string>
     <string name="slash_btw_hint">旁支问题</string>
+    <string name="slash_side_hint">旁聊任务</string>
     <string name="slash_resume_hint">会话 id 或标题</string>
     <string name="slash_models_hint">搜索文字，可选</string>
     <string name="slash_effort_hint">off, auto, low, medium, high, xhigh, max</string>

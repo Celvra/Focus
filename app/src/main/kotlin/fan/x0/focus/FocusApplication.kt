@@ -11,6 +11,7 @@ import fan.x0.focus.app.ImGatewayService
 import fan.x0.focus.core.network.NetworkModule
 import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.NotifyModule
+import fan.x0.focus.data.assistant.AgentRuntime
 import fan.x0.focus.data.assistant.ApprovalStatus
 import fan.x0.focus.data.assistant.ApprovalStore
 import fan.x0.focus.data.assistant.AssistantEventSink
@@ -128,6 +129,7 @@ class FocusApplication : Application() {
 
     private suspend fun bootstrap() {
         val koin = KoinPlatform.getKoin()
+        koin.get<AgentRuntime>().start()
         koin.get<DeviceTriggerManager>()
         koin.get<CrewRunner>()
         val approvals = koin.get<ApprovalStore>()

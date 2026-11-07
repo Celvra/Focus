@@ -46,7 +46,8 @@ fun ShellDrawer(
     pluginPages: List<PluginPageRef>,
     controlledOnly: Boolean = false,
     onNavigate: (FocusRoute) -> Unit,
-    onNewChat: () -> Unit,
+    onOpenMain: () -> Unit,
+    onNewSideChat: () -> Unit,
     onOpenConversation: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -59,8 +60,17 @@ fun ShellDrawer(
     ) {
         DrawerHeader(state, onOpenSettings = { onNavigate(FocusRoute.Settings) })
         Spacer(Modifier.height(8.dp))
+        DrawerEntry(
+            FocusIcons.Assistant,
+            stringResource(R.string.drawer_main_session),
+            current == FocusRoute.Chat,
+            onOpenMain,
+        )
         if (!controlledOnly) {
-            NewChatButton(onClick = onNewChat)
+            NewChatButton(
+                label = stringResource(R.string.drawer_new_side_chat),
+                onClick = onNewSideChat,
+            )
             Spacer(Modifier.height(8.dp))
             DrawerEntry(FocusIcons.Today, stringResource(R.string.tab_today), current == FocusRoute.Today) {
                 onNavigate(FocusRoute.Today)
@@ -167,7 +177,7 @@ private fun DrawerHeader(state: ShellState, onOpenSettings: () -> Unit) {
 }
 
 @Composable
-private fun NewChatButton(onClick: () -> Unit) {
+private fun NewChatButton(label: String, onClick: () -> Unit) {
     Button(
         onClick = hapticTap(onClick),
         modifier = Modifier
@@ -187,7 +197,7 @@ private fun NewChatButton(onClick: () -> Unit) {
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            text = stringResource(R.string.drawer_new_chat),
+            text = label,
             style = MaterialTheme.typography.titleSmallEmphasized,
         )
     }

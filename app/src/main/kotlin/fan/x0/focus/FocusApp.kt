@@ -193,8 +193,12 @@ private fun MainShell() {
                 pluginPages = pluginPages,
                 controlledOnly = deviceRole == DeviceRole.Controlled,
                 onNavigate = navigate,
-                onNewChat = {
-                    shell.newChat()
+                onOpenMain = {
+                    shell.openMain()
+                    navigate(FocusRoute.Chat)
+                },
+                onNewSideChat = {
+                    shell.newSideChat()
                     navigate(FocusRoute.Chat)
                 },
                 onOpenConversation = { id ->

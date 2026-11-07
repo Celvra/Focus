@@ -24,6 +24,8 @@
     <string name="device_title">设备</string>
     <string name="drawer_recent">最近</string>
     <string name="drawer_new_chat">新对话</string>
+    <string name="drawer_new_side_chat">新旁聊</string>
+    <string name="drawer_main_session">主会话</string>
     <string name="drawer_no_conversations">还没有对话。</string>
     <string name="drawer_default_name">你</string>
     <string name="drawer_untitled">未命名</string>

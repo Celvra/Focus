@@ -167,6 +167,93 @@ internal fun ChatNoticeCard(
 }
 
 @Composable
+internal fun ChatSideResultCard(
+    card: SideResultUi,
+    onOpen: () -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(FocusShapeTokens.card)
+            .stateLayer(interaction, FocusShapeTokens.card)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClick = hapticTap(onOpen),
+            ),
+        shape = FocusShapeTokens.card,
+        color = if (card.failed) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        contentColor = if (card.failed) {
+            MaterialTheme.colorScheme.onErrorContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                imageVector = if (card.failed) FocusIcons.Warning else FocusIcons.Check,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = stringResource(
+                        if (card.failed) R.string.chat_side_result_failed else R.string.chat_side_result_done,
+                    ),
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                )
+                Text(
+                    text = card.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (card.summary.isNotBlank()) {
+                    Text(
+                        text = card.summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (card.failed) {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (card.failed) {
+                FocusOutlinedButton(
+                    onClick = onRetry,
+                    text = stringResource(R.string.chat_side_result_retry),
+                )
+            } else {
+                Icon(
+                    imageVector = FocusIcons.Chevron,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 internal fun ChatCompactionCard(
     text: String,
     streaming: Boolean = false,
