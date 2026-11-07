@@ -14,14 +14,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.savedstate.SavedStateRegistry
-import androidx.savedstate.SavedStateRegistryController
-import androidx.savedstate.SavedStateRegistryOwner
 import fan.x0.focus.core.designsystem.theme.FocusTheme
 import fan.x0.focus.data.device.AutomationGate
 import fan.x0.focus.data.device.DeviceAutomationState
@@ -37,27 +29,8 @@ import org.koin.mp.KoinPlatform
 
 class AutomationOverlayService : Service() {
 
-    private class OverlayOwner : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
-        private val registry = LifecycleRegistry(this)
-        private val controller = SavedStateRegistryController.create(this)
-        override val viewModelStore = ViewModelStore()
-        override val lifecycle: Lifecycle get() = registry
-        override val savedStateRegistry: SavedStateRegistry get() = controller.savedStateRegistry
-
-        init {
-            controller.performRestore(null)
-            registry.currentState = Lifecycle.State.RESUMED
-        }
-
-        fun destroy() {
-            if (registry.currentState == Lifecycle.State.DESTROYED) return
-            registry.currentState = Lifecycle.State.DESTROYED
-            viewModelStore.clear()
-        }
-    }
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val owner = OverlayOwner()
+    private val owner = OverlayWindowOwner()
     private val runtime: DeviceRuntime by lazy { KoinPlatform.getKoin().get<DeviceRuntime>() }
     private val gate: AutomationGate by lazy { KoinPlatform.getKoin().get<AutomationGate>() }
 
@@ -69,7 +42,6 @@ class AutomationOverlayService : Service() {
     private var concealObserver: Job? = null
     private var finishJob: Job? = null
     private var finished by mutableStateOf(false)
-    private var preview by mutableStateOf<String?>(null)
     private var leaving = false
     private var observing = false
 
@@ -107,11 +79,11 @@ class AutomationOverlayService : Service() {
 
     private fun addView() {
         val compose = ComposeView(this)
-        attachOwners(compose)
+        compose.attachOverlayOwners(owner)
         compose.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         compose.setContent {
             FocusTheme {
-                AutomationOverlay(finished = finished, preview = preview)
+                AutomationOverlay(finished = finished)
             }
         }
         val params = WindowManager.LayoutParams(
@@ -166,9 +138,6 @@ class AutomationOverlayService : Service() {
                         DeviceAutomationState.Idle -> fadeOutAndStop()
                     }
                 }
-        }
-        scope.launch {
-            runtime.displayPreview.collect { preview = it }
         }
         concealObserver = scope.launch {
             gate.concealed
@@ -229,20 +198,6 @@ class AutomationOverlayService : Service() {
                 stopSelf()
             }
             .start()
-    }
-
-    private fun attachOwners(target: View) {
-        setOwner(target, "androidx.lifecycle.ViewTreeLifecycleOwner", "androidx.lifecycle.LifecycleOwner", owner)
-        setOwner(target, "androidx.lifecycle.ViewTreeViewModelStoreOwner", "androidx.lifecycle.ViewModelStoreOwner", owner)
-        setOwner(target, "androidx.savedstate.ViewTreeSavedStateRegistryOwner", "androidx.savedstate.SavedStateRegistryOwner", owner)
-    }
-
-    private fun setOwner(target: View, ownerClass: String, interfaceClass: String, value: Any) {
-        runCatching {
-            val type = Class.forName(interfaceClass)
-            val method = Class.forName(ownerClass).getMethod("set", View::class.java, type)
-            method.invoke(null, target, value)
-        }
     }
 
     companion object {

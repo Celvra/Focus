@@ -45,4 +45,10 @@
     <string name="overlay_notification_close">Close</string>
     <string name="overlay_automation_running">Automation in progress</string>
     <string name="overlay_automation_finished">Automation finished</string>
+    <string name="overlay_display_window_title">Virtual screen</string>
+    <string name="overlay_display_window_id">Display %1$d</string>
+    <string name="overlay_display_window_close">Stop virtual screen</string>
+    <string name="overlay_display_window_waiting">Waiting for the screen</string>
+    <string name="overlay_display_window_hint">Tap or swipe to take over</string>
+    <string name="overlay_display_window_screen">Virtual screen content</string>
 </resources>

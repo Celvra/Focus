@@ -72,7 +72,9 @@ class DeviceViewModel(
             }
         }.launchIn(viewModelScope)
         runtime.displayPreview.onEach { image ->
-            updateState { copy(displayPreview = image) }
+            if (currentState.displayPreviewing) {
+                updateState { copy(displayPreview = image) }
+            }
         }.launchIn(viewModelScope)
         refresh()
     }
@@ -322,7 +324,6 @@ class DeviceViewModel(
 
     private fun stopSession() {
         stopLive()
-        runtime.setDisplayPreview(false)
         launchGuarded(onError = ::emitError) {
             runtime.stopSessionWithDisplay()
             updateState {
@@ -373,7 +374,6 @@ class DeviceViewModel(
     }
 
     private fun stopDisplay() {
-        runtime.setDisplayPreview(false)
         launchGuarded(onError = ::emitError) {
             runtime.stopVirtualDisplay()
             updateState {
@@ -390,7 +390,6 @@ class DeviceViewModel(
 
     private fun toggleDisplayPreview() {
         val next = !currentState.displayPreviewing
-        runtime.setDisplayPreview(next)
         updateState { copy(displayPreviewing = next, displayPreview = if (next) displayPreview else null) }
     }
 

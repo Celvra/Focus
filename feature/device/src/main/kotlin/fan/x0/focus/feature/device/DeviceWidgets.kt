@@ -11,8 +11,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -38,15 +39,16 @@ internal fun DeviceCard(content: @Composable () -> Unit) {
 
 @Composable
 internal fun DevicePreview(raw: String, title: String) {
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, raw) {
-        value = withContext(Dispatchers.IO) {
+    val frame = remember { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(raw) {
+        frame.value = withContext(Dispatchers.IO) {
             runCatching {
                 val bytes = Base64.decode(raw, Base64.DEFAULT)
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
             }.getOrNull()
         }
     }
-    val image = bitmap ?: return
+    val image = frame.value ?: return
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = FocusShapeTokens.card,

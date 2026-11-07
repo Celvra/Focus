@@ -202,12 +202,20 @@ class DeviceRuntime(
 
     val displayPreview: StateFlow<String?> get() = display.preview
 
-    fun setDisplayPreview(active: Boolean) = display.setPreviewActive(active)
-
     suspend fun startVirtualDisplay(spec: VirtualDisplaySpec): VirtualDisplayState =
         display.start(spec)
 
     suspend fun stopVirtualDisplay() = display.stop()
+
+    suspend fun virtualTap(x: Int, y: Int, longPress: Boolean = false): Boolean {
+        if (!display.state.value.running) return false
+        return display.tap(x, y, longPress)
+    }
+
+    suspend fun virtualSwipe(startX: Int, startY: Int, endX: Int, endY: Int, durationMs: Int = 250): Boolean {
+        if (!display.state.value.running) return false
+        return display.swipe(startX, startY, endX, endY, durationMs)
+    }
 
     suspend fun refreshVirtualDisplay() = display.refresh()
 

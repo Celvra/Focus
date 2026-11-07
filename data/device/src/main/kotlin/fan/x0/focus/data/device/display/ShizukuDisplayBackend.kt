@@ -36,23 +36,23 @@ class ShizukuDisplayBackend(
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
     }.getOrDefault(false)
 
-    override suspend fun start(spec: VirtualDisplaySpec): DisplayStartResult {
+    override suspend fun start(spec: VirtualDisplaySpec): DisplayStartResult = withContext(Dispatchers.IO) {
         val client = bind()
         val raw = client.start(spec.width, spec.height, spec.density)
         val result = parseStart(raw)
         displayId = result.displayId
-        return result.copy(backend = DisplayBackendKind.Shizuku)
+        result.copy(backend = DisplayBackendKind.Shizuku)
     }
 
-    override suspend fun stop() {
+    override suspend fun stop() = withContext(Dispatchers.IO) {
         runCatching { service?.stop() }
         displayId = 0
     }
 
-    override suspend fun status(): DisplayStatus {
-        val client = service ?: return DisplayStatus()
-        val raw = runCatching { client.status() }.getOrNull() ?: return DisplayStatus()
-        return parseStatus(raw)
+    override suspend fun status(): DisplayStatus = withContext(Dispatchers.IO) {
+        val client = service ?: return@withContext DisplayStatus()
+        val raw = runCatching { client.status() }.getOrNull() ?: return@withContext DisplayStatus()
+        parseStatus(raw)
     }
 
     override suspend fun capture(quality: Int, maxWidth: Int): ByteArray? = withContext(Dispatchers.IO) {
@@ -65,7 +65,9 @@ class ShizukuDisplayBackend(
     }
 
     override suspend fun tap(displayId: Int, x: Int, y: Int, durationMs: Int): Boolean =
-        runCatching { service?.tap(displayId, x, y, durationMs) == true }.getOrDefault(false)
+        withContext(Dispatchers.IO) {
+            runCatching { service?.tap(displayId, x, y, durationMs) == true }.getOrDefault(false)
+        }
 
     override suspend fun swipe(
         displayId: Int,
@@ -74,18 +76,24 @@ class ShizukuDisplayBackend(
         endX: Int,
         endY: Int,
         durationMs: Int,
-    ): Boolean = runCatching {
-        service?.swipe(displayId, startX, startY, endX, endY, durationMs) == true
-    }.getOrDefault(false)
+    ): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            service?.swipe(displayId, startX, startY, endX, endY, durationMs) == true
+        }.getOrDefault(false)
+    }
 
-    override suspend fun key(displayId: Int, keyCode: Int): Boolean =
+    override suspend fun key(displayId: Int, keyCode: Int): Boolean = withContext(Dispatchers.IO) {
         runCatching { service?.key(displayId, keyCode) == true }.getOrDefault(false)
+    }
 
-    override suspend fun text(displayId: Int, text: String): Boolean =
+    override suspend fun text(displayId: Int, text: String): Boolean = withContext(Dispatchers.IO) {
         runCatching { service?.text(displayId, text) == true }.getOrDefault(false)
+    }
 
     override suspend fun launch(displayId: Int, packageName: String, activity: String): Boolean =
-        runCatching { service?.launch(displayId, packageName, activity) == true }.getOrDefault(false)
+        withContext(Dispatchers.IO) {
+            runCatching { service?.launch(displayId, packageName, activity) == true }.getOrDefault(false)
+        }
 
     override fun release() {
         val args = serviceArgs()

@@ -9,6 +9,7 @@ class DeviceTurnGuard(private val runtime: DeviceRuntime) : AssistantTurnGuard {
         if (conversationId.isBlank()) return
         val session = runtime.session.value ?: return
         if (session.remote || session.conversationId != conversationId) return
+        if (runtime.displayState.value.running || runtime.displayState.value.starting) return
         if (runtime.backgroundList().any { it.running }) return
         runtime.stopSession()
     }

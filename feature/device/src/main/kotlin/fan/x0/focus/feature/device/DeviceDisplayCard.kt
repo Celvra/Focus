@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import android.provider.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -75,6 +78,15 @@ internal fun DeviceDisplayCard(state: DeviceUiState, onAction: (DeviceAction) ->
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                val context = LocalContext.current
+                val overlayAllowed = remember(context) { Settings.canDrawOverlays(context) }
+                if (!overlayAllowed) {
+                    Text(
+                        text = stringResource(R.string.device_display_overlay_needed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 FocusOutlinedButton(
                     text = stringResource(
                         if (state.displayPreviewing) {

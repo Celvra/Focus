@@ -9,8 +9,8 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import fan.x0.focus.data.device.DeviceNotifier
+import fan.x0.focus.data.device.DeviceRuntime
 import fan.x0.focus.data.device.R
-import fan.x0.focus.data.device.display.VirtualDisplayController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,12 +23,16 @@ class DeviceDisplayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             scope.launch {
-                runCatching { KoinPlatform.getKoin().get<VirtualDisplayController>().stop() }
+                runCatching { KoinPlatform.getKoin().get<DeviceRuntime>().stopSessionWithDisplay() }
                 stopSelf()
             }
             return START_NOT_STICKY
         }
         startForegroundNotification()
+        val remote = runCatching {
+            KoinPlatform.getKoin().get<DeviceRuntime>().session.value?.remote == true
+        }.getOrDefault(false)
+        if (!remote) openDisplayWindow()
         return START_NOT_STICKY
     }
 
@@ -38,6 +42,14 @@ class DeviceDisplayService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun openDisplayWindow() {
+        runCatching {
+            startService(
+                Intent().setClassName(packageName, DISPLAY_WINDOW_SERVICE),
+            )
+        }
+    }
 
     private fun startForegroundNotification() {
         runCatching {
@@ -80,6 +92,7 @@ class DeviceDisplayService : Service() {
 
     companion object {
         private const val ACTION_START = "fan.x0.focus.device.display.START"
+        private const val DISPLAY_WINDOW_SERVICE = "fan.x0.focus.feature.overlay.DisplayWindowService"
         private const val ACTION_STOP = "fan.x0.focus.device.display.STOP"
 
         fun start(context: Context) {

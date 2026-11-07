@@ -106,4 +106,5 @@
     <string name="device_msg_display_failed">Virtual screen failed: %1$s</string>
     <string name="device_msg_display_started">Virtual screen %1$s started</string>
     <string name="device_msg_display_stopped">Virtual screen stopped</string>
+    <string name="device_display_overlay_needed">Allow display over other apps to show the floating window.</string>
 </resources>

@@ -106,4 +106,5 @@
     <string name="device_msg_display_failed">虚拟屏启动失败：%1$s</string>
     <string name="device_msg_display_started">虚拟屏 %1$s 已启动</string>
     <string name="device_msg_display_stopped">虚拟屏已停止</string>
+    <string name="device_display_overlay_needed">允许显示在其他应用上层，才能显示悬浮小窗。</string>
 </resources>

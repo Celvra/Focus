@@ -39,7 +39,7 @@ import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 
 @Composable
-internal fun AutomationOverlay(finished: Boolean, preview: String? = null) {
+internal fun AutomationOverlay(finished: Boolean) {
     Box(modifier = Modifier.fillMaxSize()) {
         AutomationMarquee()
         Box(
@@ -49,13 +49,13 @@ internal fun AutomationOverlay(finished: Boolean, preview: String? = null) {
                 .padding(bottom = 56.dp),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            AutomationPill(finished = finished, preview = preview)
+            AutomationPill(finished = finished)
         }
     }
 }
 
 @Composable
-private fun AutomationPill(finished: Boolean, preview: String?) {
+private fun AutomationPill(finished: Boolean) {
     val scheme = MaterialTheme.colorScheme
     val typography = LocalFocusTypography.current
     val shape = RoundedCornerShape(50)
@@ -103,7 +103,6 @@ private fun AutomationPill(finished: Boolean, preview: String?) {
                     style = typography.labelLarge,
                     color = scheme.onSurface,
                 )
-                preview?.let { AutomationPreview(it) }
             }
         }
     }
