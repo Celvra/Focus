@@ -138,6 +138,7 @@ class SideChatManager(
             reasoning = (resolved?.reasoning ?: ReasoningLevel.Auto).name,
         )
         threads.subscribe("side:${conversation.id}", conversation.id, "self")
+        chats.setTaskStatus(conversation.id, TaskStatus.None)
         updateCounts()
         return conversation
     }
@@ -218,7 +219,16 @@ class SideChatManager(
                 updatedAt = conversation.updatedAt,
                 resultSeen = conversation.resultSeen,
             )
-        }
+        }.sortedWith(compareBy<SideChatSummary> { statusRank(it.status) }.thenByDescending { it.updatedAt })
+    }
+
+    private fun statusRank(status: TaskStatus): Int = when (status) {
+        TaskStatus.Waiting -> 0
+        TaskStatus.Running -> 1
+        TaskStatus.Failed, TaskStatus.Interrupted -> 2
+        TaskStatus.Queued -> 3
+        TaskStatus.Done -> 4
+        TaskStatus.NoResult, TaskStatus.None -> 5
     }
 
     suspend fun recover() {

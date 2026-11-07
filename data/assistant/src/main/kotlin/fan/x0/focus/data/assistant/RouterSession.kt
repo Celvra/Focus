@@ -28,6 +28,7 @@ class RouterSession(
     private val workspace: WorkspaceStore,
     private val journal: TurnJournalStore,
     private val assembler: ContextAssembler,
+    private val keepAlive: ChatTurnKeepAlive,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val queue = Channel<AgentEvent>(Channel.UNLIMITED)
@@ -80,6 +81,7 @@ class RouterSession(
         synchronized(queuedIds) { batch.forEach { queuedIds.remove(it.id) } }
         if (claimed.isEmpty()) return
         main.setWorking(true, "Router 正在处理")
+        keepAlive.start()
         var journalStatus = "failed"
         try {
             val resolved = models.resolve(AgentRole.Router)

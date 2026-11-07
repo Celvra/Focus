@@ -212,7 +212,11 @@ data class AgentEvent(
         fun deviceTrigger(label: String, prompt: String, conversationId: String): AgentEvent = AgentEvent(
             source = AgentEventSource.Device,
             kind = AgentEventKind.DeviceTrigger,
-            target = AgentEventRoute.ROUTER_TARGET,
+            target = if (conversationId.isBlank()) {
+                AgentEventRoute.ROUTER_TARGET
+            } else {
+                AgentEventRoute.Side(conversationId).target
+            },
             threadKey = "device:$label",
             payload = buildJsonObject {
                 put("label", label)

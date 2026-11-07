@@ -837,12 +837,17 @@ class ChatViewModel(
             SlashCommandId.Resume -> resume(argument)
             SlashCommandId.Sessions -> sendEffect(ChatEffect.OpenSessions)
             SlashCommandId.Models -> {
-                if (argument.isNotBlank()) {
-                    updateState { copy(modelQuery = argument) }
+                if (currentState.isMain) {
+                    sendEffect(ChatEffect.OpenSettings)
+                } else {
+                    if (argument.isNotBlank()) {
+                        updateState { copy(modelQuery = argument) }
+                    }
+                    onAction(ChatAction.OpenPicker(ComposerPicker.Model))
                 }
-                onAction(ChatAction.OpenPicker(ComposerPicker.Model))
             }
             SlashCommandId.Effort -> {
+                if (currentState.isMain) return
                 val level = ReasoningLevel.entries.firstOrNull {
                     it.name.equals(argument, ignoreCase = true)
                 }
@@ -1588,6 +1593,11 @@ class ChatViewModel(
     private suspend fun newConversation() {
         if (currentState.isMain) {
             openSidePanel()
+            return
+        }
+        if (currentState.isSide) {
+            val conversation = sideChats.createEmpty()
+            switchTo(conversation.id)
             return
         }
         loadGeneration++

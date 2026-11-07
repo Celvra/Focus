@@ -17,6 +17,7 @@ class ModelResolver(
     private val settings: AssistantSettings,
     private val secrets: SecretStore,
     private val roles: RoleModels,
+    private val agent: AgentSettings,
 ) {
     suspend fun resolve(role: AgentRole, parent: ResolvedModel? = null): ResolvedModel? {
         resolveAssigned(role)?.let { return it }
@@ -33,6 +34,21 @@ class ModelResolver(
     suspend fun resolveAssigned(role: AgentRole): ResolvedModel? {
         val config = settings.configOnce()
         val assigned = roles.configsOnce()
+        if (role == AgentRole.Subagent && assigned[role] == null) {
+            val legacy = agent.configOnce()
+            if (legacy.subagentProviderId.isNotBlank() && legacy.subagentModel.isNotBlank()) {
+                val provider = config.providers.firstOrNull { it.id == legacy.subagentProviderId }
+                if (provider != null) {
+                    candidate(
+                        role = role,
+                        provider = provider,
+                        model = legacy.subagentModel,
+                        reasoning = ReasoningLevel.Auto,
+                        via = null,
+                    )?.let { return it }
+                }
+            }
+        }
         val chain = buildList {
             add(role)
             addAll(role.fallbacks)

@@ -30,7 +30,7 @@ class AgentEventDispatcher(
         }
         val route = event.route
         if (route is AgentEventRoute.Side) {
-            sideChats.deliver(event)
+            if (!sideChats.deliver(event)) router.submit(event)
             return
         }
         if (route == AgentEventRoute.Router) {

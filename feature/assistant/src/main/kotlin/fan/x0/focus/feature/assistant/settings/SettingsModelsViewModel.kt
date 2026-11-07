@@ -159,6 +159,7 @@ class RoleModelsViewModel(
                     )
                 }.filter { it.models.isNotEmpty() }
                 updateState { copy(groups = groups, modelsLoading = false) }
+                reloadRows()
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Throwable) {

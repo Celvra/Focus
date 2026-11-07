@@ -53,6 +53,7 @@ class AgentWatchdog(
                 ?: 0
             val snapshot = Progress(turn.stats.totalTokens.toLong(), answerLength, now)
             val previous = progress.put(conversationId, snapshot)
+            val lastTouch = journal.latest(conversationId)?.updatedAt ?: 0
             val waiting = turn.entries.any { entry ->
                 when (entry) {
                     is ChatTurnEntry.Approval -> entry.card.phase == ChatTurnApprovalPhase.Waiting
@@ -65,7 +66,7 @@ class AgentWatchdog(
             if (!waiting && previous != null &&
                 previous.tokens == snapshot.tokens &&
                 previous.answer == snapshot.answer &&
-                now - previous.at > NO_PROGRESS_MS
+                now - maxOf(previous.at, lastTouch) > NO_PROGRESS_MS
             ) {
                 alarm(conversationId, "no_progress", "长时间没有输出，已停止这次运行。")
                 stop(conversationId)
