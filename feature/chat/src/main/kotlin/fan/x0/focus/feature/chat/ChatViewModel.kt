@@ -1444,9 +1444,13 @@ class ChatViewModel(
             copy(
                 history = entries,
                 live = emptyList(),
-                sending = false,
+                sending = conversation?.kind == ConversationKind.Main && mainChannel.state.value.working,
                 compacting = false,
-                workingText = "",
+                workingText = if (conversation?.kind == ConversationKind.Main) {
+                    mainChannel.state.value.workingText
+                } else {
+                    ""
+                },
                 kind = conversation?.kind ?: ConversationKind.Chat,
                 taskStatus = conversation?.taskStatus ?: TaskStatus.None,
                 workerProfile = conversation?.workerProfile ?: WorkerProfile.Standard,
@@ -1500,6 +1504,10 @@ class ChatViewModel(
         if (conversation?.kind == ConversationKind.Side) {
             sideChats.markSeen(conversationId)
         }
+        if (conversation?.kind == ConversationKind.Main) {
+            mainWasWorking = mainChannel.state.value.working
+            mainSubmitting = false
+        }
         if (generation != loadGeneration) return
         val runningTurn = turns.state(conversationId)
         val visibleMessages = if (runningTurn.running && runningTurn.userText.isNotBlank()) {
@@ -1529,9 +1537,13 @@ class ChatViewModel(
                 history = entries,
                 live = emptyList(),
                 suggestions = emptyList(),
-                sending = false,
+                sending = conversation?.kind == ConversationKind.Main && mainChannel.state.value.working,
                 compacting = false,
-                workingText = "",
+                workingText = if (conversation?.kind == ConversationKind.Main) {
+                    mainChannel.state.value.workingText
+                } else {
+                    ""
+                },
                 input = "",
                 turn = 0,
                 attachments = emptyList(),
