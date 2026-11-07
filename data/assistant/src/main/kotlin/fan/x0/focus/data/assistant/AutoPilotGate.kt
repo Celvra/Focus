@@ -22,6 +22,7 @@ class AutoPilotGate(
     private val jev: JevJudge,
     private val llm: LlmJudge,
     private val chats: ChatStore,
+    private val models: ModelResolver,
 ) {
     suspend fun evaluate(action: JudgeAction, conversationId: String): GateDecision {
         val config = policy.configOnce()
@@ -75,6 +76,15 @@ class AutoPilotGate(
     }
 
     private suspend fun resolveTarget(config: PolicyConfig): JudgeTarget? {
+        models.resolveAssigned(AgentRole.Judge)?.let { resolved ->
+            val key = secrets.apiKey(resolved.providerId)?.takeIf { it.isNotBlank() } ?: return@let
+            return JudgeTarget(
+                baseUrl = resolved.provider.baseUrl,
+                model = resolved.model,
+                protocol = resolved.provider.protocol,
+                requestConfig = resolved.provider.requestConfig(key),
+            )
+        }
         val assistant = settings.configOnce()
         val provider = assistant.providers.firstOrNull { it.id == config.judgeProviderId }
             ?: assistant.activeProvider

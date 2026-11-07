@@ -12,17 +12,20 @@ class ChatTitleGenerator(
     private val settings: AssistantSettings,
     private val secrets: SecretStore,
     private val chats: ChatStore,
+    private val models: ModelResolver,
 ) {
     suspend fun generate(conversationId: String, providerId: String, model: String): String? {
         val conversation = chats.conversation(conversationId) ?: return null
         val config = settings.configOnce()
-        val provider = config.providers.firstOrNull { it.id == providerId }
+        val fallbackProvider = config.providers.firstOrNull { it.id == providerId }
             ?: config.providers.firstOrNull { it.id == conversation.providerId }
             ?: config.activeProvider
             ?: return null
+        val resolved = models.resolve(AgentRole.Title)
+        val provider = resolved?.provider ?: fallbackProvider
         val endpoint = ModelEndpoint(
             baseUrl = provider.baseUrl,
-            model = model.ifBlank { conversation.model }.ifBlank { provider.model },
+            model = resolved?.model ?: model.ifBlank { conversation.model }.ifBlank { provider.model },
         )
         if (!endpoint.isUsable) return null
         val apiKey = secrets.apiKey(provider.id).orEmpty()

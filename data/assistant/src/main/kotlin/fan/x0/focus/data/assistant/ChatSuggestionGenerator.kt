@@ -30,6 +30,7 @@ class ChatSuggestionGenerator(
     private val goals: GoalStore,
     private val workspace: WorkspaceStore,
     private val locale: LocaleController,
+    private val models: ModelResolver,
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -38,12 +39,14 @@ class ChatSuggestionGenerator(
 
     suspend fun generate(providerId: String, model: String): List<ChatSuggestion> {
         val config = settings.configOnce()
-        val provider = config.providers.firstOrNull { it.id == providerId }
+        val fallback = config.providers.firstOrNull { it.id == providerId }
             ?: config.activeProvider
             ?: return emptyList()
+        val resolved = models.resolve(AgentRole.Suggestion)
+        val provider = resolved?.provider ?: fallback
         val endpoint = ModelEndpoint(
             baseUrl = provider.baseUrl,
-            model = model.ifBlank { provider.model },
+            model = resolved?.model ?: model.ifBlank { provider.model },
         )
         if (!endpoint.isUsable) return emptyList()
         val apiKey = secrets.apiKey(provider.id).orEmpty()

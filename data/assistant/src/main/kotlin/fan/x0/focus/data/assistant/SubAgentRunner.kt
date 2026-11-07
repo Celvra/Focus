@@ -46,46 +46,31 @@ data class SubAgentResult(
 @Single
 class SubAgentRunner(
     private val client: ChatWireClient,
-    private val settings: AssistantSettings,
     private val secrets: SecretStore,
-    private val agent: AgentSettings,
+    private val models: ModelResolver,
     private val tools: ToolExecutor,
     private val runs: SubAgentRunStore,
     private val skills: SkillRepository,
 ) {
     suspend fun run(request: SubAgentRequest): SubAgentResult {
         if (request.task.isBlank()) return SubAgentResult("", emptyList(), emptyList(), "Task is empty")
-        val config = settings.configOnce()
-        val agentConfig = agent.configOnce()
-        val candidates = buildList {
-            agentConfig.subagentProviderId.takeIf { it.isNotBlank() }?.let { id ->
-                config.providers.firstOrNull { it.id == id }?.let(::add)
-            }
-            request.parentProviderId.takeIf { it.isNotBlank() }?.let { id ->
-                config.providers.firstOrNull { it.id == id }?.let(::add)
-            }
-            config.activeProvider?.let(::add)
-        }.distinctBy { it.id }
-        if (candidates.isEmpty()) {
-            return SubAgentResult("", emptyList(), emptyList(), "No provider is configured")
+        val parent = if (request.parentProviderId.isNotBlank() && request.parentModel.isNotBlank()) {
+            models.resolveManual(request.parentProviderId, request.parentModel, ReasoningLevel.Auto)
+        } else {
+            null
         }
-        val provider = candidates.firstOrNull { candidate ->
-            !candidate.requiresKey || !secrets.apiKey(candidate.id).isNullOrBlank()
-        } ?: candidates.first()
+        val explicit = request.model.takeIf { it.isNotBlank() }?.let { model ->
+            models.resolveManual(request.parentProviderId.ifBlank { parent?.providerId.orEmpty() }, model, ReasoningLevel.Auto)
+        }
+        val resolved = explicit
+            ?: models.resolve(AgentRole.Subagent, parent)
+            ?: return SubAgentResult("", emptyList(), emptyList(), "No provider is configured")
+        val provider = resolved.provider
         val key = secrets.apiKey(provider.id).orEmpty()
         if (key.isBlank() && provider.requiresKey) {
             return SubAgentResult("", emptyList(), emptyList(), "No API key for ${provider.name}")
         }
-        val configuredModel = agentConfig.subagentModel.takeIf {
-            agentConfig.subagentProviderId.isNotBlank() &&
-                provider.id == agentConfig.subagentProviderId &&
-                it.isNotBlank()
-        }
-        val parentModel = request.parentModel.takeIf {
-            provider.id == request.parentProviderId && it.isNotBlank()
-        }
-        val model = request.model.ifBlank { configuredModel ?: parentModel ?: provider.model }
-            .ifBlank { provider.model }
+        val model = resolved.model.ifBlank { provider.model }
         val endpoint = ModelEndpoint(provider.baseUrl, model)
         if (!endpoint.isUsable) return SubAgentResult("", emptyList(), emptyList(), "Model is not usable")
         val requestConfig = provider.requestConfig(key)

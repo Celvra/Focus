@@ -97,6 +97,7 @@ class ChatCompactor(
     private val secrets: SecretStore,
     private val chats: ChatStore,
     private val catalog: ModelsDevCatalog,
+    private val models: ModelResolver,
 ) {
     private val windows = ConcurrentHashMap<String, Int>()
 
@@ -118,13 +119,15 @@ class ChatCompactor(
         val conversation = chats.conversation(conversationId) ?: return null
         val config = settings.configOnce()
         val preferred = providerId.ifBlank { conversation.providerId }
-        val provider = config.providers.firstOrNull { it.id == preferred }
+        val fallbackProvider = config.providers.firstOrNull { it.id == preferred }
             ?: config.providers.firstOrNull { it.id == conversation.providerId }
             ?: config.activeProvider
             ?: return null
+        val resolved = models.resolve(AgentRole.Compactor)
+        val provider = resolved?.provider ?: fallbackProvider
         val endpoint = ModelEndpoint(
             baseUrl = provider.baseUrl,
-            model = model.ifBlank { conversation.model }.ifBlank { provider.model },
+            model = resolved?.model ?: model.ifBlank { conversation.model }.ifBlank { provider.model },
         )
         if (!endpoint.isUsable) return null
         val apiKey = secrets.apiKey(provider.id).orEmpty()
