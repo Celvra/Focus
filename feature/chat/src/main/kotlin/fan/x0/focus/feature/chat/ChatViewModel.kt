@@ -1496,6 +1496,9 @@ class ChatViewModel(
             ?: ReasoningLevel.Auto
         val todos = chats.todos(conversationId)
         val source = imChats.bindingForConversation(conversationId)
+        if (conversation?.kind == ConversationKind.Side) {
+            sideChats.markSeen(conversationId)
+        }
         if (generation != loadGeneration) return
         val runningTurn = turns.state(conversationId)
         val visibleMessages = if (runningTurn.running && runningTurn.userText.isNotBlank()) {

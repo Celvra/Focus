@@ -197,11 +197,12 @@ class SideChatManager(
                 createdAt = System.currentTimeMillis(),
             ),
         )
-        chats.setResultSeen(id, true)
         updateCounts()
     }
 
     suspend fun markSeen(id: String) {
+        val conversation = chats.conversation(id) ?: return
+        if (conversation.resultSeen) return
         chats.setResultSeen(id, true)
         updateCounts()
     }
@@ -366,7 +367,6 @@ class SideChatManager(
                     createdAt = System.currentTimeMillis(),
                 ),
             )
-            chats.setResultSeen(conversation.id, true)
         }
         bus.publish(
             AgentEvent.sideChatResult(
