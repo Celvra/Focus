@@ -7,8 +7,8 @@ enum class DisplayBackendKind { None, Shizuku, Root }
 
 @Serializable
 data class VirtualDisplaySpec(
-    val width: Int = 1080,
-    val height: Int = 1920,
+    val width: Int = 720,
+    val height: Int = 1280,
     val density: Int = 320,
     val backend: String = "auto",
 )

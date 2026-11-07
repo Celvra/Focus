@@ -52,6 +52,7 @@ class DeviceToolProvider(
             if (runtime.session.value == null) {
                 return fail("Call device_start first")
             }
+            runtime.markAutomationRunning()
         }
         return when (name) {
             "device_list" -> listDevices()
@@ -206,8 +207,8 @@ class DeviceToolProvider(
     private suspend fun displayStart(args: JsonObject): ToolResult {
         val target = target(args)
         val spec = VirtualDisplaySpec(
-            width = (args.int("width") ?: 1080).coerceIn(320, 2560),
-            height = (args.int("height") ?: 1920).coerceIn(320, 2560),
+            width = (args.int("width") ?: 720).coerceIn(320, 2560),
+            height = (args.int("height") ?: 1280).coerceIn(320, 2560),
             density = (args.int("dpi") ?: 320).coerceIn(120, 640),
             backend = args.text("backend") ?: "auto",
         )

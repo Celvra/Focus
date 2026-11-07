@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.media.Image
 import android.media.ImageReader
 import android.os.Build
 import android.os.Handler
@@ -28,11 +29,7 @@ internal class DisplaySession(private val context: Context) {
     private var display: VirtualDisplay? = null
     private var reader: ImageReader? = null
     private var frameThread: HandlerThread? = null
-    private var frame: Bitmap? = null
-    private var frameWidth = 0
-    private var frameHeight = 0
-    @Volatile
-    private var frameReady = false
+    private var latestImage: Image? = null
 
     @Volatile
     private var displayId = 0
@@ -109,22 +106,35 @@ internal class DisplaySession(private val context: Context) {
             height = height,
             density = density,
             trusted = trusted,
-            frameReady = frameReady,
+            frameReady = latestImage != null,
         )
     }
 
     fun capture(quality: Int, maxWidth: Int): ByteArray? {
         val source = synchronized(lock) {
             if (reader == null) return null
-            if (!frameReady) runCatching { lock.wait(3_000) }
-            val bitmap = frame ?: return null
-            val croppedWidth = frameWidth.coerceAtMost(bitmap.width)
-            val croppedHeight = frameHeight.coerceAtMost(bitmap.height)
-            if (croppedWidth <= 0 || croppedHeight <= 0) return null
-            val cropped = Bitmap.createBitmap(bitmap, 0, 0, croppedWidth, croppedHeight)
-            val copy = cropped.copy(Bitmap.Config.ARGB_8888, false)
-            if (cropped !== bitmap) cropped.recycle()
-            copy
+            if (latestImage == null) {
+                val startedAt = SystemClock.elapsedRealtime()
+                while (latestImage == null) {
+                    val remaining = 3_000L - (SystemClock.elapsedRealtime() - startedAt)
+                    if (remaining <= 0) break
+                    runCatching { lock.wait(remaining.coerceIn(1, 100)) }
+                }
+            }
+            val image = latestImage ?: return null
+            val plane = image.planes.firstOrNull() ?: return null
+            val pixelStride = plane.pixelStride.coerceAtLeast(1)
+            val paddedWidth = (plane.rowStride / pixelStride).coerceAtLeast(image.width)
+            val padded = Bitmap.createBitmap(paddedWidth, image.height, Bitmap.Config.ARGB_8888)
+            plane.buffer.rewind()
+            padded.copyPixelsFromBuffer(plane.buffer)
+            if (paddedWidth == image.width) {
+                padded
+            } else {
+                val cropped = Bitmap.createBitmap(padded, 0, 0, image.width, image.height)
+                padded.recycle()
+                cropped
+            }
         }
         var output = source
         try {
@@ -259,29 +269,16 @@ internal class DisplaySession(private val context: Context) {
 
     private fun onFrame(source: ImageReader) {
         val image = runCatching { source.acquireLatestImage() }.getOrNull() ?: return
-        try {
-            synchronized(lock) {
-                if (reader !== source) return
-                val plane = image.planes.firstOrNull() ?: return
-                val pixelStride = plane.pixelStride.coerceAtLeast(1)
-                val paddedWidth = (plane.rowStride / pixelStride).coerceAtLeast(image.width)
-                var bitmap = frame
-                if (bitmap == null || bitmap.width != paddedWidth || bitmap.height != image.height) {
-                    bitmap?.recycle()
-                    bitmap = Bitmap.createBitmap(paddedWidth, image.height, Bitmap.Config.ARGB_8888)
-                    frame = bitmap
-                }
-                plane.buffer.rewind()
-                bitmap.copyPixelsFromBuffer(plane.buffer)
-                frameWidth = image.width.coerceAtMost(bitmap.width)
-                frameHeight = image.height.coerceAtMost(bitmap.height)
-                frameReady = true
+        var stored = false
+        synchronized(lock) {
+            if (reader === source) {
+                latestImage?.close()
+                latestImage = image
+                stored = true
                 lock.notifyAll()
             }
-        } catch (_: Throwable) {
-        } finally {
-            image.close()
         }
+        if (!stored) image.close()
     }
 
     private fun touch(startX: Int, startY: Int, endX: Int, endY: Int, durationMs: Int) {
@@ -402,7 +399,8 @@ internal class DisplaySession(private val context: Context) {
     }
 
     private fun stopLocked() {
-        frameReady = false
+        latestImage?.close()
+        latestImage = null
         displayWake?.let { lock -> runCatching { if (lock.isHeld) lock.release() } }
         displayWake = null
         cpuWake?.let { lock -> runCatching { if (lock.isHeld) lock.release() } }
@@ -412,10 +410,6 @@ internal class DisplaySession(private val context: Context) {
         display = null
         reader?.close()
         reader = null
-        frame?.recycle()
-        frame = null
-        frameWidth = 0
-        frameHeight = 0
         displayId = 0
         trusted = false
         frameThread?.quitSafely()

@@ -95,6 +95,13 @@ class DeviceRuntime(
             current.remote == remote &&
             current.conversationId == conversationId
         ) {
+            if (_automation.value !is DeviceAutomationState.Running) {
+                _automation.value = DeviceAutomationState.Running(
+                    owner = current.owner,
+                    remote = current.remote,
+                    startedAt = current.startedAt,
+                )
+            }
             return current
         }
         if (current != null) {
@@ -138,6 +145,22 @@ class DeviceRuntime(
 
     fun clearAutomation() {
         if (_automation.value is DeviceAutomationState.Finished) {
+            _automation.value = DeviceAutomationState.Idle
+        }
+    }
+
+    fun markAutomationRunning() {
+        val current = _session.value ?: return
+        if (_automation.value is DeviceAutomationState.Running) return
+        _automation.value = DeviceAutomationState.Running(
+            owner = current.owner,
+            remote = current.remote,
+            startedAt = current.startedAt,
+        )
+    }
+
+    fun markAutomationIdle() {
+        if (_session.value != null) {
             _automation.value = DeviceAutomationState.Idle
         }
     }

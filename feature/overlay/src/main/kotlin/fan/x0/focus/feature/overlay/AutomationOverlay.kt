@@ -39,9 +39,9 @@ import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 
 @Composable
-internal fun AutomationOverlay(finished: Boolean) {
+internal fun AutomationOverlay(finished: Boolean, showMarquee: Boolean = true) {
     Box(modifier = Modifier.fillMaxSize()) {
-        AutomationMarquee()
+        if (showMarquee) AutomationMarquee()
         Box(
             modifier = Modifier
                 .fillMaxSize()

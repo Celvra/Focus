@@ -50,8 +50,8 @@ object DeviceToolCatalog {
             kind = ToolKind.Write,
             parameters = schema {
                 put("device_id", string("local or a remote device id from device_list"))
-                put("width", number("Display width in pixels, default 1080"))
-                put("height", number("Display height in pixels, default 1920"))
+                put("width", number("Display width in pixels, default 720"))
+                put("height", number("Display height in pixels, default 1280"))
                 put("dpi", number("Display density, default 320"))
                 put("backend", string("auto, shizuku, or root. Default auto"))
             },

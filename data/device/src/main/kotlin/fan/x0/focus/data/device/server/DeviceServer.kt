@@ -242,8 +242,8 @@ class DeviceServer(
             "display_start" -> {
                 val state = runtime.startVirtualDisplay(
                     VirtualDisplaySpec(
-                        width = (args.int("width") ?: 1080).coerceIn(320, 2560),
-                        height = (args.int("height") ?: 1920).coerceIn(320, 2560),
+                        width = (args.int("width") ?: 720).coerceIn(320, 2560),
+                        height = (args.int("height") ?: 1280).coerceIn(320, 2560),
                         density = (args.int("dpi") ?: 320).coerceIn(120, 640),
                         backend = args.text("backend") ?: "auto",
                     ),

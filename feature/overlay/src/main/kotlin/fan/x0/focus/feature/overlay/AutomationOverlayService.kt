@@ -42,6 +42,7 @@ class AutomationOverlayService : Service() {
     private var concealObserver: Job? = null
     private var finishJob: Job? = null
     private var finished by mutableStateOf(false)
+    private var displayOpen by mutableStateOf(false)
     private var leaving = false
     private var observing = false
 
@@ -83,7 +84,7 @@ class AutomationOverlayService : Service() {
         compose.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         compose.setContent {
             FocusTheme {
-                AutomationOverlay(finished = finished)
+                AutomationOverlay(finished = finished, showMarquee = !displayOpen)
             }
         }
         val params = WindowManager.LayoutParams(
@@ -138,6 +139,9 @@ class AutomationOverlayService : Service() {
                         DeviceAutomationState.Idle -> fadeOutAndStop()
                     }
                 }
+        }
+        scope.launch {
+            runtime.displayState.collect { displayOpen = it.running }
         }
         concealObserver = scope.launch {
             gate.concealed

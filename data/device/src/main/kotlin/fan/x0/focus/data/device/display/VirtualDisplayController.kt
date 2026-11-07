@@ -110,7 +110,7 @@ class VirtualDisplayController(
         if (previewJob != null) return
         previewJob = scope.launch {
             while (isActive) {
-                val bytes = runCatching { backend?.capture(quality = 65, maxWidth = 640) }.getOrNull()
+                val bytes = runCatching { backend?.capture(quality = 60, maxWidth = 480) }.getOrNull()
                 if (bytes != null) {
                     _preview.value = Base64.encodeToString(bytes, Base64.NO_WRAP)
                 }
