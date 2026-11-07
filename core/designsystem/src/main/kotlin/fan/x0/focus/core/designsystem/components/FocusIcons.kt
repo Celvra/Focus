@@ -30,10 +30,12 @@ import androidx.compose.material.icons.rounded.Handyman
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Notifications
@@ -71,6 +73,7 @@ object FocusIcons {
     val Reply: ImageVector = Icons.AutoMirrored.Rounded.Reply
     val Send: ImageVector = Icons.AutoMirrored.Rounded.Send
     val Stop: ImageVector = Icons.Rounded.Stop
+    val Mic: ImageVector = Icons.Rounded.Mic
     val Check: ImageVector = Icons.Rounded.Check
     val Close: ImageVector = Icons.Rounded.Close
     val Delete: ImageVector = Icons.Rounded.Delete
@@ -92,6 +95,7 @@ object FocusIcons {
     val Task: ImageVector = Icons.Rounded.TaskAlt
     val Chevron: ImageVector = Icons.Rounded.ChevronRight
     val ArrowDown: ImageVector = Icons.Rounded.KeyboardArrowDown
+    val Keyboard: ImageVector = Icons.Rounded.Keyboard
     val Archive: ImageVector = Icons.Rounded.Archive
     val Unarchive: ImageVector = Icons.Rounded.Unarchive
     val Play: ImageVector = Icons.Rounded.PlayArrow

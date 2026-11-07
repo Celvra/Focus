@@ -21,6 +21,10 @@
     <string name="common_loading">加载中</string>
     <string name="common_remove">移除</string>
     <string name="common_stop">停止</string>
+    <string name="common_voice_listening">正在聆听，再点一下结束</string>
+    <string name="common_voice_busy">处理中</string>
+    <string name="common_voice_start">开始语音输入</string>
+    <string name="common_voice_stop">停止语音输入</string>
     <string name="common_reasoning">思考过程</string>
     <string name="common_reasoning_live">正在思考</string>
     <string name="common_tools_done">完成</string>

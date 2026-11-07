@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import fan.x0.focus.core.notify.R as NotifyR
 
 class PluginScreenCaptureService : Service() {
     override fun onCreate() {
@@ -27,7 +28,7 @@ class PluginScreenCaptureService : Service() {
             return START_NOT_STICKY
         }
         val notification = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle("Plugin screen capture")
             .setContentText("Screen capture is active")
             .setOngoing(true)

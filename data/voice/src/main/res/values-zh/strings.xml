@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voice_status_loading_model">正在加载本地模型</string>
+    <string name="voice_status_transcribing">正在转写</string>
+    <string name="voice_status_downloading">正在下载模型</string>
+    <string name="voice_error_permission">需要麦克风权限</string>
+    <string name="voice_permission_granted">已授予麦克风权限，请再点一次麦克风</string>
+    <string name="voice_error_recording">无法开始录音</string>
+    <string name="voice_error_local_missing">请先在设置里下载本地模型</string>
+    <string name="voice_error_local_load">无法加载本地模型</string>
+    <string name="voice_error_cloud_provider">没有可用的云端转写服务商</string>
+    <string name="voice_error_cloud_key">云端服务商没有 API Key</string>
+</resources>

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import fan.x0.focus.core.notify.R as NotifyR
 import fan.x0.focus.data.device.DeviceNotifier
 import fan.x0.focus.data.device.DeviceRuntime
 import fan.x0.focus.data.device.R
@@ -67,7 +68,7 @@ class DeviceDisplayService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = Notification.Builder(this, DeviceNotifier.CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_camera)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(getString(R.string.device_notification_display))
             .setContentText(getString(R.string.device_notification_display_body))
             .setOngoing(true)

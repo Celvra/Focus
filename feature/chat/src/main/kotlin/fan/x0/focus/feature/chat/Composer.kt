@@ -1,7 +1,10 @@
 package fan.x0.focus.feature.chat
 
+import android.Manifest
 import android.graphics.BitmapFactory
 import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -53,8 +56,11 @@ import fan.x0.focus.core.designsystem.components.FocusGroupedPickerSheet
 import fan.x0.focus.core.designsystem.components.FocusPickerGroup
 import fan.x0.focus.core.designsystem.components.FocusPickerItem
 import fan.x0.focus.core.designsystem.components.FocusPickerSelection
+import fan.x0.focus.core.designsystem.components.FocusVoiceUi
 import fan.x0.focus.core.designsystem.components.hapticTap
+import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.data.assistant.AttachmentKind
+import fan.x0.focus.data.voice.rememberVoiceInput
 
 @Composable
 internal fun Composer(
@@ -68,6 +74,13 @@ internal fun Composer(
     modifier: Modifier = Modifier,
 ) {
     var attachSheet by remember { mutableStateOf(false) }
+    val voice = rememberVoiceInput(
+        input = state.input,
+        onInput = { onAction(ChatAction.InputChanged(it)) },
+    )
+    val microphone = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) voice.permissionGranted() else voice.permissionDenied()
+    }
     val modelLabel = state.models[state.providerId]
         ?.firstOrNull { it.id == state.model }
         ?.name
@@ -94,6 +107,22 @@ internal fun Composer(
             highlightTokens = state.mentionNames.map { "@$it" } +
                 state.fileMentionTokens.map { "@$it" } +
                 SlashCommands.all.map { it.command },
+            voice = FocusVoiceUi(
+                active = voice.listening,
+                busy = voice.busy,
+                status = voice.status,
+                error = voice.error?.message(),
+                level = voice.level,
+            ),
+            onVoiceStart = {
+                if (voice.canRecord()) {
+                    voice.start()
+                } else {
+                    microphone.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            },
+            onVoiceStop = { voice.stop() },
+            onVoiceCancel = { voice.cancel() },
             onKeyEvent = { event ->
                 when {
                     state.mention.visible && event.type == KeyEventType.KeyDown -> {

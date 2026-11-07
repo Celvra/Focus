@@ -27,6 +27,7 @@ import fan.x0.focus.data.plugin.PluginModule
 import fan.x0.focus.data.sources.FeedRefreshScheduler
 import fan.x0.focus.data.sources.SourcePreferences
 import fan.x0.focus.data.sources.SourcesModule
+import fan.x0.focus.data.voice.VoiceModule
 import fan.x0.focus.data.bridge.BridgeModule as BridgeDataModule
 import fan.x0.focus.feature.assistant.AssistantFeatureModule
 import fan.x0.focus.feature.bridge.BridgeModule as BridgeFeatureModule
@@ -57,6 +58,7 @@ import org.koin.plugin.module.dsl.startKoin
         NotifyModule::class,
         SourcesModule::class,
         AssistantModule::class,
+        VoiceModule::class,
         DeviceModule::class,
         ImModule::class,
         PluginModule::class,

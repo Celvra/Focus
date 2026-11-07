@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import fan.x0.focus.core.notify.R as NotifyR
 import fan.x0.focus.data.device.system.DeviceStopReceiver
 import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
@@ -27,7 +28,7 @@ class DeviceNotifier(@Provided private val context: Context) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = Notification.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(context.getString(R.string.device_notification_controlling))
             .setContentText(owner)
             .setOngoing(true)
@@ -51,7 +52,7 @@ class DeviceNotifier(@Provided private val context: Context) {
 
     fun showBackground(id: String, command: String, result: String) {
         val notification = Notification.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_manage)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(context.getString(R.string.device_notification_background))
             .setContentText("$command\n$result")
             .setStyle(Notification.BigTextStyle().bigText("$command\n$result"))
@@ -69,7 +70,7 @@ class DeviceNotifier(@Provided private val context: Context) {
             if (output.isNotBlank()) append('\n').append(output.take(300))
         }
         val notification = Notification.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(name)
             .setContentText(body)
             .setStyle(Notification.BigTextStyle().bigText(body))
@@ -81,7 +82,7 @@ class DeviceNotifier(@Provided private val context: Context) {
 
     fun showServer() {
         val notification = Notification.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_share)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(context.getString(R.string.device_notification_controlled))
             .setOngoing(true)
             .build()

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import fan.x0.focus.core.notify.R as NotifyR
 import fan.x0.focus.data.device.DeviceNotifier
 import org.koin.mp.KoinPlatform
 
@@ -18,7 +19,7 @@ class DeviceTriggerService : Service() {
         }
         runCatching { KoinPlatform.getKoin().get<DeviceNotifier>().createChannel() }
         val notification = Notification.Builder(this, DeviceNotifier.CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(getString(fan.x0.focus.data.device.R.string.device_trigger_service_title))
             .setContentText(getString(fan.x0.focus.data.device.R.string.device_trigger_service_body))
             .setOngoing(true)

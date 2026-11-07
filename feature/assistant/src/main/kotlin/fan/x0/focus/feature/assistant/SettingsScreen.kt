@@ -37,6 +37,7 @@ import fan.x0.focus.feature.plugin.SettingsPluginsRoute
 import fan.x0.focus.feature.assistant.settings.SettingsToolsPage
 import fan.x0.focus.feature.assistant.settings.ProviderEditorSheet
 import fan.x0.focus.feature.assistant.settings.SettingsWebSearchRoute
+import fan.x0.focus.feature.assistant.settings.SettingsVoiceRoute
 import fan.x0.focus.feature.assistant.settings.SettingsWorkspaceIndexRoute
 import fan.x0.focus.feature.assistant.settings.SettingsWorkspaceTrustRoute
 import org.koin.compose.viewmodel.koinViewModel
@@ -180,6 +181,10 @@ internal fun SettingsScreen(
                         snackbar = snackbar,
                     )
                     SettingsDestination.Overlay -> SettingsOverlayPage(
+                        onBack = { backStack.removeLastOrNull() },
+                        snackbar = snackbar,
+                    )
+                    SettingsDestination.Voice -> SettingsVoiceRoute(
                         onBack = { backStack.removeLastOrNull() },
                         snackbar = snackbar,
                     )

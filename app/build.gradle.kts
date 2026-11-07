@@ -22,6 +22,9 @@ android {
         targetSdk = 37
         versionCode = releaseVersionCode ?: 2
         versionName = releaseVersionName ?: "1.0.1"
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     signingConfigs {
@@ -64,6 +67,7 @@ dependencies {
     implementation(projects.pluginSdk)
     implementation(projects.data.plugin)
     implementation(projects.data.assistant)
+    implementation(projects.data.voice)
     implementation(projects.data.device)
     implementation(projects.data.sources)
     implementation(projects.data.bridge)

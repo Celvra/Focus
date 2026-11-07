@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import fan.x0.focus.core.notify.R as NotifyR
 import kotlinx.coroutines.CancellationException
 import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
@@ -39,7 +40,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             NotificationChannel(CHANNEL_ID, "Reminders", NotificationManager.IMPORTANCE_DEFAULT),
         )
         val notification = Notification.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle("Focus")
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))

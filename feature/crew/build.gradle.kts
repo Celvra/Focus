@@ -15,6 +15,7 @@ dependencies {
     implementation(projects.core.network)
     implementation(projects.core.notify)
     implementation(projects.data.assistant)
+    implementation(projects.data.voice)
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)
     implementation(libs.koin.compose)

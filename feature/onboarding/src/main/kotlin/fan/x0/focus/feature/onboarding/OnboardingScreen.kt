@@ -1,5 +1,8 @@
 package fan.x0.focus.feature.onboarding
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,12 +74,14 @@ import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusReasoningCard
 import fan.x0.focus.core.designsystem.components.FocusTextButton
 import fan.x0.focus.core.designsystem.components.FocusTraceCard
+import fan.x0.focus.core.designsystem.components.FocusVoiceUi
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.core.mvi.CollectEffect
 import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.data.assistant.ProviderCatalog
+import fan.x0.focus.data.voice.rememberVoiceInput
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -325,6 +330,13 @@ private fun ComposerArea(
     modifier: Modifier = Modifier,
 ) {
     val name = state.assistantName.ifBlank { stringResource(R.string.onboarding_title) }
+    val voice = rememberVoiceInput(
+        input = state.input,
+        onInput = { onAction(OnboardingAction.InputChanged(it)) },
+    )
+    val microphone = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) voice.permissionGranted() else voice.permissionDenied()
+    }
     Column(modifier = modifier.fillMaxWidth()) {
         FocusComposer(
             input = state.input,
@@ -335,6 +347,22 @@ private fun ComposerArea(
             onSend = { onAction(OnboardingAction.Send) },
             onStop = { onAction(OnboardingAction.Stop) },
             hazeState = hazeState,
+            voice = FocusVoiceUi(
+                active = voice.listening,
+                busy = voice.busy,
+                status = voice.status,
+                error = voice.error?.message(),
+                level = voice.level,
+            ),
+            onVoiceStart = {
+                if (voice.canRecord()) {
+                    voice.start()
+                } else {
+                    microphone.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            },
+            onVoiceStop = { voice.stop() },
+            onVoiceCancel = { voice.cancel() },
             pills = {
                 FocusComposerPill(
                     label = stringResource(R.string.onboarding_model_settings),

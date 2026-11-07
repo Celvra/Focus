@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import fan.x0.focus.core.notify.R as NotifyR
 import fan.x0.focus.plugin.PluginAccessibilityHost
 import fan.x0.focus.plugin.PluginActivityHost
 import fan.x0.focus.plugin.PluginBootHost
@@ -69,7 +70,7 @@ class PluginNotificationManager(private val context: Context) : PluginNotificati
             )
         }
         val notification = android.app.Notification.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)

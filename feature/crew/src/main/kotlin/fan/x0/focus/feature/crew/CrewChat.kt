@@ -1,5 +1,8 @@
 package fan.x0.focus.feature.crew
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -78,6 +81,8 @@ import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusMentionGroup
 import fan.x0.focus.core.designsystem.components.FocusMentionItem
 import fan.x0.focus.core.designsystem.components.FocusMentionPanel
+import fan.x0.focus.core.designsystem.components.FocusVoiceUi
+import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusActivity
@@ -95,6 +100,7 @@ import fan.x0.focus.data.assistant.MentionKind
 import fan.x0.focus.data.assistant.MentionUi
 import fan.x0.focus.data.assistant.ToolPayload
 import fan.x0.focus.data.assistant.WorkspaceKind
+import fan.x0.focus.data.voice.rememberVoiceInput
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -112,6 +118,13 @@ fun CrewChatScreen(
 ) {
     val group = state.group ?: return
     var attachSheet by remember { mutableStateOf(false) }
+    val voice = rememberVoiceInput(
+        input = state.input,
+        onInput = { onAction(CrewAction.InputChanged(it)) },
+    )
+    val microphone = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) voice.permissionGranted() else voice.permissionDenied()
+    }
     val entries = state.entries
     val listState = rememberLazyListState()
     val hazeState = rememberHazeState()
@@ -321,6 +334,22 @@ fun CrewChatScreen(
                     addAll(state.mentionNames.map { "@$it" })
                     addAll(state.fileMentionTokens.map { "@$it" })
                 },
+                voice = FocusVoiceUi(
+                    active = voice.listening,
+                    busy = voice.busy,
+                    status = voice.status,
+                    error = voice.error?.message(),
+                    level = voice.level,
+                ),
+                onVoiceStart = {
+                    if (voice.canRecord()) {
+                        voice.start()
+                    } else {
+                        microphone.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                },
+                onVoiceStop = { voice.stop() },
+                onVoiceCancel = { voice.cancel() },
                 onKeyEvent = { event ->
                     if (!state.mention.visible || event.type != KeyEventType.KeyDown) {
                         false

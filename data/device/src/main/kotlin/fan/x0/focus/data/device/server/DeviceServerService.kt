@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import fan.x0.focus.core.notify.R as NotifyR
 import fan.x0.focus.data.device.DeviceNotifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,7 +62,7 @@ class DeviceServerService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val notification = Notification.Builder(this, DeviceNotifier.CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_share)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(getString(fan.x0.focus.data.device.R.string.device_notification_controlled))
             .setContentText(getString(fan.x0.focus.data.device.R.string.device_notification_stop))
             .setOngoing(true)

@@ -2,18 +2,31 @@ package fan.x0.focus.feature.overlay
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -43,15 +56,18 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,14 +75,21 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -76,6 +99,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
@@ -89,11 +113,17 @@ import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusMarkdown
 import fan.x0.focus.core.designsystem.components.hapticTap
+import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.core.designsystem.theme.FocusTheme
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 import fan.x0.focus.data.assistant.AskAnswer
 import fan.x0.focus.data.assistant.AskKind
+import fan.x0.focus.data.voice.VoiceInputHandle
+import fan.x0.focus.data.voice.rememberVoiceInput
 import kotlinx.coroutines.delay
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.sin
 
 private val InputShape = RoundedCornerShape(50)
 private val ResultShape = RoundedCornerShape(24.dp)
@@ -107,19 +137,12 @@ private data class OverlaySuggestion(
 @Composable
 internal fun OverlayBarContent(
     state: OverlayUiState,
-    selectionActive: Boolean,
-    autoFocus: Boolean,
-    onToggleSelection: () -> Unit,
     onAction: (OverlayAction) -> Unit,
     onCaptureScreen: () -> Unit,
     onClose: () -> Unit,
 ) {
     var appeared by remember { mutableStateOf(false) }
     val motion = LocalFocusMotion.current
-    val dispatch: (OverlayAction) -> Unit = { action ->
-        if (action is OverlayAction.Submit && selectionActive) onToggleSelection()
-        onAction(action)
-    }
     LaunchedEffect(Unit) { appeared = true }
     FocusTheme {
         Box(
@@ -151,22 +174,19 @@ internal fun OverlayBarContent(
                     if (state.ask != null) {
                         AskInline(
                             ask = state.ask,
-                            onAction = dispatch,
+                            onAction = onAction,
                         )
                     } else {
                         if (state.attachment != null && !state.sending) {
                             SuggestionRow(
                                 selection = state.attachment.selection,
-                                onAction = dispatch,
+                                onAction = onAction,
                             )
                             Spacer(modifier = Modifier.size(8.dp))
                         }
                         InputBar(
                             state = state,
-                            selectionActive = selectionActive,
-                            autoFocus = autoFocus,
-                            onToggleSelection = onToggleSelection,
-                            onAction = dispatch,
+                            onAction = onAction,
                             onCaptureScreen = onCaptureScreen,
                         )
                     }
@@ -226,11 +246,9 @@ internal fun OverlayResultContent(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentAlignment = Alignment.TopCenter,
                                 transitionSpec = {
-                                    (
-                                        fadeIn(tween(durationMillis = 220)) +
-                                            slideInVertically(tween(durationMillis = 260)) { it / 8 } +
-                                            scaleIn(tween(durationMillis = 240), initialScale = 0.97f)
-                                        ) togetherWith fadeOut(tween(durationMillis = 160))
+                                    fadeIn(tween(durationMillis = 180)) togetherWith
+                                        fadeOut(tween(durationMillis = 120)) using
+                                        SizeTransform(clip = false) { _, _ -> snap() }
                                 },
                                 contentKey = { current ->
                                     current.messages.lastOrNull { it.role == OverlayRole.Assistant }?.id ?: 0L
@@ -829,6 +847,12 @@ private fun SuggestionRow(
         contentPadding = PaddingValues(horizontal = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item(key = "attachment") {
+            AttachmentSuggestionChip(
+                selection = selection,
+                onRemove = hapticTap { onAction(OverlayAction.RemoveAttachment) },
+            )
+        }
         items(suggestions) { suggestion ->
             val click = hapticTap { onAction(OverlayAction.Submit(suggestion.prompt)) }
             SuggestionChip(
@@ -851,16 +875,26 @@ private fun SuggestionRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun InputBar(
     state: OverlayUiState,
-    selectionActive: Boolean,
-    autoFocus: Boolean,
-    onToggleSelection: () -> Unit,
     onAction: (OverlayAction) -> Unit,
     onCaptureScreen: () -> Unit,
 ) {
-    val scheme = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    var typing by remember { mutableStateOf(false) }
+    val voice = rememberVoiceInput(
+        input = state.input,
+        onInput = { onAction(OverlayAction.InputChanged(it)) },
+    )
+    val voiceError = voice.error?.message()
+    LaunchedEffect(voiceError) {
+        if (voiceError != null) {
+            Toast.makeText(context, voiceError, Toast.LENGTH_SHORT).show()
+        }
+    }
     val focusRequester = remember { FocusRequester() }
     val defaultQuestion = stringResource(
         if (state.attachment?.selection == true) {
@@ -868,9 +902,6 @@ private fun InputBar(
         } else {
             R.string.overlay_screen_question
         },
-    )
-    val hint = stringResource(
-        if (state.ask != null) R.string.overlay_answer_input_hint else R.string.overlay_hint,
     )
     val canSend = !state.sending && !state.capturing &&
         (state.input.isNotBlank() || state.attachment != null)
@@ -882,146 +913,504 @@ private fun InputBar(
             if (text.isNotBlank()) onAction(OverlayAction.Submit(text))
         }
     }
-    val capture = hapticTap { onCaptureScreen() }
-    val toggleSelection = hapticTap { onToggleSelection() }
     val sendClick = hapticTap {
-        if (state.sending) {
-            onAction(OverlayAction.Stop)
-        } else {
-            send()
-        }
+        if (state.sending) onAction(OverlayAction.Stop) else send()
     }
-    val removeAttachment = hapticTap { onAction(OverlayAction.RemoveAttachment) }
-    LaunchedEffect(Unit) {
-        if (!autoFocus) return@LaunchedEffect
-        delay(180)
+    val enterTyping = {
+        voice.cancel()
+        typing = true
+    }
+    val enterVoice = {
+        typing = false
+        keyboard?.hide()
+        voice.start()
+    }
+    LaunchedEffect(typing) {
+        if (!typing) return@LaunchedEffect
+        delay(260)
         runCatching { focusRequester.requestFocus() }
     }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 64.dp)
-            .clip(InputShape)
-            .background(scheme.surfaceContainerHigh.copy(alpha = 0.96f))
-            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.6f), InputShape)
-            .padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    LaunchedEffect(voice.autoVoice, typing) {
+        if (typing) return@LaunchedEffect
+        if (!voice.autoVoice) return@LaunchedEffect
+        if (state.input.isNotBlank()) return@LaunchedEffect
+        delay(220)
+        if (!voice.listening && !voice.busy) voice.start()
+    }
+    if (typing) {
+        TypingDock(
+            state = state,
+            canSend = canSend,
+            focusRequester = focusRequester,
+            sendClick = sendClick,
+            onCaptureScreen = onCaptureScreen,
+            onVoice = enterVoice,
+            onAction = onAction,
+        )
+    } else {
+        VoiceDock(
+            state = state,
+            canSend = canSend,
+            voice = voice,
+            onTyping = enterTyping,
+            onCaptureScreen = onCaptureScreen,
+            send = send,
+            onAction = onAction,
+        )
+    }
+}
+
+private sealed interface VoiceCenter {
+    data class Transcript(val text: String) : VoiceCenter
+    data class Status(val text: String) : VoiceCenter
+    data object Listening : VoiceCenter
+    data object Idle : VoiceCenter
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun VoiceDock(
+    state: OverlayUiState,
+    canSend: Boolean,
+    voice: VoiceInputHandle,
+    onTyping: () -> Unit,
+    onCaptureScreen: () -> Unit,
+    send: () -> Unit,
+    onAction: (OverlayAction) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val motion = LocalFocusMotion.current
+    val status = voice.status
+    val loading = voice.listening && status != null
+    val working = loading || voice.busy || state.sending
+    val listening = voice.listening && !loading && !voice.busy
+    val statusText = when {
+        status != null -> status
+        voice.busy || state.sending -> stringResource(R.string.overlay_voice_working)
+        else -> null
+    }
+    val center = when {
+        listening && state.input.isBlank() -> VoiceCenter.Listening
+        state.input.isNotBlank() -> VoiceCenter.Transcript(state.input)
+        statusText != null -> VoiceCenter.Status(statusText)
+        else -> VoiceCenter.Idle
+    }
+    val placeholder = stringResource(R.string.overlay_shortcut_short)
+    val startClick = hapticTap { voice.start() }
+    val typingClick = hapticTap(onTyping)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = InputShape,
+        color = scheme.surfaceContainerHigh.copy(alpha = 0.96f),
+        tonalElevation = 1.dp,
+        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.5f)),
     ) {
-        if (state.ask == null) {
-            IconButton(
-                onClick = capture,
-                enabled = !state.sending && !state.capturing,
-            ) {
-                if (state.capturing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = scheme.primary,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Icon(
-                        imageVector = FocusIcons.Camera,
-                        contentDescription = stringResource(
-                            if (state.attachment != null) {
-                                R.string.overlay_screen_attached
-                            } else {
-                                R.string.overlay_screen
-                            },
-                        ),
-                        tint = when {
-                            state.sending -> scheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            state.attachment != null -> scheme.primary
-                            else -> scheme.onSurfaceVariant
-                        },
-                    )
-                }
-            }
-            IconButton(
-                onClick = toggleSelection,
-                modifier = Modifier.size(48.dp),
-            ) {
-                Icon(
-                    imageVector = FocusIcons.SelectAll,
-                    contentDescription = stringResource(
-                        if (selectionActive) R.string.overlay_select_exit else R.string.overlay_select,
-                    ),
-                    tint = if (selectionActive) scheme.primary else scheme.onSurfaceVariant,
-                )
-            }
-        }
-        if (state.attachment != null) {
+        Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)) {
             Row(
                 modifier = Modifier
-                    .clip(InputShape)
-                    .background(scheme.secondaryContainer)
-                    .padding(start = 8.dp, end = 0.dp, top = 2.dp, bottom = 2.dp),
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .padding(start = 8.dp, end = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = if (state.attachment.selection) {
-                        FocusIcons.SelectAll
-                    } else {
-                        FocusIcons.Photo
-                    },
-                    contentDescription = null,
-                    tint = scheme.onSecondaryContainer,
-                    modifier = Modifier.size(14.dp),
+                CameraButton(
+                    capturing = state.capturing,
+                    enabled = !state.sending,
+                    onCaptureScreen = onCaptureScreen,
                 )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 44.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable(onClick = typingClick)
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AnimatedVisibility(
+                            visible = listening && state.input.isNotBlank(),
+                            enter = fadeIn(motion.effectsFast()) +
+                                expandHorizontally(
+                                    animationSpec = motion.spatialDefault(),
+                                    expandFrom = Alignment.Start,
+                                ),
+                            exit = fadeOut(motion.effectsFast()) +
+                                shrinkHorizontally(
+                                    animationSpec = motion.spatialDefault(),
+                                    shrinkTowards = Alignment.Start,
+                                ),
+                        ) {
+                            Row(modifier = Modifier.padding(end = 10.dp)) {
+                                ListeningBars(
+                                    color = scheme.onSurface,
+                                    level = voice.level,
+                                    compact = true,
+                                )
+                            }
+                        }
+                        AnimatedContent(
+                            targetState = center,
+                            modifier = Modifier.weight(1f),
+                            contentKey = { it::class },
+                            transitionSpec = {
+                                (
+                                    fadeIn(motion.effectsFast()) +
+                                        scaleIn(motion.spatialDefault(), initialScale = 0.88f)
+                                    ) togetherWith (
+                                    fadeOut(motion.effectsFast()) +
+                                        scaleOut(motion.spatialDefault(), targetScale = 0.88f)
+                                    )
+                            },
+                            contentAlignment = Alignment.CenterStart,
+                            label = "voiceCenter",
+                        ) { current ->
+                            when (current) {
+                                is VoiceCenter.Transcript -> Text(
+                                    text = current.text,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = scheme.onSurface,
+                                )
+                                is VoiceCenter.Status -> Text(
+                                    text = current.text,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = scheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                VoiceCenter.Listening -> ListeningBars(
+                                    color = scheme.onSurface,
+                                    level = voice.level,
+                                )
+                                VoiceCenter.Idle -> Text(
+                                    text = placeholder,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = scheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+                when {
+                    state.sending -> DockCircle(
+                        container = scheme.error,
+                        contentColor = scheme.onError,
+                        onClick = { onAction(OverlayAction.Stop) },
+                    ) {
+                        Icon(
+                            imageVector = FocusIcons.Stop,
+                            contentDescription = stringResource(R.string.overlay_stop),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    working -> DockCircle(
+                        container = scheme.primaryContainer,
+                        contentColor = scheme.onPrimaryContainer,
+                        onClick = { voice.cancel() },
+                    ) {
+                        LoadingIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = scheme.onPrimaryContainer,
+                        )
+                    }
+                    listening -> DockCircle(
+                        container = scheme.primaryContainer,
+                        contentColor = scheme.onPrimaryContainer,
+                        onClick = { voice.stop() },
+                    ) {
+                        Icon(
+                            imageVector = FocusIcons.Mic,
+                            contentDescription = stringResource(R.string.overlay_voice_stop),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    else -> {
+                        IconButton(
+                            onClick = startClick,
+                            modifier = Modifier.size(44.dp),
+                        ) {
+                            Icon(
+                                imageVector = FocusIcons.Mic,
+                                contentDescription = stringResource(R.string.overlay_voice_start),
+                                tint = scheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        if (canSend) {
+                            DockCircle(
+                                container = scheme.primary,
+                                contentColor = scheme.onPrimary,
+                                onClick = send,
+                            ) {
+                                Icon(
+                                    imageVector = FocusIcons.Send,
+                                    contentDescription = stringResource(R.string.overlay_send),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        } else {
+                            IconButton(
+                                onClick = typingClick,
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(
+                                    imageVector = FocusIcons.Keyboard,
+                                    contentDescription = stringResource(R.string.overlay_typing_mode),
+                                    tint = scheme.onSurfaceVariant,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun TypingDock(
+    state: OverlayUiState,
+    canSend: Boolean,
+    focusRequester: FocusRequester,
+    sendClick: () -> Unit,
+    onCaptureScreen: () -> Unit,
+    onVoice: () -> Unit,
+    onAction: (OverlayAction) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val hint = stringResource(R.string.overlay_hint)
+    val voiceClick = hapticTap(onVoice)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = scheme.surfaceContainerHigh.copy(alpha = 0.96f),
+        tonalElevation = 1.dp,
+        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.5f)),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            BasicTextField(
+                value = state.input,
+                onValueChange = { onAction(OverlayAction.InputChanged(it)) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 40.dp)
+                    .padding(vertical = 8.dp)
+                    .focusRequester(focusRequester),
+                textStyle = MaterialTheme.typography.titleMedium.copy(color = scheme.onSurface),
+                cursorBrush = SolidColor(scheme.primary),
+                maxLines = 4,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { sendClick() }),
+                decorationBox = { inner ->
+                    Box {
+                        if (state.input.isEmpty()) {
+                            Text(
+                                text = hint,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = scheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            )
+                        }
+                        inner()
+                    }
+                },
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CameraButton(
+                    capturing = state.capturing,
+                    enabled = !state.sending,
+                    onCaptureScreen = onCaptureScreen,
+                )
+                Spacer(modifier = Modifier.weight(1f))
                 IconButton(
-                    onClick = removeAttachment,
-                    modifier = Modifier.size(30.dp),
+                    onClick = voiceClick,
+                    modifier = Modifier.size(44.dp),
                 ) {
                     Icon(
-                        imageVector = FocusIcons.Close,
-                        contentDescription = stringResource(R.string.overlay_screen_remove),
-                        tint = scheme.onSecondaryContainer,
-                        modifier = Modifier.size(14.dp),
+                        imageVector = FocusIcons.Mic,
+                        contentDescription = stringResource(R.string.overlay_voice_mode),
+                        tint = scheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                DockCircle(
+                    container = if (state.sending) scheme.error else scheme.primary,
+                    contentColor = if (state.sending) scheme.onError else scheme.onPrimary,
+                    onClick = sendClick,
+                    enabled = state.sending || canSend,
+                ) {
+                    Icon(
+                        imageVector = if (state.sending) FocusIcons.Stop else FocusIcons.Send,
+                        contentDescription = stringResource(
+                            if (state.sending) R.string.overlay_stop else R.string.overlay_send,
+                        ),
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
-            Spacer(modifier = Modifier.width(4.dp))
         }
-        BasicTextField(
-            value = state.input,
-            onValueChange = { onAction(OverlayAction.InputChanged(it)) },
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 6.dp)
-                .focusRequester(focusRequester),
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = scheme.onSurface),
-            cursorBrush = SolidColor(scheme.primary),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { sendClick() }),
-            decorationBox = { inner ->
-                Box {
-                    if (state.input.isEmpty()) {
-                        Text(
-                            text = hint,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = scheme.onSurfaceVariant.copy(alpha = 0.55f),
-                        )
-                    }
-                    inner()
-                }
-            },
-        )
-        FilledIconButton(
-            onClick = sendClick,
-            enabled = state.sending || canSend,
-            modifier = Modifier.size(48.dp),
-            colors = IconButtonDefaults.filledIconButtonColors(
-                containerColor = if (state.sending) scheme.error else scheme.primary,
-                contentColor = if (state.sending) scheme.onError else scheme.onPrimary,
-                disabledContainerColor = scheme.surfaceContainerHigh,
-                disabledContentColor = scheme.onSurfaceVariant.copy(alpha = 0.38f),
-            ),
-        ) {
+    }
+}
+
+@Composable
+private fun DockCircle(
+    container: Color,
+    contentColor: Color,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    FilledIconButton(
+        onClick = hapticTap(onClick),
+        enabled = enabled,
+        modifier = Modifier.size(44.dp),
+        colors = IconButtonDefaults.filledIconButtonColors(
+            containerColor = container,
+            contentColor = contentColor,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+        ),
+    ) {
+        content()
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun CameraButton(
+    capturing: Boolean,
+    enabled: Boolean,
+    onCaptureScreen: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    IconButton(
+        onClick = hapticTap(onCaptureScreen),
+        enabled = enabled && !capturing,
+        modifier = Modifier.size(48.dp),
+    ) {
+        if (capturing) {
+            LoadingIndicator(
+                modifier = Modifier.size(22.dp),
+                color = scheme.primary,
+            )
+        } else {
             Icon(
-                imageVector = if (state.sending) FocusIcons.Stop else FocusIcons.Send,
-                contentDescription = stringResource(
-                    if (state.sending) R.string.overlay_stop else R.string.overlay_send,
-                ),
+                imageVector = FocusIcons.Camera,
+                contentDescription = stringResource(R.string.overlay_screen),
+                tint = if (enabled) {
+                    scheme.onSurfaceVariant
+                } else {
+                    scheme.onSurfaceVariant.copy(alpha = 0.38f)
+                },
+                modifier = Modifier.size(24.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AttachmentSuggestionChip(
+    selection: Boolean,
+    onRemove: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    SuggestionChip(
+        onClick = onRemove,
+        label = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(
+                        if (selection) R.string.overlay_select else R.string.overlay_screen_attached,
+                    ),
+                )
+                Icon(
+                    imageVector = FocusIcons.Close,
+                    contentDescription = stringResource(R.string.overlay_screen_remove),
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .size(14.dp),
+                )
+            }
+        },
+        icon = {
+            Icon(
+                imageVector = if (selection) FocusIcons.SelectAll else FocusIcons.Photo,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+        },
+        colors = SuggestionChipDefaults.suggestionChipColors(
+            containerColor = scheme.secondaryContainer,
+            labelColor = scheme.onSecondaryContainer,
+            iconContentColor = scheme.onSecondaryContainer,
+        ),
+    )
+}
+
+@Composable
+private fun ListeningBars(
+    color: Color,
+    level: () -> Float,
+    compact: Boolean = false,
+) {
+    val transition = rememberInfiniteTransition(label = "listening")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "phase",
+    )
+    val smoothed = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { level().coerceIn(0f, 1f) }.collect { next ->
+            smoothed.floatValue = if (next > smoothed.floatValue) {
+                smoothed.floatValue + (next - smoothed.floatValue) * 0.65f
+            } else {
+                smoothed.floatValue * 0.8f + next * 0.2f
+            }
+        }
+    }
+    Canvas(
+        modifier = if (compact) {
+            Modifier.size(width = 42.dp, height = 20.dp)
+        } else {
+            Modifier
+                .fillMaxWidth()
+                .height(24.dp)
+        },
+    ) {
+        val count = if (compact) 5 else 11
+        val barWidth = 3.dp.toPx()
+        val gap = 4.dp.toPx()
+        val total = count * barWidth + (count - 1) * gap
+        val startX = (size.width - total) / 2f
+        val minHeight = 3.dp.toPx()
+        val maxHeight = if (compact) 16.dp.toPx() else 20.dp.toPx()
+        val energy = smoothed.floatValue
+        val middle = (count - 1) / 2f
+        repeat(count) { index ->
+            val wave = sin(phase * 2f * PI.toFloat() - index * 0.6f)
+            val swell = (wave + 1f) / 2f
+            val focus = 1f - 0.4f * (abs(index - middle) / middle)
+            val height = minHeight +
+                (maxHeight - minHeight) * energy * (0.45f + 0.55f * swell) * focus
+            val x = startX + index * (barWidth + gap)
+            drawRoundRect(
+                color = color.copy(alpha = 0.35f + 0.65f * energy),
+                topLeft = Offset(x, (size.height - height) / 2f),
+                size = Size(barWidth, height),
+                cornerRadius = CornerRadius(barWidth / 2f),
             )
         }
     }

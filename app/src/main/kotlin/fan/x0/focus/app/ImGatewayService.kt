@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import fan.x0.focus.MainActivity
 import fan.x0.focus.R
+import fan.x0.focus.core.notify.R as NotifyR
 import fan.x0.focus.data.im.ImAccountStore
 import fan.x0.focus.data.im.ImConnectionState
 import fan.x0.focus.data.im.ImGateway
@@ -114,7 +115,7 @@ class ImGatewayService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.notification_im_running, running, connected))
             .setContentIntent(open)

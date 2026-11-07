@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -27,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -38,6 +40,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import fan.x0.focus.core.designsystem.theme.FocusTheme
+import fan.x0.focus.core.notify.R as NotifyR
 import fan.x0.focus.data.device.DeviceAutomationState
 import fan.x0.focus.data.device.DeviceImage
 import fan.x0.focus.data.device.DeviceRuntime
@@ -104,7 +107,6 @@ class FocusOverlayService : Service() {
     private var resultView: ComposeView? = null
     private var resultParams: WindowManager.LayoutParams? = null
     private var panelView: ComposeView? = null
-    private var autoFocusInput = true
     private var automationHidden = false
     private var interactionVisible = false
     private var capturing = false
@@ -164,7 +166,7 @@ class FocusOverlayService : Service() {
         super.onDestroy()
     }
 
-    private fun show(autoFocus: Boolean = true, interaction: Boolean = false) {
+    private fun show(interaction: Boolean = false) {
         if (panelView != null) return
         if (!interaction && deviceRuntime.automation.value is DeviceAutomationState.Running) {
             dismiss()
@@ -175,7 +177,6 @@ class FocusOverlayService : Service() {
             dismiss()
             return
         }
-        autoFocusInput = autoFocus
         val manager = windowManager
         addGlowView(manager)
         addSelectionView(manager)
@@ -183,6 +184,7 @@ class FocusOverlayService : Service() {
         addPanelView(manager)
         if (panelView == null) return
         startWindowObserver()
+        if (!interaction && !viewModel.state.value.hasResult) setSelectionActive(true)
     }
 
     private fun addGlowView(manager: WindowManager) {
@@ -226,7 +228,6 @@ class FocusOverlayService : Service() {
             FocusTheme {
                 OverlaySelection(
                     onSelected = ::captureSelection,
-                    onClear = { viewModel.onAction(OverlayAction.RemoveAttachment) },
                     onClose = ::animatedDismiss,
                 )
             }
@@ -347,28 +348,40 @@ class FocusOverlayService : Service() {
                     result -> OverlayScene.Result
                     else -> OverlayScene.Bar
                 }
-                Triple(result, selecting, effect)
+                OverlayWindowState(
+                    result = result,
+                    selecting = selecting,
+                    effect = effect,
+                    sending = state.sending,
+                )
             }
                 .distinctUntilChanged()
-                .collect { (result, selecting, effect) ->
-                    scene.value = effect
-                    setResultActive(result)
-                    if (selecting) setSelectionActive(true)
+                .collect { window ->
+                    if (window.selecting && window.sending) {
+                        setSelectionActive(false)
+                        return@collect
+                    }
+                    scene.value = window.effect
+                    setResultActive(window.result)
+                    if (window.selecting) setSelectionActive(true)
                 }
         }
     }
+
+    private data class OverlayWindowState(
+        val result: Boolean,
+        val selecting: Boolean,
+        val effect: OverlayScene,
+        val sending: Boolean,
+    )
 
     private fun addPanelView(manager: WindowManager) {
         val view = ComposeView(this)
         attachOwners(view)
         view.setContent {
             val state by viewModel.state.collectAsState()
-            val selecting by selectionActive.collectAsState()
             OverlayBarContent(
                 state = state,
-                selectionActive = selecting,
-                autoFocus = autoFocusInput,
-                onToggleSelection = { setSelectionActive(!selecting) },
                 onAction = viewModel::onAction,
                 onCaptureScreen = ::captureScreen,
                 onClose = ::animatedDismiss,
@@ -474,7 +487,7 @@ class FocusOverlayService : Service() {
         val needsInput = state.ask != null || state.approval != null || state.trust != null
         if (!needsInput) return
         interactionVisible = true
-        show(autoFocus = state.ask != null, interaction = true)
+        show(interaction = true)
     }
 
     private suspend fun hideInteraction() {
@@ -515,7 +528,7 @@ class FocusOverlayService : Service() {
         selectionActive.value = false
         resultVisible = false
         scene.value = OverlayScene.Bar
-        show(autoFocus = false)
+        show()
     }
 
     private fun overlayViews(): List<View> = listOfNotNull(
@@ -527,6 +540,7 @@ class FocusOverlayService : Service() {
 
     private fun captureScreen() {
         if (capturing) return
+        if (selectionActive.value) setSelectionActive(false)
         capturing = true
         viewModel.onAction(OverlayAction.CaptureRequested)
         scope.launch {
@@ -672,7 +686,17 @@ class FocusOverlayService : Service() {
 
     private fun startForeground() {
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            val microphone = if (
+                ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.RECORD_AUDIO,
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            } else {
+                0
+            }
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or microphone
         } else {
             0
         }
@@ -693,7 +717,7 @@ class FocusOverlayService : Service() {
             PendingIntent.getActivity(this, 2, it, flags)
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_overlay_notification)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(getString(R.string.overlay_notification_title))
             .setContentText(getString(R.string.overlay_notification_body))
             .setContentIntent(open)

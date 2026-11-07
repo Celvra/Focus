@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.IBinder
 import fan.x0.focus.MainActivity
 import fan.x0.focus.R
+import fan.x0.focus.core.notify.R as NotifyR
 import fan.x0.focus.data.assistant.ChatTurnRunner
 import fan.x0.focus.data.assistant.CrewRunner
 import kotlinx.coroutines.CoroutineScope
@@ -71,7 +72,7 @@ class ChatTurnService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.chat_turn_running))
             .setContentIntent(open)

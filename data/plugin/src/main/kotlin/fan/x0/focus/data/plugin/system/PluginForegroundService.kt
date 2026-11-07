@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import fan.x0.focus.core.notify.R as NotifyR
 import java.util.concurrent.ConcurrentHashMap
 
 class PluginForegroundService : Service() {
@@ -74,7 +75,7 @@ class PluginForegroundService : Service() {
             )
         }
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(title.ifBlank { "Plugin running" })
             .setContentText(text)
             .setOngoing(true)

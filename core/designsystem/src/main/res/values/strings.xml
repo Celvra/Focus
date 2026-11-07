@@ -21,6 +21,10 @@
     <string name="common_loading">Loading</string>
     <string name="common_remove">Remove</string>
     <string name="common_stop">Stop</string>
+    <string name="common_voice_listening">Listening. Tap again to finish</string>
+    <string name="common_voice_busy">Working</string>
+    <string name="common_voice_start">Start voice input</string>
+    <string name="common_voice_stop">Stop voice input</string>
     <string name="common_reasoning">Thinking process</string>
     <string name="common_reasoning_live">Thinking</string>
     <string name="common_tools_done">Done</string>

@@ -15,6 +15,7 @@ android {
 dependencies {
     implementation(projects.core.error)
     implementation(projects.core.network)
+    implementation(projects.core.notify)
     implementation(projects.data.assistant)
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)

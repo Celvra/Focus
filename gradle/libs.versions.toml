@@ -24,6 +24,7 @@ junit = "4.13.2"
 kxml2 = "2.3.0"
 zxing = "3.5.3"
 rhino = "1.7.15"
+commons-compress = "1.27.1"
 shizuku = "13.1.5"
 libxposed = "102.0.0"
 
@@ -80,6 +81,7 @@ junit = { module = "junit:junit", version.ref = "junit" }
 kxml2 = { module = "net.sf.kxml:kxml2", version.ref = "kxml2" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons-compress" }
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
 android-gradleApi = { group = "com.android.tools.build", name = "gradle-api", version.ref = "agp" }
 kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }

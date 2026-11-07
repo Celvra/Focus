@@ -26,6 +26,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -63,6 +65,7 @@ import dev.chrisbanes.haze.blur.hazeBlur
 import fan.x0.focus.core.designsystem.R
 import fan.x0.focus.core.designsystem.theme.LocalFocusMotion
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun FocusComposer(
     input: String,
@@ -79,6 +82,10 @@ fun FocusComposer(
     addContentDescription: String? = null,
     onKeyEvent: (KeyEvent) -> Boolean = { false },
     highlightTokens: List<String> = emptyList(),
+    voice: FocusVoiceUi? = null,
+    onVoiceStart: (() -> Unit)? = null,
+    onVoiceStop: () -> Unit = {},
+    onVoiceCancel: () -> Unit = {},
     attachments: @Composable ColumnScope.() -> Unit = {},
     pills: @Composable RowScope.() -> Unit = {},
 ) {
@@ -106,6 +113,10 @@ fun FocusComposer(
         }
     }
     val active = canSend || sending
+    val voiceActive = voice?.active == true
+    val voiceBusy = voice?.busy == true
+    val mic = !active && !voiceActive && !voiceBusy && onVoiceStart != null
+    val buttonEnabled = active || voiceActive || voiceBusy || onVoiceStart != null
     var fieldValue by remember { mutableStateOf(TextFieldValue(input)) }
     LaunchedEffect(input) {
         if (fieldValue.text != input) {
@@ -131,7 +142,10 @@ fun FocusComposer(
     val buttonContainer by animateColorAsState(
         targetValue = when {
             sending && !canSend -> scheme.errorContainer
+            voiceActive -> scheme.error
+            voiceBusy -> scheme.secondaryContainer
             active -> scheme.primary
+            mic -> scheme.primary
             else -> scheme.surfaceContainerHighest
         },
         animationSpec = motion.effectsFast(),
@@ -140,7 +154,10 @@ fun FocusComposer(
     val buttonContent by animateColorAsState(
         targetValue = when {
             sending && !canSend -> scheme.onErrorContainer
+            voiceActive -> scheme.onError
+            voiceBusy -> scheme.onSecondaryContainer
             active -> scheme.onPrimary
+            mic -> scheme.onPrimary
             else -> scheme.onSurfaceVariant
         },
         animationSpec = motion.effectsFast(),
@@ -161,6 +178,12 @@ fun FocusComposer(
         color = scrim,
     ) {
         Column(modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 6.dp)) {
+            if (voice != null) {
+                FocusVoiceHud(
+                    voice = voice,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
             attachments()
             TextField(
                 value = fieldValue,
@@ -219,6 +242,14 @@ fun FocusComposer(
                         onClick = onAdd,
                     )
                 }
+                val buttonMode = when {
+                    sending -> ComposerButton.Stop
+                    voiceBusy -> ComposerButton.Busy
+                    voiceActive -> ComposerButton.Stop
+                    canSend -> ComposerButton.Send
+                    mic -> ComposerButton.Mic
+                    else -> ComposerButton.Send
+                }
                 Surface(
                     modifier = Modifier
                         .size(36.dp)
@@ -226,29 +257,53 @@ fun FocusComposer(
                     shape = CircleShape,
                     color = buttonContainer,
                     contentColor = buttonContent,
-                    enabled = active,
+                    enabled = buttonEnabled,
                     onClick = hapticTap {
-                        if (sending) onStop() else onSend()
+                        when {
+                            sending -> onStop()
+                            voiceBusy -> onVoiceCancel()
+                            voiceActive -> onVoiceStop()
+                            canSend -> onSend()
+                            onVoiceStart != null -> onVoiceStart()
+                        }
                     },
                     interactionSource = buttonInteraction,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         AnimatedContent(
-                            targetState = sending,
+                            targetState = buttonMode,
                             transitionSpec = {
                                 (fadeIn(motion.effectsFast()) + scaleIn(motion.spatialDefault(), initialScale = 0.8f)) togetherWith
                                     (fadeOut(motion.effectsFast()) + scaleOut(motion.spatialDefault(), targetScale = 0.8f))
                             },
                             label = "sendIcon",
-                        ) { isSending ->
-                            Icon(
-                                imageVector = if (isSending) FocusIcons.Stop else FocusIcons.Send,
-                                contentDescription = stringResource(
-                                    if (isSending) R.string.common_stop else R.string.common_send,
-                                ),
-                                tint = buttonContent,
-                                modifier = Modifier.size(16.dp),
-                            )
+                        ) { mode ->
+                            when (mode) {
+                                ComposerButton.Busy -> LoadingIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = buttonContent,
+                                )
+                                ComposerButton.Mic -> Icon(
+                                    imageVector = FocusIcons.Mic,
+                                    contentDescription = stringResource(R.string.common_voice_start),
+                                    tint = buttonContent,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                ComposerButton.Stop -> Icon(
+                                    imageVector = FocusIcons.Stop,
+                                    contentDescription = stringResource(
+                                        if (voiceActive) R.string.common_voice_stop else R.string.common_stop,
+                                    ),
+                                    tint = buttonContent,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                ComposerButton.Send -> Icon(
+                                    imageVector = FocusIcons.Send,
+                                    contentDescription = stringResource(R.string.common_send),
+                                    tint = buttonContent,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -310,6 +365,8 @@ fun FocusComposerPill(
         }
     }
 }
+
+private enum class ComposerButton { Send, Stop, Mic, Busy }
 
 private fun tokenRanges(text: String, tokens: List<String>): List<IntRange> {
     if (text.isEmpty() || tokens.isEmpty()) return emptyList()

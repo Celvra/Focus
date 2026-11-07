@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voice_status_loading_model">Loading local model</string>
+    <string name="voice_status_transcribing">Transcribing</string>
+    <string name="voice_status_downloading">Downloading model</string>
+    <string name="voice_error_permission">Microphone permission is required</string>
+    <string name="voice_permission_granted">Microphone granted. Tap the microphone again</string>
+    <string name="voice_error_recording">Cannot start recording</string>
+    <string name="voice_error_local_missing">Download the local model in settings first</string>
+    <string name="voice_error_local_load">Cannot load the local model</string>
+    <string name="voice_error_cloud_provider">No provider for cloud transcription</string>
+    <string name="voice_error_cloud_key">Cloud provider has no API key</string>
+</resources>

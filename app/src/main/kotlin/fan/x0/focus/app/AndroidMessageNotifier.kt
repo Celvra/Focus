@@ -11,6 +11,7 @@ import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.MessageNotifier
 import fan.x0.focus.core.notify.NotificationSettings
 import fan.x0.focus.core.notify.NotifyActionKind
+import fan.x0.focus.core.notify.R as NotifyR
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -117,7 +118,7 @@ class AndroidMessageNotifier(
         body: String,
     ) {
         val notification = Notification.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setSmallIcon(NotifyR.drawable.ic_notification_mascot)
             .setContentTitle(title.ifBlank { context.getString(R.string.app_name) })
             .setSubText(heading)
             .setContentText(body)

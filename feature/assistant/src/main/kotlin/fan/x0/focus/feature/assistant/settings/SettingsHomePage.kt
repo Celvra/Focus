@@ -52,6 +52,8 @@ internal fun SettingsHomePage(onOpen: (SettingsDestination) -> Unit) {
                 val detailBody = stringResource(R.string.settings_page_chat_detail_body)
                 val overlayTitle = stringResource(R.string.settings_page_overlay)
                 val overlayBody = stringResource(R.string.settings_page_overlay_body)
+                val voiceTitle = stringResource(R.string.settings_page_voice)
+                val voiceBody = stringResource(R.string.settings_page_voice_body)
                 val imTitle = stringResource(R.string.settings_page_im)
                 val imBody = stringResource(R.string.settings_page_im_body)
                 val appearanceTitle = stringResource(R.string.settings_page_appearance)
@@ -96,6 +98,12 @@ internal fun SettingsHomePage(onOpen: (SettingsDestination) -> Unit) {
                         body = overlayBody,
                         icon = FocusIcons.Assistant,
                         onClick = { onOpen(SettingsDestination.Overlay) },
+                    )
+                    pageItem(
+                        title = voiceTitle,
+                        body = voiceBody,
+                        icon = FocusIcons.Chat,
+                        onClick = { onOpen(SettingsDestination.Voice) },
                     )
                     pageItem(
                         title = imTitle,

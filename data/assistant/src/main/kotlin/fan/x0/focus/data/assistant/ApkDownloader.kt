@@ -37,6 +37,14 @@ class ApkDownloader(private val http: HttpClient) {
         target: File,
         expectedSize: Long,
         onProgress: (downloaded: Long, total: Long) -> Unit,
+    ): File = download(url, target, expectedSize, multiThreaded = true, onProgress = onProgress)
+
+    suspend fun download(
+        url: String,
+        target: File,
+        expectedSize: Long,
+        multiThreaded: Boolean,
+        onProgress: (downloaded: Long, total: Long) -> Unit,
     ): File = withContext(Dispatchers.IO) {
         val parent = target.absoluteFile.parentFile
         if (parent != null && !parent.exists() && !parent.mkdirs()) {
@@ -51,6 +59,10 @@ class ApkDownloader(private val http: HttpClient) {
         if (total <= 0) {
             target.delete()
             downloadWhole(url, target, onProgress)
+            return@withContext target
+        }
+        if (!multiThreaded) {
+            downloadSingle(url, target, total, onProgress)
             return@withContext target
         }
         val partCount = min(MAX_THREADS, max(1, (total / MIN_PART_SIZE).toInt()))
