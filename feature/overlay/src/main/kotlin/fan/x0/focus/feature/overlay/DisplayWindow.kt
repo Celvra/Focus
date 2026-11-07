@@ -13,7 +13,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,6 +31,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +51,9 @@ import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.theme.FocusShapeTokens
 import fan.x0.focus.data.device.display.VirtualDisplayState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -60,7 +62,7 @@ internal enum class DisplayWindowMode { Normal, Hover, Minimized }
 
 internal const val DISPLAY_WINDOW_WIDTH_DP = 200
 internal const val DISPLAY_WINDOW_PADDING_DP = 8
-internal const val DISPLAY_WINDOW_CHROME_DP = 64
+internal const val DISPLAY_WINDOW_CHROME_DP = 16
 internal const val DISPLAY_WINDOW_HOVER_DP = 96
 internal const val DISPLAY_WINDOW_BUBBLE_DP = 48
 private const val LONG_PRESS_MS = 450L
@@ -134,21 +136,18 @@ private fun DisplayWindowNormal(
             color = scheme.surfaceContainerHigh.copy(alpha = 0.96f),
             shadowElevation = 16.dp,
         ) {
-            Column(modifier = Modifier.fillMaxSize().padding(DISPLAY_WINDOW_PADDING_DP.dp)) {
-                DisplayWindowHeader(
-                    onDrag = onDrag,
-                    onDragEnd = onDragEnd,
-                    onMenuClick = { menuOpen = !menuOpen },
-                )
+            Box(modifier = Modifier.fillMaxSize().padding(DISPLAY_WINDOW_PADDING_DP.dp)) {
                 DisplayWindowScreen(
                     state = state,
                     preview = preview,
                     onTap = onTap,
                     onLongPress = onLongPress,
                     onSwipe = onSwipe,
+                    onDrag = onDrag,
+                    onDragEnd = onDragEnd,
+                    onMenuOpen = { menuOpen = true },
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
+                        .fillMaxSize()
                         .clip(MaterialTheme.shapes.large)
                         .background(scheme.surfaceContainerLowest),
                 )
@@ -166,8 +165,8 @@ private fun DisplayWindowNormal(
             )
             DisplayWindowMenu(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 56.dp, end = 8.dp)
+                    .align(Alignment.TopCenter)
+                    .padding(top = 48.dp)
                     .width(160.dp),
                 onHover = {
                     menuOpen = false
@@ -181,50 +180,6 @@ private fun DisplayWindowNormal(
                     menuOpen = false
                     onClose()
                 },
-            )
-        }
-    }
-}
-
-@Composable
-private fun DisplayWindowHeader(
-    onDrag: (Offset) -> Unit,
-    onDragEnd: () -> Unit,
-    onMenuClick: () -> Unit,
-) {
-    val scheme = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier.fillMaxWidth().height(48.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(48.dp)
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            onDrag(dragAmount)
-                        },
-                        onDragEnd = onDragEnd,
-                        onDragCancel = onDragEnd,
-                    )
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(width = 24.dp, height = 4.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(scheme.onSurfaceVariant.copy(alpha = 0.45f)),
-            )
-        }
-        IconButton(onClick = onMenuClick) {
-            Icon(
-                imageVector = FocusIcons.MoreHoriz,
-                contentDescription = stringResource(R.string.overlay_display_window_more),
-                tint = scheme.onSurfaceVariant,
             )
         }
     }
@@ -287,6 +242,9 @@ private fun DisplayWindowScreen(
     onTap: (Int, Int) -> Unit,
     onLongPress: (Int, Int) -> Unit,
     onSwipe: (Int, Int, Int, Int) -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onMenuOpen: () -> Unit,
     modifier: Modifier,
 ) {
     Box(
@@ -306,6 +264,106 @@ private fun DisplayWindowScreen(
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
         )
+        DisplayWindowHandle(
+            onDrag = onDrag,
+            onDragEnd = onDragEnd,
+            onMenuOpen = onMenuOpen,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun DisplayWindowHandle(
+    onDrag: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onMenuOpen: () -> Unit,
+    modifier: Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    val menuShown = remember { mutableStateOf(false) }
+    var longPressJob by remember { mutableStateOf<Job?>(null) }
+    val cancelLongPress = {
+        longPressJob?.cancel()
+        longPressJob = null
+    }
+    val startLongPress = {
+        cancelLongPress()
+        menuShown.value = false
+        longPressJob = scope.launch {
+            delay(LONG_PRESS_MS)
+            menuShown.value = true
+            onMenuOpen()
+        }
+    }
+    Box(
+        modifier = modifier
+            .size(width = 80.dp, height = 32.dp)
+            .clip(RoundedCornerShape(50))
+            .background(scheme.surfaceContainerHighest.copy(alpha = 0.78f))
+            .pointerInput(Unit) {
+                handleGesture(
+                    onDrag = onDrag,
+                    onDragEnd = onDragEnd,
+                    onPressStart = { startLongPress() },
+                    onPressCancel = { cancelLongPress() },
+                    isMenuShown = { menuShown.value },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 24.dp, height = 4.dp)
+                .clip(RoundedCornerShape(50))
+                .background(scheme.onSurfaceVariant.copy(alpha = 0.55f)),
+        )
+    }
+}
+
+private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.handleGesture(
+    onDrag: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onPressStart: () -> Unit,
+    onPressCancel: () -> Unit,
+    isMenuShown: () -> Boolean,
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        onPressStart()
+        val start = down.position
+        var dragged = false
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            if (change.isConsumed) {
+                onPressCancel()
+                break
+            }
+            if (isMenuShown()) {
+                change.consume()
+                if (!change.pressed) {
+                    onPressCancel()
+                    break
+                }
+                continue
+            }
+            if (!dragged && (change.position - start).getDistance() > viewConfiguration.touchSlop) {
+                dragged = true
+                onPressCancel()
+                change.consume()
+            }
+            if (dragged) {
+                change.consume()
+                onDrag(change.position - change.previousPosition)
+            }
+            if (!change.pressed) {
+                onPressCancel()
+                if (dragged) onDragEnd()
+                break
+            }
+        }
     }
 }
 
@@ -492,6 +550,7 @@ private fun Modifier.displayTakeover(
         while (true) {
             val event = awaitPointerEvent()
             val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            if (change.isConsumed) break
             if (!dragged && (change.position - start).getDistance() > viewConfiguration.touchSlop) {
                 dragged = true
             }
