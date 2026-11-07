@@ -321,6 +321,8 @@ data class ChatUiState(
     val taskStatus: TaskStatus = TaskStatus.None,
     val workerProfile: WorkerProfile = WorkerProfile.Standard,
     val routerModel: String = "",
+    val routerProviderId: String = "",
+    val routerModelId: String = "",
     val sideActiveCount: Int = 0,
     val sideUnreadCount: Int = 0,
     val sidePanel: SidePanelUi = SidePanelUi(),
@@ -424,7 +426,7 @@ data class ChatUiState(
     val isSide: Boolean get() = kind == ConversationKind.Side
 }
 
-enum class ComposerPicker { Model, Reasoning }
+enum class ComposerPicker { Model, RouterModel, Reasoning }
 
 sealed interface ChatAction : UiAction {
     data class InputChanged(val value: String) : ChatAction
@@ -449,6 +451,7 @@ sealed interface ChatAction : UiAction {
     data object RetryBtw : ChatAction
     data class OpenPicker(val picker: ComposerPicker?) : ChatAction
     data class SelectModel(val providerId: String, val model: String) : ChatAction
+    data class SelectRouterModel(val providerId: String, val model: String) : ChatAction
     data class ModelQueryChanged(val value: String) : ChatAction
     data object RefreshModels : ChatAction
     data class SelectReasoning(val level: ReasoningLevel) : ChatAction

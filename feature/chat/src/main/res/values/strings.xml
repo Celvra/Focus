@@ -5,6 +5,7 @@
     <string name="chat_side_title">Side chat · %1$s</string>
     <string name="chat_side_panel_title">Side chats</string>
     <string name="chat_router_model">Router</string>
+    <string name="chat_router_model_title">Router model</string>
     <string name="chat_side_panel_refresh">Refresh</string>
     <string name="chat_side_panel_empty">No side chats yet. Ask for work that needs tools and it opens here.</string>
     <string name="chat_side_panel_stop">Stop</string>

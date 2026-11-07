@@ -197,7 +197,7 @@ internal fun Composer(
                         label = state.routerModel.ifBlank { stringResource(R.string.chat_router_model) },
                         icon = FocusIcons.Bolt,
                         compact = true,
-                        onClick = { onAction(ChatAction.OpenSettings) },
+                        onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.RouterModel)) },
                     )
                 } else {
                     FocusComposerPill(
@@ -219,6 +219,46 @@ internal fun Composer(
     }
 
     when (state.picker) {
+        ComposerPicker.RouterModel -> {
+            val labels = modelMetaLabels()
+            val groups = remember(state.providers, state.models, labels) {
+                state.providers.mapNotNull { provider ->
+                    val models = state.models[provider.id].orEmpty()
+                    if (models.isEmpty()) return@mapNotNull null
+                    FocusPickerGroup(
+                        id = provider.id,
+                        title = provider.name,
+                        icon = provider.icon,
+                        items = models.map { option ->
+                            FocusPickerItem(
+                                id = option.id,
+                                label = option.name.ifBlank { option.id },
+                                detail = option.meta.toPickerDetail(labels),
+                            )
+                        },
+                    )
+                }
+            }
+            FocusGroupedPickerSheet(
+                title = stringResource(R.string.chat_router_model_title),
+                searchHint = stringResource(R.string.chat_picker_model_search),
+                emptyText = stringResource(
+                    if (state.modelsLoading) {
+                        R.string.chat_picker_model_loading
+                    } else {
+                        R.string.chat_picker_model_empty
+                    },
+                ),
+                groups = groups,
+                query = state.modelQuery,
+                onQueryChange = { onAction(ChatAction.ModelQueryChanged(it)) },
+                onSelect = { onAction(ChatAction.SelectRouterModel(it.groupId, it.itemId)) },
+                onDismiss = { onAction(ChatAction.OpenPicker(null)) },
+                selected = FocusPickerSelection(state.routerProviderId, state.routerModelId),
+                loading = state.modelsLoading,
+                onRefresh = { onAction(ChatAction.RefreshModels) },
+            )
+        }
         ComposerPicker.Model -> {
             val labels = modelMetaLabels()
             val groups = remember(state.providers, state.models, labels) {

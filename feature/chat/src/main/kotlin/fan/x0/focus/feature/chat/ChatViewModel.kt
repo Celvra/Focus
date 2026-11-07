@@ -53,6 +53,7 @@ import fan.x0.focus.data.assistant.PolicySettings
 import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ProviderModelCatalog
 import fan.x0.focus.data.assistant.ReasoningLevel
+import fan.x0.focus.data.assistant.RoleModels
 import fan.x0.focus.data.assistant.RouterSession
 import fan.x0.focus.data.assistant.SkillEntry
 import fan.x0.focus.data.assistant.SkillRepository
@@ -111,6 +112,7 @@ class ChatViewModel(
     private val sideChats: SideChatManager,
     private val router: RouterSession,
     private val models: ModelResolver,
+    private val roles: RoleModels,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
@@ -255,6 +257,10 @@ class ChatViewModel(
                     )
                 }
                 if (!isMain || currentState.loading) return@collect
+                if (channel.streaming.isNotBlank() && currentState.conversationId == ChatStore.MAIN_CONVERSATION_ID) {
+                    updateDisplayTarget(currentState.conversationId, 0L, channel.streaming)
+                    updateState { copy(sending = true) }
+                }
                 when {
                     channel.working -> {
                         mainSubmitting = false
@@ -304,11 +310,14 @@ class ChatViewModel(
             ChatAction.RetryBtw -> retryBtw()
             is ChatAction.OpenPicker -> {
                 updateState { copy(picker = action.picker, modelQuery = "") }
-                if (action.picker == ComposerPicker.Model && !currentState.modelsLoaded) {
+                if ((action.picker == ComposerPicker.Model || action.picker == ComposerPicker.RouterModel) &&
+                    !currentState.modelsLoaded
+                ) {
                     loadModels()
                 }
             }
             is ChatAction.SelectModel -> selectModel(action.providerId, action.model)
+            is ChatAction.SelectRouterModel -> selectRouterModel(action.providerId, action.model)
             is ChatAction.ModelQueryChanged -> updateState { copy(modelQuery = action.value) }
             ChatAction.RefreshModels -> loadModels(force = true)
             is ChatAction.SelectReasoning -> selectReasoning(action.level)
@@ -845,7 +854,7 @@ class ChatViewModel(
             SlashCommandId.Sessions -> sendEffect(ChatEffect.OpenSessions)
             SlashCommandId.Models -> {
                 if (currentState.isMain) {
-                    sendEffect(ChatEffect.OpenSettings)
+                    onAction(ChatAction.OpenPicker(ComposerPicker.RouterModel))
                 } else {
                     if (argument.isNotBlank()) {
                         updateState { copy(modelQuery = argument) }
@@ -1306,6 +1315,24 @@ class ChatViewModel(
         updateState { copy(providerId = providerId, model = model, picker = null) }
     }
 
+    private fun selectRouterModel(providerId: String, model: String) {
+        launchGuarded(onError = {}) {
+            roles.set(AgentRole.Router, providerId, model, ReasoningLevel.Auto.name)
+            val config = settings.configOnce()
+            val name = config.providers.firstOrNull { it.id == providerId }?.name ?: providerId
+            val label = "$name · $model"
+            mainChannel.setRouterModel(label)
+            updateState {
+                copy(
+                    picker = null,
+                    routerProviderId = providerId,
+                    routerModelId = model,
+                    routerModel = label,
+                )
+            }
+        }
+    }
+
     private fun selectReasoning(level: ReasoningLevel) {
         persistTurnSettings(reasoning = level.name)
         updateState { copy(reasoningLevel = level) }
@@ -1445,6 +1472,7 @@ class ChatViewModel(
         val entries = messages.toEntries(compaction, main = conversation?.kind == ConversationKind.Main) +
             listOfNotNull(planEntry(conversation))
         val routerLabel = routerLabel()
+        val routerConfig = roles.configsOnce()[AgentRole.Router]
         if (currentState.conversationId != id || generation != loadGeneration) return
         if (turns.isRunning(id)) return
         resetDisplay(id)
@@ -1464,6 +1492,8 @@ class ChatViewModel(
                 taskStatus = conversation?.taskStatus ?: TaskStatus.None,
                 workerProfile = conversation?.workerProfile ?: WorkerProfile.Standard,
                 routerModel = routerLabel.ifBlank { mainChannel.state.value.routerModel },
+                routerProviderId = routerConfig?.providerId.orEmpty(),
+                routerModelId = routerConfig?.model.orEmpty(),
                 sideActiveCount = mainChannel.state.value.activeSideChats,
                 sideUnreadCount = mainChannel.state.value.unreadResults,
                 providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon, it.models) },
@@ -1511,6 +1541,7 @@ class ChatViewModel(
         val todos = chats.todos(conversationId)
         val source = imChats.bindingForConversation(conversationId)
         val routerLabel = routerLabel()
+        val routerConfig = roles.configsOnce()[AgentRole.Router]
         if (conversation?.kind == ConversationKind.Side) {
             sideChats.markSeen(conversationId)
         }
@@ -1540,6 +1571,8 @@ class ChatViewModel(
                 taskStatus = conversation?.taskStatus ?: TaskStatus.None,
                 workerProfile = conversation?.workerProfile ?: WorkerProfile.Standard,
                 routerModel = routerLabel.ifBlank { mainChannel.state.value.routerModel },
+                routerProviderId = routerConfig?.providerId.orEmpty(),
+                routerModelId = routerConfig?.model.orEmpty(),
                 sideActiveCount = mainChannel.state.value.activeSideChats,
                 sideUnreadCount = mainChannel.state.value.unreadResults,
                 name = name,
@@ -1591,6 +1624,13 @@ class ChatViewModel(
             )
         }
         switcher.markLoaded(conversationId)
+        if (conversation?.kind == ConversationKind.Main) {
+            val streaming = mainChannel.state.value.streaming
+            if (streaming.isNotBlank()) {
+                updateDisplayTarget(conversationId, 0L, streaming)
+                updateState { copy(sending = true) }
+            }
+        }
         applyTurn(turns.state(conversationId))
         turns.result(conversationId)?.let { handleResult(it) }
         if (messages.isEmpty() && !turns.isRunning(conversationId)) {

@@ -118,6 +118,7 @@ class RouterSession(
                     when (event) {
                         is ChatEvent.Delta -> {
                             outcome.answer += event.text
+                            main.setStreaming(outcome.answer)
                             val now = System.currentTimeMillis()
                             if (now - lastTouch > TOUCH_MS) {
                                 lastTouch = now

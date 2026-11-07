@@ -14,6 +14,7 @@ import org.koin.core.annotation.Single
 data class MainChannelState(
     val working: Boolean = false,
     val workingText: String = "",
+    val streaming: String = "",
     val activeSideChats: Int = 0,
     val unreadResults: Int = 0,
     val routerModel: String = "",
@@ -184,8 +185,13 @@ class MainChannelSession(
             it.copy(
                 working = working,
                 workingText = if (working) text.ifBlank { it.workingText } else "",
+                streaming = if (working) it.streaming else "",
             )
         }
+    }
+
+    fun setStreaming(text: String) {
+        _state.update { it.copy(streaming = text) }
     }
 
     fun setWorkingText(text: String) {
