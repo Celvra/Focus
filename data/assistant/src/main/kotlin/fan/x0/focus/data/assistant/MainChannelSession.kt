@@ -159,7 +159,7 @@ class MainChannelSession(
         }
         notifier.notifyReply(
             conversationId = card.sideChatId,
-            title = card.title.ifBlank { MAIN_TITLE },
+            title = card.title.ifBlank { "旁聊" },
             preview = preview.ifBlank {
                 if (card.failed) "旁聊失败" else "旁聊完成"
             },

@@ -5,6 +5,7 @@ import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.AppErrorType
 import fan.x0.focus.core.mvi.BaseViewModel
 import fan.x0.focus.data.assistant.AgentMode
+import fan.x0.focus.data.assistant.AgentRole
 import fan.x0.focus.data.assistant.AskAnswer
 import fan.x0.focus.data.assistant.AskKind
 import fan.x0.focus.data.assistant.AttachmentKind
@@ -41,6 +42,7 @@ import fan.x0.focus.data.assistant.MentionItemUi
 import fan.x0.focus.data.assistant.MentionKind
 import fan.x0.focus.data.assistant.MentionText
 import fan.x0.focus.data.assistant.MentionUi
+import fan.x0.focus.data.assistant.ModelResolver
 import fan.x0.focus.data.assistant.SideResultCard
 import fan.x0.focus.data.assistant.SideChatManager
 import fan.x0.focus.data.assistant.TaskStatus
@@ -108,6 +110,7 @@ class ChatViewModel(
     private val mainChannel: MainChannelSession,
     private val sideChats: SideChatManager,
     private val router: RouterSession,
+    private val models: ModelResolver,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
@@ -1441,6 +1444,7 @@ class ChatViewModel(
         val todos = chats.todos(id)
         val entries = messages.toEntries(compaction, main = conversation?.kind == ConversationKind.Main) +
             listOfNotNull(planEntry(conversation))
+        val routerLabel = routerLabel()
         if (currentState.conversationId != id || generation != loadGeneration) return
         if (turns.isRunning(id)) return
         resetDisplay(id)
@@ -1459,7 +1463,7 @@ class ChatViewModel(
                 kind = conversation?.kind ?: ConversationKind.Chat,
                 taskStatus = conversation?.taskStatus ?: TaskStatus.None,
                 workerProfile = conversation?.workerProfile ?: WorkerProfile.Standard,
-                routerModel = mainChannel.state.value.routerModel,
+                routerModel = routerLabel.ifBlank { mainChannel.state.value.routerModel },
                 sideActiveCount = mainChannel.state.value.activeSideChats,
                 sideUnreadCount = mainChannel.state.value.unreadResults,
                 providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon, it.models) },
@@ -1506,6 +1510,7 @@ class ChatViewModel(
             ?: ReasoningLevel.Auto
         val todos = chats.todos(conversationId)
         val source = imChats.bindingForConversation(conversationId)
+        val routerLabel = routerLabel()
         if (conversation?.kind == ConversationKind.Side) {
             sideChats.markSeen(conversationId)
         }
@@ -1534,7 +1539,7 @@ class ChatViewModel(
                 kind = conversation?.kind ?: ConversationKind.Chat,
                 taskStatus = conversation?.taskStatus ?: TaskStatus.None,
                 workerProfile = conversation?.workerProfile ?: WorkerProfile.Standard,
-                routerModel = mainChannel.state.value.routerModel,
+                routerModel = routerLabel.ifBlank { mainChannel.state.value.routerModel },
                 sideActiveCount = mainChannel.state.value.activeSideChats,
                 sideUnreadCount = mainChannel.state.value.unreadResults,
                 name = name,
@@ -1848,6 +1853,11 @@ class ChatViewModel(
         if (shown == entry.text) return this
         return toMutableList().also { it[index] = entry.copy(text = shown) }
     }
+
+    private suspend fun routerLabel(): String =
+        models.resolve(AgentRole.Router)?.let { resolved ->
+            "${resolved.provider.name} · ${resolved.model}"
+        }.orEmpty()
 
     private suspend fun refreshTitle() {
         val id = currentState.conversationId
