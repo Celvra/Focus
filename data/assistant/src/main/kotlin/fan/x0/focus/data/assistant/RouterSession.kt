@@ -27,6 +27,7 @@ class RouterSession(
     private val memory: RouterMemoryStore,
     private val workspace: WorkspaceStore,
     private val journal: TurnJournalStore,
+    private val assembler: ContextAssembler,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val queue = Channel<AgentEvent>(Channel.UNLIMITED)
@@ -87,9 +88,9 @@ class RouterSession(
                 return
             }
             val router = chats.ensureRouterConversation()
-            val prompt = buildPrompt(claimed)
+            val prompt = assembler.build(claimed)
             val flags = RouterTurnFlags()
-            val eventText = claimed.joinToString("\n\n") { describe(it) }
+            val eventText = claimed.joinToString("\n\n") { assembler.describe(it) }
             chats.append(
                 conversationId = router.id,
                 role = ChatRole.User,
@@ -203,6 +204,9 @@ class RouterSession(
         builder.appendLine("- Change role models only when the user explicitly asks. Use list_role_models first.")
         builder.appendLine("- Pass a thread_key to start_side_chat when the event carries one and the work continues that thread.")
         builder.appendLine("- User messages always go through you. Context events may go straight to a subscribed side chat.")
+        builder.appendLine("- Sources marked speculative must not produce a message just because they fired. " +
+            "Check whether anything useful or actionable exists. If not, stay silent. " +
+            "If it needs checking, start a light side chat and stay silent until its result.")
         builder.appendLine("- Stay silent when nothing needs the user. Quiet is the default.")
         builder.appendLine("- ${language()}")
         if (userName.isNotBlank()) builder.appendLine("- The user's name is $userName.")

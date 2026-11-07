@@ -53,7 +53,16 @@ class AgentWatchdog(
                 ?: 0
             val snapshot = Progress(turn.stats.totalTokens.toLong(), answerLength, now)
             val previous = progress.put(conversationId, snapshot)
-            if (previous != null &&
+            val waiting = turn.entries.any { entry ->
+                when (entry) {
+                    is ChatTurnEntry.Approval -> entry.card.phase == ChatTurnApprovalPhase.Waiting
+                    is ChatTurnEntry.Plan -> entry.card.phase == ChatTurnApprovalPhase.Waiting
+                    is ChatTurnEntry.Ask -> entry.card.phase == ChatTurnAskPhase.Waiting
+                    is ChatTurnEntry.Trust -> entry.card.phase == ChatTurnTrustPhase.Waiting
+                    else -> false
+                }
+            }
+            if (!waiting && previous != null &&
                 previous.tokens == snapshot.tokens &&
                 previous.answer == snapshot.answer &&
                 now - previous.at > NO_PROGRESS_MS
@@ -65,6 +74,7 @@ class AgentWatchdog(
             val retry = turn.retry
             if (retry != null && retry.attempt >= retry.max && retry.max > 0) {
                 alarm(conversationId, "retry_exhausted", "重试次数已用完。")
+                stop(conversationId)
             }
         }
     }
