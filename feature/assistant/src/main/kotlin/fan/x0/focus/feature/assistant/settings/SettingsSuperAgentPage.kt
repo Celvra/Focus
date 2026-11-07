@@ -159,7 +159,6 @@ fun SettingsSuperAgentRoute(
                                     ) { Text("+") }
                                 }
                             },
-                            onClick = {},
                         )
                         item(
                             headlineContent = { Text(stringResource(R.string.settings_super_rate_limit)) },
@@ -189,7 +188,6 @@ fun SettingsSuperAgentRoute(
                                     ) { Text("+") }
                                 }
                             },
-                            onClick = {},
                         )
                         item(
                             headlineContent = { Text(stringResource(R.string.settings_super_watchdog)) },
