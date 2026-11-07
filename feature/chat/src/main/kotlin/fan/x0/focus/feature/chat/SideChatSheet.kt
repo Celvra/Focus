@@ -82,7 +82,7 @@ internal fun SideChatSheet(
                     modifier = Modifier.heightIn(max = 520.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(panel.items, key = { it.id }) { row ->
+                    items(panel.items, key = { it.id }, contentType = { "side" }) { row ->
                         SideChatRow(
                             row = row,
                             onOpen = { onOpen(row.id) },

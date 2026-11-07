@@ -143,7 +143,7 @@ private fun RoleModelSection(
                     },
                     leadingContent = { FocusCardGroupIcon(icon = roleIcon(row.role)) },
                     trailingContent = {
-                        if (!row.followsMain) {
+                        if (row.own) {
                             IconButton(onClick = { onClear(row.role) }) {
                                 Icon(
                                     imageVector = FocusIcons.Close,
@@ -193,9 +193,10 @@ private fun RoleModelPicker(
         )
     }
     val selected = state.rows.firstOrNull { it.role == role }
-        ?.takeIf { !it.followsMain && it.inherited == null }
+        ?.takeIf { it.own && it.inherited == null }
         ?.let { row ->
-            val group = state.groups.firstOrNull { group -> group.models.any { it.id == row.model } }
+            val group = state.groups.firstOrNull { it.id == row.providerId }
+                ?: state.groups.firstOrNull { group -> group.models.any { it.id == row.model } }
                 ?: return@let null
             FocusPickerSelection(group.id, row.model)
         }

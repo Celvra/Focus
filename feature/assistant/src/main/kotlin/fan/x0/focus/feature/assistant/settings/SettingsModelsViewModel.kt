@@ -14,10 +14,12 @@ import org.koin.core.annotation.KoinViewModel
 
 data class RoleModelRowUi(
     val role: AgentRole,
+    val providerId: String,
     val providerName: String,
     val model: String,
     val inherited: AgentRole?,
     val followsMain: Boolean,
+    val own: Boolean,
     val toolsMissing: Boolean,
 )
 
@@ -121,10 +123,12 @@ class RoleModelsViewModel(
             val tools = requestedModel?.let { meta[metaProviderId to it] }
             RoleModelRowUi(
                 role = role,
+                providerId = provider?.id ?: inheritedProvider?.id ?: fallbackProvider?.id.orEmpty(),
                 providerName = providerName,
                 model = model,
                 inherited = inherited,
                 followsMain = own == null && inherited == null,
+                own = own != null,
                 toolsMissing = role.needsTools && tools == false,
             )
         }
