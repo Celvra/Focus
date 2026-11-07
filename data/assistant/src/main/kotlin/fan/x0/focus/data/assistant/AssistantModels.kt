@@ -162,6 +162,15 @@ enum class WorkerProfile {
     }
 }
 
+fun TaskStatus.sideChatRank(): Int = when (this) {
+    TaskStatus.Waiting -> 0
+    TaskStatus.Running -> 1
+    TaskStatus.Queued -> 2
+    TaskStatus.Done -> 3
+    TaskStatus.NoResult, TaskStatus.None -> 4
+    TaskStatus.Failed, TaskStatus.Interrupted -> 5
+}
+
 data class Conversation(
     val id: String,
     val title: String,

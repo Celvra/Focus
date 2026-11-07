@@ -309,16 +309,26 @@ fun ChatScreen(
                             )
                         }
                         if (state.isMain) {
-                            val badge = if (state.sideActiveCount > 0) {
-                                state.sideActiveCount
-                            } else {
-                                state.sideUnreadCount
-                            }
+                            val unread = state.sideUnreadCount
+                            val badge = if (unread > 0) unread else state.sideActiveCount
                             IconButton(onClick = hapticTap { onAction(ChatAction.OpenSidePanel) }) {
                                 BadgedBox(
                                     badge = {
                                         if (badge > 0) {
-                                            Badge { Text(badge.coerceAtMost(99).toString()) }
+                                            Badge(
+                                                containerColor = if (unread > 0) {
+                                                    MaterialTheme.colorScheme.error
+                                                } else {
+                                                    MaterialTheme.colorScheme.secondaryContainer
+                                                },
+                                                contentColor = if (unread > 0) {
+                                                    MaterialTheme.colorScheme.onError
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                                },
+                                            ) {
+                                                Text(badge.coerceAtMost(99).toString())
+                                            }
                                         }
                                     },
                                 ) {

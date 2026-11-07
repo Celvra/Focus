@@ -17,6 +17,7 @@
     <string name="chat_side_status_interrupted">已中断</string>
     <string name="chat_side_status_no_result">无结果</string>
     <string name="chat_side_status_none">空闲</string>
+    <string name="chat_side_unread">未读</string>
     <string name="chat_side_profile_light">轻档</string>
     <string name="chat_side_profile_standard">标准</string>
     <string name="chat_side_profile_heavy">重档</string>

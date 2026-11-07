@@ -17,6 +17,7 @@
     <string name="chat_side_status_interrupted">Interrupted</string>
     <string name="chat_side_status_no_result">No result</string>
     <string name="chat_side_status_none">Idle</string>
+    <string name="chat_side_unread">Unread</string>
     <string name="chat_side_profile_light">Light</string>
     <string name="chat_side_profile_standard">Standard</string>
     <string name="chat_side_profile_heavy">Heavy</string>

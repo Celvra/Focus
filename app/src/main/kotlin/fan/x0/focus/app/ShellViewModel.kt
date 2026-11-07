@@ -7,6 +7,7 @@ import fan.x0.focus.data.assistant.ChatSwitcher
 import fan.x0.focus.data.assistant.Conversation
 import fan.x0.focus.data.assistant.SideChatManager
 import fan.x0.focus.data.assistant.WorkspaceStore
+import fan.x0.focus.data.assistant.sideChatRank
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -94,7 +95,9 @@ class ShellViewModel(
         val name = workspace.userName()
         val main = chats.ensureMainConversation()
         val conversations = chats.conversations().filter { it.id != ONBOARDING_CHAT }
-        val sides = chats.sideChats().filter { it.id != ONBOARDING_CHAT }
+        val sides = chats.sideChats()
+            .filter { it.id != ONBOARDING_CHAT }
+            .sortedWith(compareBy({ it.taskStatus.sideChatRank() }, { -it.updatedAt }))
         val archived = chats.conversations(archived = true).filter { it.id != ONBOARDING_CHAT }
         _state.value = ShellState(
             loading = false,
