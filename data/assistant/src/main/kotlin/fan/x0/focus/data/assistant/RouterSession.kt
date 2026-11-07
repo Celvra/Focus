@@ -90,7 +90,9 @@ class RouterSession(
             }
             val router = chats.ensureRouterConversation()
             val prompt = assembler.build(claimed)
-            val flags = RouterTurnFlags()
+            val flags = RouterTurnFlags(
+                attachments = claimed.flatMap { it.attachments() }.distinctBy { it.id },
+            )
             val eventText = claimed.joinToString("\n\n") { assembler.describe(it) }
             chats.append(
                 conversationId = router.id,

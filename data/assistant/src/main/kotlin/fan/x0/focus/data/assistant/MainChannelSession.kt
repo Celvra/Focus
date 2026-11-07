@@ -37,6 +37,7 @@ data class SideResultCard(
     val summary: String,
     val failed: Boolean,
     val createdAt: Long = 0,
+    val attachments: List<ChatAttachment> = emptyList(),
 )
 
 @Single

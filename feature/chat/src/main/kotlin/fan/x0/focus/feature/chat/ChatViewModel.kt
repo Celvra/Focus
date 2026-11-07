@@ -2163,6 +2163,7 @@ class ChatViewModel(
                                         title = card.title,
                                         summary = card.summary,
                                         failed = card.failed,
+                                        attachments = card.attachments.map { it.toUi() },
                                     ),
                                 )
                             }

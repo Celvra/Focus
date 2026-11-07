@@ -28,6 +28,10 @@ class ContextAssembler(
         builder.appendLine("Rules:")
         builder.appendLine("- Reply directly only for simple conversation, questions you can answer without tools, or decisions about routing.")
         builder.appendLine("- For any work that needs tools, files, devices, apps, long steps, or parallel effort, call start_side_chat with a complete, self-contained task.")
+        builder.appendLine("- Attachments in the current event are forwarded to a new side chat automatically. " +
+            "If an event carries an image or file and the user asks about it, start a side chat instead of guessing.")
+        builder.appendLine("- Files and images produced by a side chat are returned with its result. " +
+            "Call show_side_chat_result so the user can open them.")
         builder.appendLine("- Start one side chat per independent task. Several can run in parallel. Do not start a side chat for simple chat.")
         builder.appendLine("- When you start work, tell the user in one short line what is running. Do not claim the work is done.")
         builder.appendLine("- Side chat results arrive as events. If the user can use or act on a result, call show_side_chat_result. Otherwise call stay_silent. Never repeat a full side chat trajectory in the main conversation.")
@@ -115,9 +119,18 @@ class ContextAssembler(
     }
 
     fun describe(event: AgentEvent): String = when (event.kind) {
-        AgentEventKind.UserMessage -> "User: ${event.text()}"
-        AgentEventKind.SideChatResult -> "Side chat ${event.sideChatId()} (${event.payloadObject()["title"].stringValue()}) " +
-            if (event.failed()) "failed: ${event.summary()}" else "finished: ${event.summary()}"
+        AgentEventKind.UserMessage -> buildString {
+            append("User: ")
+            append(event.text().ifBlank { "(empty message)" })
+            val names = event.attachments().joinToString(", ") { it.name }
+            if (names.isNotBlank()) append("\nAttachments: ").append(names)
+        }
+        AgentEventKind.SideChatResult -> buildString {
+            append("Side chat ${event.sideChatId()} (${event.payloadObject()["title"].stringValue()}) ")
+            if (event.failed()) append("failed: ${event.summary()}") else append("finished: ${event.summary()}")
+            val names = event.attachments().joinToString(", ") { it.name }
+            if (names.isNotBlank()) append("\nAttachments: ").append(names)
+        }
         AgentEventKind.SideChatApproval -> "Side chat ${event.sideChatId()} " +
             "(${event.payloadObject()["title"].stringValue()}) waits for approval: ${event.note()}"
         AgentEventKind.BackgroundCommand ->

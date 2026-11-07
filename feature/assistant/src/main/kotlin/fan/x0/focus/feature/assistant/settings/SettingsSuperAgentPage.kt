@@ -3,28 +3,41 @@ package fan.x0.focus.feature.assistant.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import fan.x0.focus.core.designsystem.components.FocusCard
 import fan.x0.focus.core.designsystem.components.FocusCardGroup
 import fan.x0.focus.core.designsystem.components.FocusCardGroupIcon
+import fan.x0.focus.core.designsystem.components.FocusChip
+import fan.x0.focus.core.designsystem.components.FocusChoiceButtons
+import fan.x0.focus.core.designsystem.components.FocusIconBadge
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusReveal
+import fan.x0.focus.core.designsystem.components.FocusSectionHeader
+import fan.x0.focus.core.designsystem.components.FocusStatusPill
+import fan.x0.focus.core.designsystem.components.StatusTone
+import fan.x0.focus.core.designsystem.components.switchItem
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
+import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
 import fan.x0.focus.core.mvi.CollectEffect
 import fan.x0.focus.data.assistant.AgentEventSource
 import fan.x0.focus.feature.assistant.R
 import org.koin.compose.viewmodel.koinViewModel
+import java.util.Locale
 
 @Composable
 fun SettingsSuperAgentRoute(
@@ -41,215 +54,329 @@ fun SettingsSuperAgentRoute(
         onBack = onBack,
         snackbar = snackbar,
     ) {
-        item(key = "intro") {
+        item(key = "hero") {
             FocusReveal {
-                Text(
-                    text = stringResource(R.string.settings_super_intro),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-                )
+                HeroCard(state)
             }
         }
         item(key = "sources") {
             FocusReveal(index = 1) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = stringResource(R.string.settings_super_sources),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 4.dp),
-                    )
-                    FocusCardGroup {
-                        state.sources.forEach { row ->
-                            item(
-                                headlineContent = { Text(sourceLabel(row.source)) },
-                                supportingContent = {
-                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text(
-                                            text = sourceBody(row.source),
-                                            style = MaterialTheme.typography.bodySmall,
-                                        )
-                                        if (row.speculative) {
-                                            Text(
-                                                text = stringResource(R.string.settings_super_speculative_on),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.tertiary,
-                                            )
-                                        }
-                                    }
-                                },
-                                leadingContent = { FocusCardGroupIcon(icon = sourceIcon(row.source)) },
-                                trailingContent = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        if (supportsSpeculative(row.source)) {
-                                            TextButton(
-                                                onClick = {
-                                                    viewModel.onAction(
-                                                        SuperAgentAction.ToggleSpeculative(
-                                                            row.source,
-                                                            !row.speculative,
-                                                        ),
-                                                    )
-                                                },
-                                            ) {
-                                                Text(stringResource(R.string.settings_super_speculative))
-                                            }
-                                        }
-                                        Switch(
-                                            checked = row.enabled,
-                                            onCheckedChange = {
-                                                viewModel.onAction(
-                                                    SuperAgentAction.ToggleSource(row.source, it),
-                                                )
-                                            },
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.onAction(SuperAgentAction.ToggleSource(row.source, !row.enabled))
-                                },
-                            )
-                        }
-                    }
-                }
+                SourceSections(state, viewModel::onAction)
             }
         }
         item(key = "runtime") {
             FocusReveal(index = 2) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = stringResource(R.string.settings_super_runtime),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 4.dp),
-                    )
-                    FocusCardGroup {
-                        item(
-                            headlineContent = { Text(stringResource(R.string.settings_super_concurrency)) },
-                            supportingContent = {
-                                Text(
-                                    text = stringResource(R.string.settings_super_concurrency_body),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            },
-                            leadingContent = { FocusCardGroupIcon(icon = FocusIcons.Groups) },
-                            trailingContent = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    TextButton(
-                                        onClick = {
-                                            viewModel.onAction(
-                                                SuperAgentAction.SetConcurrent(
-                                                    (state.maxConcurrent - 1).coerceAtLeast(1),
-                                                ),
-                                            )
-                                        },
-                                    ) { Text("-") }
-                                    Text(state.maxConcurrent.toString())
-                                    TextButton(
-                                        onClick = {
-                                            viewModel.onAction(
-                                                SuperAgentAction.SetConcurrent(
-                                                    (state.maxConcurrent + 1).coerceAtMost(
-                                                        fan.x0.focus.data.assistant.AgentEventConfig.MAX_CONCURRENT_LIMIT,
-                                                    ),
-                                                ),
-                                            )
-                                        },
-                                    ) { Text("+") }
-                                }
-                            },
-                        )
-                        item(
-                            headlineContent = { Text(stringResource(R.string.settings_super_rate_limit)) },
-                            supportingContent = {
-                                Text(
-                                    text = stringResource(R.string.settings_super_rate_limit_body, state.rateLimit),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            },
-                            leadingContent = { FocusCardGroupIcon(icon = FocusIcons.Bolt) },
-                            trailingContent = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    TextButton(
-                                        onClick = {
-                                            viewModel.onAction(
-                                                SuperAgentAction.SetRateLimit((state.rateLimit - 10).coerceAtLeast(5)),
-                                            )
-                                        },
-                                    ) { Text("-") }
-                                    Text(state.rateLimit.toString())
-                                    TextButton(
-                                        onClick = {
-                                            viewModel.onAction(
-                                                SuperAgentAction.SetRateLimit((state.rateLimit + 10).coerceAtMost(300)),
-                                            )
-                                        },
-                                    ) { Text("+") }
-                                }
-                            },
-                        )
-                        item(
-                            headlineContent = { Text(stringResource(R.string.settings_super_usage)) },
-                            supportingContent = {
-                                Text(
-                                    text = stringResource(
-                                        R.string.settings_super_usage_body,
-                                        state.usage.inputTokens,
-                                        state.usage.outputTokens,
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            },
-                            leadingContent = { FocusCardGroupIcon(icon = FocusIcons.Today) },
-                        )
-                        item(
-                            headlineContent = { Text(stringResource(R.string.settings_super_watchdog)) },
-                            supportingContent = {
-                                Text(
-                                    text = stringResource(R.string.settings_super_watchdog_body),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            },
-                            leadingContent = { FocusCardGroupIcon(icon = FocusIcons.Notification) },
-                            trailingContent = {
-                                Switch(
-                                    checked = state.watchdog,
-                                    onCheckedChange = {
-                                        viewModel.onAction(SuperAgentAction.ToggleWatchdog(it))
-                                    },
-                                )
-                            },
-                            onClick = {
-                                viewModel.onAction(SuperAgentAction.ToggleWatchdog(!state.watchdog))
-                            },
-                        )
-                        item(
-                            headlineContent = { Text(stringResource(R.string.settings_super_today)) },
-                            supportingContent = {
-                                Text(
-                                    text = stringResource(R.string.settings_super_today_body),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            },
-                            leadingContent = { FocusCardGroupIcon(icon = FocusIcons.Today) },
-                            trailingContent = {
-                                Switch(
-                                    checked = state.postToToday,
-                                    onCheckedChange = {
-                                        viewModel.onAction(SuperAgentAction.ToggleToday(it))
-                                    },
-                                )
-                            },
-                            onClick = {
-                                viewModel.onAction(SuperAgentAction.ToggleToday(!state.postToToday))
-                            },
-                        )
-                    }
-                }
+                RuntimeSection(state, viewModel::onAction)
+            }
+        }
+        item(key = "output") {
+            FocusReveal(index = 3) {
+                OutputSection(state, viewModel::onAction)
             }
         }
     }
+}
+
+@Composable
+private fun HeroCard(state: SuperAgentUiState) {
+    val scheme = MaterialTheme.colorScheme
+    val enabled = state.sources.count { it.enabled }
+    FocusCard(
+        containerColor = scheme.primaryContainer,
+        contentPadding = 20.dp,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FocusIconBadge(
+                icon = FocusIcons.Bolt,
+                tint = scheme.onPrimaryContainer,
+                container = scheme.primary,
+                size = 56.dp,
+            )
+            Spacer(Modifier.size(16.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_super_hero_title),
+                    style = LocalFocusTypography.current.titleLarge,
+                    color = scheme.onPrimaryContainer,
+                )
+                Text(
+                    text = stringResource(R.string.settings_super_intro),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onPrimaryContainer.copy(alpha = 0.78f),
+                )
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FocusStatusPill(
+                text = stringResource(
+                    R.string.settings_super_sources_count,
+                    enabled,
+                    state.sources.size,
+                ),
+                tone = StatusTone.Active,
+            )
+            FocusStatusPill(
+                text = stringResource(
+                    R.string.settings_super_concurrency_pill,
+                    state.maxConcurrent,
+                ),
+                tone = StatusTone.Neutral,
+            )
+            FocusStatusPill(
+                text = stringResource(
+                    if (state.watchdog) {
+                        R.string.settings_super_watchdog_on
+                    } else {
+                        R.string.settings_super_watchdog_off
+                    },
+                ),
+                tone = if (state.watchdog) StatusTone.Success else StatusTone.Warning,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SourceSections(
+    state: SuperAgentUiState,
+    onAction: (SuperAgentAction) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        FocusSectionHeader(
+            title = stringResource(R.string.settings_super_sources),
+            subtitle = stringResource(R.string.settings_super_sources_body),
+        )
+        SourceGroup(
+            title = stringResource(R.string.settings_super_group_chat),
+            sources = listOf(AgentEventSource.User, AgentEventSource.SideChat),
+            state = state,
+            onAction = onAction,
+        )
+        SourceGroup(
+            title = stringResource(R.string.settings_super_group_background),
+            sources = listOf(
+                AgentEventSource.Background,
+                AgentEventSource.Reminder,
+                AgentEventSource.Device,
+                AgentEventSource.Feed,
+            ),
+            state = state,
+            onAction = onAction,
+        )
+        SourceGroup(
+            title = stringResource(R.string.settings_super_group_system),
+            sources = listOf(AgentEventSource.Watchdog, AgentEventSource.System),
+            state = state,
+            onAction = onAction,
+        )
+    }
+}
+
+@Composable
+private fun SourceGroup(
+    title: String,
+    sources: List<AgentEventSource>,
+    state: SuperAgentUiState,
+    onAction: (SuperAgentAction) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp),
+        )
+        FocusCardGroup {
+            sources.forEach { source ->
+                val row = state.sources.firstOrNull { it.source == source } ?: return@forEach
+                switchItem(
+                    checked = row.enabled,
+                    checkedIcon = FocusIcons.Check,
+                    onCheckedChange = { onAction(SuperAgentAction.ToggleSource(source, it)) },
+                    headlineContent = { Text(sourceLabel(source)) },
+                    supportingContent = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = sourceBody(source),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            if (supportsSpeculative(source) && row.enabled) {
+                                FocusChip(
+                                    label = stringResource(R.string.settings_super_speculative),
+                                    selected = row.speculative,
+                                    leadingIcon = FocusIcons.Bolt,
+                                    onClick = {
+                                        onAction(
+                                            SuperAgentAction.ToggleSpeculative(
+                                                source,
+                                                !row.speculative,
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    },
+                    leadingContent = { FocusCardGroupIcon(icon = sourceIcon(source)) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RuntimeSection(
+    state: SuperAgentUiState,
+    onAction: (SuperAgentAction) -> Unit,
+) {
+    val concurrencyOptions = remember(state.maxConcurrent) {
+        (listOf(1, 2, 3, 4, 6, 8) + state.maxConcurrent).distinct().sorted()
+    }
+    val rateOptions = remember(state.rateLimit) {
+        (listOf(30, 60, 120, 180, 300) + state.rateLimit).distinct().sorted()
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        FocusSectionHeader(
+            title = stringResource(R.string.settings_super_runtime),
+            subtitle = stringResource(R.string.settings_super_runtime_body),
+        )
+        FocusCard {
+            Text(
+                text = stringResource(R.string.settings_super_concurrency),
+                style = MaterialTheme.typography.titleSmallEmphasized,
+            )
+            Text(
+                text = stringResource(R.string.settings_super_concurrency_body),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(14.dp))
+            FocusChoiceButtons(
+                options = concurrencyOptions,
+                selected = state.maxConcurrent,
+                onSelect = { onAction(SuperAgentAction.SetConcurrent(it)) },
+                label = { it.toString() },
+            )
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = stringResource(R.string.settings_super_rate_limit),
+                style = MaterialTheme.typography.titleSmallEmphasized,
+            )
+            Text(
+                text = stringResource(R.string.settings_super_rate_limit_body, state.rateLimit),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(14.dp))
+            FocusChoiceButtons(
+                options = rateOptions,
+                selected = state.rateLimit,
+                onSelect = { onAction(SuperAgentAction.SetRateLimit(it)) },
+                label = { stringResource(R.string.settings_super_rate_value, it) },
+            )
+        }
+        FocusCardGroup {
+            switchItem(
+                checked = state.watchdog,
+                checkedIcon = FocusIcons.Check,
+                onCheckedChange = { onAction(SuperAgentAction.ToggleWatchdog(it)) },
+                headlineContent = { Text(stringResource(R.string.settings_super_watchdog)) },
+                supportingContent = {
+                    Text(
+                        text = stringResource(R.string.settings_super_watchdog_body),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                leadingContent = { FocusCardGroupIcon(icon = FocusIcons.Notification) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun OutputSection(
+    state: SuperAgentUiState,
+    onAction: (SuperAgentAction) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        FocusSectionHeader(
+            title = stringResource(R.string.settings_super_output),
+            subtitle = stringResource(R.string.settings_super_output_body),
+        )
+        FocusCardGroup {
+            switchItem(
+                checked = state.postToToday,
+                checkedIcon = FocusIcons.Check,
+                onCheckedChange = { onAction(SuperAgentAction.ToggleToday(it)) },
+                headlineContent = { Text(stringResource(R.string.settings_super_today)) },
+                supportingContent = {
+                    Text(
+                        text = stringResource(R.string.settings_super_today_body),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                leadingContent = { FocusCardGroupIcon(icon = FocusIcons.Today) },
+            )
+        }
+        FocusCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FocusCardGroupIcon(icon = FocusIcons.Today)
+                Spacer(Modifier.size(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_super_usage),
+                        style = MaterialTheme.typography.titleSmallEmphasized,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_super_usage_summary),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                UsageValue(
+                    label = stringResource(R.string.settings_super_usage_input),
+                    value = compactCount(state.usage.inputTokens),
+                )
+                UsageValue(
+                    label = stringResource(R.string.settings_super_usage_output),
+                    value = compactCount(state.usage.outputTokens),
+                )
+                UsageValue(
+                    label = stringResource(R.string.settings_super_usage_messages),
+                    value = compactCount(state.usage.messages.toLong()),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UsageValue(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = value,
+            style = LocalFocusTypography.current.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun compactCount(value: Long): String = when {
+    value >= 1_000_000 -> String.format(Locale.US, "%.1fM", value / 1_000_000.0)
+    value >= 1_000 -> String.format(Locale.US, "%.1fK", value / 1_000.0)
+    else -> value.toString()
 }
 
 @Composable

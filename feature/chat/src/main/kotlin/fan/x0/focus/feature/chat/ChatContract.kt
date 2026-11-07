@@ -197,6 +197,7 @@ data class SideResultUi(
     val title: String,
     val summary: String,
     val failed: Boolean,
+    val attachments: List<AttachmentUi> = emptyList(),
 )
 
 data class SideChatRowUi(

@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
+import kotlinx.serialization.builtins.ListSerializer
 
 enum class AgentEventKind {
     UserMessage,
@@ -121,6 +122,14 @@ data class AgentEvent(
 
     fun failed(): Boolean = payloadObject()["failed"]?.stringValue()?.toBooleanStrictOrNull() == true
 
+    fun attachments(): List<ChatAttachment> {
+        val raw = payloadObject()["attachments"].stringValue()
+        if (raw.isBlank()) return emptyList()
+        return runCatching {
+            EVENT_JSON.decodeFromString(ListSerializer(ChatAttachment.serializer()), raw)
+        }.getOrDefault(emptyList())
+    }
+
     companion object {
         private val EVENT_JSON = Json { ignoreUnknownKeys = true; encodeDefaults = false }
 
@@ -149,6 +158,7 @@ data class AgentEvent(
             summary: String,
             failed: Boolean,
             threadKey: String = "side:$sideChatId",
+            attachments: List<ChatAttachment> = emptyList(),
         ): AgentEvent = AgentEvent(
             source = AgentEventSource.SideChat,
             kind = AgentEventKind.SideChatResult,
@@ -159,6 +169,12 @@ data class AgentEvent(
                 put("title", title)
                 put("summary", summary)
                 put("failed", failed)
+                if (attachments.isNotEmpty()) {
+                    put(
+                        "attachments",
+                        EVENT_JSON.encodeToString(ListSerializer(ChatAttachment.serializer()), attachments),
+                    )
+                }
             }.toString(),
         )
 

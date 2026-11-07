@@ -167,31 +167,6 @@ internal fun ChatNoticeCard(
 }
 
 @Composable
-internal fun RouterProgressCard(
-    text: String,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = FocusShapeTokens.card,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            FocusLoadingBlob(size = 24.dp)
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
 internal fun ChatSideResultCard(
     card: SideResultUi,
     onOpen: () -> Unit,
@@ -222,57 +197,64 @@ internal fun ChatSideResultCard(
             MaterialTheme.colorScheme.onSurface
         },
     ) {
-        Row(
+        Column(
             modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(
-                imageVector = if (card.failed) FocusIcons.Warning else FocusIcons.Check,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = stringResource(
-                        if (card.failed) R.string.chat_side_result_failed else R.string.chat_side_result_done,
-                    ),
-                    style = MaterialTheme.typography.titleSmallEmphasized,
+                Icon(
+                    imageVector = if (card.failed) FocusIcons.Warning else FocusIcons.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
                 )
-                Text(
-                    text = card.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (card.summary.isNotBlank()) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
                     Text(
-                        text = card.summary,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (card.failed) {
-                            MaterialTheme.colorScheme.onErrorContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        maxLines = 2,
+                        text = stringResource(
+                            if (card.failed) R.string.chat_side_result_failed else R.string.chat_side_result_done,
+                        ),
+                        style = MaterialTheme.typography.titleSmallEmphasized,
+                    )
+                    Text(
+                        text = card.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                    )
+                    if (card.summary.isNotBlank()) {
+                        Text(
+                            text = card.summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (card.failed) {
+                                MaterialTheme.colorScheme.onErrorContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (card.failed) {
+                    FocusOutlinedButton(
+                        onClick = onRetry,
+                        text = stringResource(R.string.chat_side_result_retry),
+                    )
+                } else {
+                    Icon(
+                        imageVector = FocusIcons.Chevron,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
-            if (card.failed) {
-                FocusOutlinedButton(
-                    onClick = onRetry,
-                    text = stringResource(R.string.chat_side_result_retry),
-                )
-            } else {
-                Icon(
-                    imageVector = FocusIcons.Chevron,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
+            if (card.attachments.isNotEmpty()) {
+                UserAttachmentStrip(attachments = card.attachments)
             }
         }
     }

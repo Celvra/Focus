@@ -606,4 +606,21 @@
     <string name="settings_super_today">Post results to Today</string>
     <string name="settings_super_today_body">Add a card to Today when a side chat result is shown.</string>
     <string name="settings_super_saved">Saved</string>
+    <string name="settings_super_hero_title">Router always on</string>
+    <string name="settings_super_sources_count">%1$d/%2$d sources</string>
+    <string name="settings_super_concurrency_pill">%1$d parallel</string>
+    <string name="settings_super_watchdog_on">Watchdog on</string>
+    <string name="settings_super_watchdog_off">Watchdog off</string>
+    <string name="settings_super_sources_body">Only enabled sources reach the router. Side chat events still arrive as they finish.</string>
+    <string name="settings_super_group_chat">Conversation</string>
+    <string name="settings_super_group_background">Background</string>
+    <string name="settings_super_group_system">System</string>
+    <string name="settings_super_runtime_body">How many workers can run, how often events enter, and when work is stopped.</string>
+    <string name="settings_super_output">Output</string>
+    <string name="settings_super_output_body">Where results go besides the main conversation and notifications.</string>
+    <string name="settings_super_rate_value">%1$d</string>
+    <string name="settings_super_usage_summary">Across stored conversations.</string>
+    <string name="settings_super_usage_input">Input</string>
+    <string name="settings_super_usage_output">Output</string>
+    <string name="settings_super_usage_messages">Messages</string>
 </resources>

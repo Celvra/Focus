@@ -38,6 +38,7 @@ class SideChatManager(
     private val mutex = Mutex()
     private val queue = ArrayDeque<String>()
     private val pendingTasks = mutableMapOf<String, String>()
+    private val pendingAttachments = mutableMapOf<String, List<ChatAttachment>>()
     private val running = mutableSetOf<String>()
     private val notified = mutableSetOf<String>()
     private val activeTurns = mutableMapOf<String, Long>()
@@ -94,6 +95,7 @@ class SideChatManager(
         providerId: String = "",
         model: String = "",
         reasoning: ReasoningLevel = ReasoningLevel.Auto,
+        attachments: List<ChatAttachment> = emptyList(),
     ): Conversation {
         val role = when (profile) {
             WorkerProfile.Light -> AgentRole.WorkerLight
@@ -121,7 +123,7 @@ class SideChatManager(
             threads.subscribe(threadKey, conversation.id, "origin")
         }
         threads.subscribe("side:${conversation.id}", conversation.id, "self")
-        enqueue(conversation.id, task)
+        enqueue(conversation.id, task, attachments)
         updateCounts()
         return conversation
     }
@@ -199,6 +201,7 @@ class SideChatManager(
         val conversation = chats.conversation(id) ?: return
         if (conversation.taskStatus == TaskStatus.Failed) return
         val summary = message.ifBlank { latestSummary(id) }
+        val attachments = resultAttachments(id)
         main.appendSideResult(
             SideResultCard(
                 sideChatId = id,
@@ -207,6 +210,7 @@ class SideChatManager(
                 failed = conversation.taskStatus == TaskStatus.Failed ||
                     conversation.taskStatus == TaskStatus.Interrupted,
                 createdAt = System.currentTimeMillis(),
+                attachments = attachments,
             ),
         )
         updateCounts()
@@ -325,11 +329,12 @@ class SideChatManager(
         else -> event.text().ifBlank { event.note() }
     }
 
-    private suspend fun enqueue(id: String, task: String) {
+    private suspend fun enqueue(id: String, task: String, attachments: List<ChatAttachment> = emptyList()) {
         mutex.withLock {
             if (id in running || id in queue) return@withLock
             queue.addLast(id)
             pendingTasks[id] = task
+            if (attachments.isNotEmpty()) pendingAttachments[id] = attachments
         }
         pump()
     }
@@ -350,6 +355,7 @@ class SideChatManager(
         val conversation = chats.conversation(id) ?: return false
         val task = pendingTasks.remove(id)
             ?: conversation.taskNote.ifBlank { "继续上次的任务。" }
+        val attachments = pendingAttachments.remove(id).orEmpty()
         chats.setTaskStatus(id, TaskStatus.Running)
         val handle = turns.start(
             conversationId = id,
@@ -358,6 +364,7 @@ class SideChatManager(
                 providerId = conversation.providerId,
                 model = conversation.model,
                 reasoning = ReasoningLevel.fromName(conversation.reasoning.takeIf { it.isNotBlank() }),
+                attachments = attachments,
                 agentMode = AgentMode.Build,
                 autoTitle = true,
             ),
@@ -384,6 +391,7 @@ class SideChatManager(
         }
         val summary = result.error?.let { it.serverMessage ?: it.serverTitle ?: it.type.name }
             ?: result.answer.trim().take(600)
+        val attachments = result.media.distinctBy { it.id }.take(8)
         chats.setTaskStatus(conversation.id, status)
         chats.setResultSeen(conversation.id, presence.visibleConversationId.value == conversation.id)
         release(conversation.id)
@@ -395,6 +403,7 @@ class SideChatManager(
                     summary = summary.ifBlank { "旁聊失败" },
                     failed = true,
                     createdAt = System.currentTimeMillis(),
+                    attachments = attachments,
                 ),
             )
         }
@@ -404,6 +413,7 @@ class SideChatManager(
                 title = conversation.title,
                 summary = summary.ifBlank { if (status == TaskStatus.Done) "完成" else "" },
                 failed = status == TaskStatus.Failed,
+                attachments = attachments,
             ),
         )
         notifier.notifyReply(
@@ -422,6 +432,12 @@ class SideChatManager(
         }
         pump()
     }
+
+    private suspend fun resultAttachments(id: String): List<ChatAttachment> =
+        chats.messages(id, limit = 30)
+            .flatMap { it.attachments }
+            .distinctBy { it.id }
+            .take(8)
 
     private suspend fun latestSummary(id: String): String {
         return chats.messages(id, limit = 12)

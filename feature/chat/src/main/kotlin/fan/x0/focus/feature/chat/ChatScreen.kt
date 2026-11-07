@@ -671,9 +671,6 @@ private fun ChatThread(
     val retry = state.retry
     val todos = state.todos
     val stats = state.stats?.takeIf { it.hasStats(state.statsConfig) }
-    val showProgress = state.isMain && working && state.live.none { entry ->
-        entry is ChatEntry.Assistant && (entry.text.isNotBlank() || entry.reasoning.isNotBlank())
-    }
     var follow by remember { mutableStateOf(true) }
     val played = remember(state.conversationId) { mutableSetOf<String>() }
 
@@ -711,7 +708,6 @@ private fun ChatThread(
                     (if (retry != null) 1 else 0) +
                     (if (todos.isNotEmpty()) 1 else 0) +
                     (if (stats != null) 1 else 0) +
-                    (if (showProgress) 1 else 0) +
                     (if (working) 1 else 0),
             )
         }
@@ -895,14 +891,6 @@ private fun ChatThread(
                 }
             }
             item(key = "tail") { Spacer(Modifier.height(1.dp)) }
-            if (showProgress) {
-                item(key = "router-progress") {
-                    RouterProgressCard(
-                        text = state.workingText.ifBlank { stringResource(R.string.chat_working) },
-                        modifier = Modifier.animateItem(),
-                    )
-                }
-            }
             if (working) {
                 item(key = "mascot") {
                     Box(

@@ -8,6 +8,7 @@ import org.koin.core.annotation.Single
 data class RouterTurnFlags(
     var silent: Boolean = false,
     var started: Int = 0,
+    val attachments: List<ChatAttachment> = emptyList(),
 )
 
 @Single
@@ -63,6 +64,7 @@ class RouterToolHandler(
             profile = profile,
             note = args.string("note"),
             threadKey = args.string("thread_key"),
+            attachments = flags.attachments,
         )
         flags.started += 1
         return ok(

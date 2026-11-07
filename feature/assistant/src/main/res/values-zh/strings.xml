@@ -606,4 +606,21 @@
     <string name="settings_super_today">结果发到 Today</string>
     <string name="settings_super_today_body">显示旁聊结果卡片时，在 Today 里也放一张。</string>
     <string name="settings_super_saved">已保存</string>
+    <string name="settings_super_hero_title">Router 常驻</string>
+    <string name="settings_super_sources_count">%1$d/%2$d 个来源</string>
+    <string name="settings_super_concurrency_pill">%1$d 路并行</string>
+    <string name="settings_super_watchdog_on">看门狗开启</string>
+    <string name="settings_super_watchdog_off">看门狗关闭</string>
+    <string name="settings_super_sources_body">只有开启的来源会进入 Router，旁聊结果仍会按时回来。</string>
+    <string name="settings_super_group_chat">对话</string>
+    <string name="settings_super_group_background">后台</string>
+    <string name="settings_super_group_system">系统</string>
+    <string name="settings_super_runtime_body">同时能跑多少 worker、事件进入的频率，以及什么时候停止任务。</string>
+    <string name="settings_super_output">输出</string>
+    <string name="settings_super_output_body">除了主会话和通知之外，结果还可以去哪里。</string>
+    <string name="settings_super_rate_value">%1$d</string>
+    <string name="settings_super_usage_summary">所有已保存会话的累计用量。</string>
+    <string name="settings_super_usage_input">输入</string>
+    <string name="settings_super_usage_output">输出</string>
+    <string name="settings_super_usage_messages">消息</string>
 </resources>
