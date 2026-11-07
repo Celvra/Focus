@@ -600,6 +600,8 @@
     <string name="settings_super_rate_limit">每分钟事件上限</string>
     <string name="settings_super_rate_limit_body">单个来源每分钟超过 %1$d 条后，新事件会被过滤。</string>
     <string name="settings_super_watchdog">看门狗</string>
+    <string name="settings_super_usage">Token 用量</string>
+    <string name="settings_super_usage_body">输入 %1$d，输出 %2$d</string>
     <string name="settings_super_watchdog_body">停止超时、重复调用工具或一直不汇报的任务。</string>
     <string name="settings_super_today">结果发到 Today</string>
     <string name="settings_super_today_body">显示旁聊结果卡片时，在 Today 里也放一张。</string>

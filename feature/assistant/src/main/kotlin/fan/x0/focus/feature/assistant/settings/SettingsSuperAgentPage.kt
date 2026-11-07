@@ -190,6 +190,20 @@ fun SettingsSuperAgentRoute(
                             },
                         )
                         item(
+                            headlineContent = { Text(stringResource(R.string.settings_super_usage)) },
+                            supportingContent = {
+                                Text(
+                                    text = stringResource(
+                                        R.string.settings_super_usage_body,
+                                        state.usage.inputTokens,
+                                        state.usage.outputTokens,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            },
+                            leadingContent = { FocusCardGroupIcon(icon = FocusIcons.Today) },
+                        )
+                        item(
                             headlineContent = { Text(stringResource(R.string.settings_super_watchdog)) },
                             supportingContent = {
                                 Text(

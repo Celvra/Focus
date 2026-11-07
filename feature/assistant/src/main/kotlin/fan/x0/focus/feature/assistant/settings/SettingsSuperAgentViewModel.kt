@@ -5,6 +5,8 @@ import fan.x0.focus.core.mvi.BaseViewModel
 import fan.x0.focus.data.assistant.AgentEventConfig
 import fan.x0.focus.data.assistant.AgentEventSettings
 import fan.x0.focus.data.assistant.AgentEventSource
+import fan.x0.focus.data.assistant.DataUsage
+import fan.x0.focus.data.assistant.DataUsageStore
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
@@ -22,6 +24,7 @@ data class SuperAgentUiState(
     val watchdog: Boolean = true,
     val rateLimit: Int = AgentEventConfig.DEFAULT_RATE_LIMIT,
     val postToToday: Boolean = false,
+    val usage: DataUsage = DataUsage(),
 ) : fan.x0.focus.core.mvi.UiState
 
 sealed interface SuperAgentAction : fan.x0.focus.core.mvi.UiAction {
@@ -40,9 +43,15 @@ sealed interface SuperAgentEffect : fan.x0.focus.core.mvi.UiEffect {
 @KoinViewModel
 class SuperAgentViewModel(
     private val settings: AgentEventSettings,
+    private val dataUsage: DataUsageStore,
 ) : BaseViewModel<SuperAgentAction, SuperAgentUiState, SuperAgentEffect>(SuperAgentUiState()) {
 
     init {
+        viewModelScope.launch {
+            runCatching { dataUsage.snapshot() }.getOrNull()?.let { usage ->
+                updateState { copy(usage = usage) }
+            }
+        }
         viewModelScope.launch {
             settings.config.collect { config ->
                 updateState {
