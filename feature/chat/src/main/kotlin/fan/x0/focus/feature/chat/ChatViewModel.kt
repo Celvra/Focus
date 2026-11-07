@@ -1361,6 +1361,11 @@ class ChatViewModel(
             updateState { copy(sending = false, workingText = "") }
             return
         }
+        if (currentState.isSide) {
+            viewModelScope.launch { sideChats.stop(conversationId) }
+            updateState { copy(sending = false, workingText = "") }
+            return
+        }
         turns.stop(conversationId)
     }
 

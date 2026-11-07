@@ -183,12 +183,6 @@ class SideChatManager(
                 failed = true,
             ),
         )
-        notifier.notifyReply(
-            conversationId = id,
-            title = conversation.title.ifBlank { "旁聊" },
-            preview = reason.ifBlank { "已停止。" },
-            failed = true,
-        )
     }
 
     suspend fun retry(id: String): Boolean = resume(id)

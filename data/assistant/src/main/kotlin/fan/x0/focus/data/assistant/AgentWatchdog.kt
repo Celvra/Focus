@@ -147,6 +147,9 @@ class AgentWatchdog(
         if (conversation?.kind == ConversationKind.Router) {
             router.stopCurrent()
         } else {
+            if (conversation?.kind == ConversationKind.Side) {
+                chats.setTaskStatus(conversationId, TaskStatus.Interrupted)
+            }
             turns.stop(conversationId)
         }
     }
