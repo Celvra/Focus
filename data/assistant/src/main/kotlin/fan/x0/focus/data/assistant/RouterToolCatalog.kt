@@ -48,7 +48,7 @@ object RouterToolCatalog {
         ToolSpec(
             name = START_SIDE_CHAT,
             description = "Start a side chat for work that needs tools, files, devices, or several steps. " +
-                "Attachments from the current event are forwarded automatically. " +
+                "Attachments from the current event are visible here and forwarded automatically. " +
                 "Return the side chat id. Side chats run in parallel and report back as events.",
             kind = ToolKind.Read,
             parameters = schema(required = listOf("title", "task")) {

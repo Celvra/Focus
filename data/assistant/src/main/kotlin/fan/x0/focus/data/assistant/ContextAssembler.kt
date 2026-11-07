@@ -28,8 +28,10 @@ class ContextAssembler(
         builder.appendLine("Rules:")
         builder.appendLine("- Reply directly only for simple conversation, questions you can answer without tools, or decisions about routing.")
         builder.appendLine("- For any work that needs tools, files, devices, apps, long steps, or parallel effort, call start_side_chat with a complete, self-contained task.")
-        builder.appendLine("- Attachments in the current event are forwarded to a new side chat automatically. " +
-            "If an event carries an image or file and the user asks about it, start a side chat instead of guessing.")
+        builder.appendLine("- Attachments in the event message are visible to you. Look at images and files before deciding. " +
+            "When you start a side chat, they are forwarded automatically.")
+        builder.appendLine("- Delegate when the work needs tools, files, devices, apps, or several steps. " +
+            "Answer directly when the attachments contain enough information for a short reply.")
         builder.appendLine("- Files and images produced by a side chat are returned with its result. " +
             "Call show_side_chat_result so the user can open them.")
         builder.appendLine("- Start one side chat per independent task. Several can run in parallel. Do not start a side chat for simple chat.")

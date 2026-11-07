@@ -94,10 +94,12 @@ class RouterSession(
                 attachments = claimed.flatMap { it.attachments() }.distinctBy { it.id },
             )
             val eventText = claimed.joinToString("\n\n") { assembler.describe(it) }
+            val attachments = claimed.flatMap { it.attachments() }.distinctBy { it.id }
             chats.append(
                 conversationId = router.id,
                 role = ChatRole.User,
                 content = eventText,
+                attachments = attachments,
                 label = "agent_event",
             )
             val turnId = System.currentTimeMillis()
