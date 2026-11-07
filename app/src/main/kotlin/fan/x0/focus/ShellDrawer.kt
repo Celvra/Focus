@@ -8,14 +8,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,8 +64,10 @@ fun ShellDrawer(
             onOpenMain,
         )
         if (!controlledOnly) {
-            NewChatButton(
-                label = stringResource(R.string.drawer_new_side_chat),
+            DrawerEntry(
+                FocusIcons.Add,
+                stringResource(R.string.drawer_new_side_chat),
+                selected = false,
                 onClick = onNewSideChat,
             )
             Spacer(Modifier.height(8.dp))
@@ -178,33 +176,6 @@ private fun DrawerHeader(state: ShellState, onOpenSettings: () -> Unit) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-}
-
-@Composable
-private fun NewChatButton(label: String, onClick: () -> Unit) {
-    Button(
-        onClick = hapticTap(onClick),
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp),
-        shape = MaterialTheme.shapes.largeIncreased,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-        contentPadding = ButtonDefaults.ContentPadding,
-    ) {
-        Icon(
-            imageVector = FocusIcons.Add,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(Modifier.width(10.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleSmallEmphasized,
-        )
     }
 }
 
