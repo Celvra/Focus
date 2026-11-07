@@ -40,6 +40,7 @@ class SideChatManager(
     private val pendingTasks = mutableMapOf<String, String>()
     private val running = mutableSetOf<String>()
     private val notified = mutableSetOf<String>()
+    private val activeTurns = mutableMapOf<String, Long>()
 
     init {
         scope.launch {
@@ -47,6 +48,7 @@ class SideChatManager(
                 states.forEach { (conversationId, turn) ->
                     val conversation = chats.conversation(conversationId) ?: return@forEach
                     if (conversation.kind != ConversationKind.Side) return@forEach
+                    if (turn.running) activeTurns[conversationId] = turn.turnId
                     val waiting = waitingKey(turn)
                     if (waiting != null) {
                         if (conversation.taskStatus != TaskStatus.Waiting) {
@@ -363,6 +365,9 @@ class SideChatManager(
     }
 
     private suspend fun finish(conversation: Conversation, result: ChatTurnResult) {
+        val expected = activeTurns[conversation.id]
+        if (expected != null && expected != result.turnId) return
+        activeTurns.remove(conversation.id)
         if (conversation.taskStatus == TaskStatus.Interrupted) {
             release(conversation.id)
             return

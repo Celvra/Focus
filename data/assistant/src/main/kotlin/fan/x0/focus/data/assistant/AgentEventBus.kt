@@ -35,7 +35,7 @@ class AgentEventBus(
 
     suspend fun resumePending() {
         store.recoverRunning()
-        store.pending(limit = 100).forEach { event -> _events.emit(event) }
+        store.pending(limit = 500).forEach { event -> _events.emit(event) }
     }
 
     suspend fun cleanup() {
