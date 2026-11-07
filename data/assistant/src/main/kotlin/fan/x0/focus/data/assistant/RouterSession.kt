@@ -135,7 +135,7 @@ class RouterSession(
             val outcome = try {
                 job.await()
             } catch (e: CancellationException) {
-                failAll(claimed, "Router 已停止")
+                failAll(claimed, "Router 已停止", allowRetry = false)
                 journalStatus = "interrupted"
                 return
             } finally {
@@ -166,16 +166,16 @@ class RouterSession(
         }
     }
 
-    private suspend fun failAll(batch: List<AgentEvent>, error: String) {
+    private suspend fun failAll(batch: List<AgentEvent>, error: String, allowRetry: Boolean = true) {
         batch.forEach { event ->
-            val retry = event.attempts + 1 < MAX_ATTEMPTS
+            val retry = allowRetry && event.attempts + 1 < MAX_ATTEMPTS
             events.fail(
                 event.id,
                 error,
                 retryAt = if (retry) System.currentTimeMillis() + RETRY_DELAY_MS * (event.attempts + 1) else null,
             )
         }
-        if (batch.any { it.attempts + 1 >= MAX_ATTEMPTS }) {
+        if (allowRetry && batch.any { it.attempts + 1 >= MAX_ATTEMPTS }) {
             main.appendNotice("Router 处理失败：${error.take(200)}")
         }
     }

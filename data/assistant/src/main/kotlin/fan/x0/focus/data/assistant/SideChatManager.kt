@@ -181,6 +181,12 @@ class SideChatManager(
                 failed = true,
             ),
         )
+        notifier.notifyReply(
+            conversationId = id,
+            title = conversation.title.ifBlank { "旁聊" },
+            preview = reason.ifBlank { "已停止。" },
+            failed = true,
+        )
     }
 
     suspend fun retry(id: String): Boolean = resume(id)
@@ -347,6 +353,10 @@ class SideChatManager(
     }
 
     private suspend fun finish(conversation: Conversation, result: ChatTurnResult) {
+        if (conversation.taskStatus == TaskStatus.Interrupted) {
+            release(conversation.id)
+            return
+        }
         val status = when {
             result.error != null -> TaskStatus.Failed
             result.answer.isBlank() -> TaskStatus.NoResult
