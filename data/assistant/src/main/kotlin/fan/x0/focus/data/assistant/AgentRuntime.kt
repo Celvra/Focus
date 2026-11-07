@@ -15,15 +15,19 @@ class AgentRuntime(
     private val dispatcher: AgentEventDispatcher,
     private val bus: AgentEventBus,
     private val main: MainChannelSession,
+    private val journal: TurnJournalStore,
+    private val watchdog: AgentWatchdog,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     suspend fun start() {
         main.ensureConversation()
         chats.ensureRouterConversation()
+        journal.interruptAll()
         router.prepare()
         sideChats.recover()
         dispatcher.resume()
+        watchdog.start()
         bus.cleanup()
         scope.launch {
             while (true) {

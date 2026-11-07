@@ -29,7 +29,7 @@ data class AgentEventConfig(
         const val MAX_CONCURRENT_LIMIT = 8
 
         fun defaults(): AgentEventConfig = AgentEventConfig(
-            sources = AgentEventSource.entries.associateWith { it != AgentEventSource.Watchdog },
+            sources = AgentEventSource.entries.associateWith { true },
             speculative = AgentEventSource.entries.associateWith {
                 it == AgentEventSource.Background ||
                     it == AgentEventSource.Reminder ||

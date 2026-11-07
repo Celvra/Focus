@@ -57,6 +57,7 @@ class ChatTurnRunner(
     private val events: AssistantEventSink,
     private val triggerBus: AssistantTriggerBus,
     private val turnGuard: AssistantTurnGuard,
+    private val journal: TurnJournalStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, Job>()
@@ -194,6 +195,10 @@ class ChatTurnRunner(
         var compactionFailed = false
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
+                journal.begin(conversationId, turnId, userText)
+            } catch (_: Throwable) {
+            }
+            try {
                 flow().collect { event ->
                     when (event) {
                         is ChatEvent.Delta -> updateEntries(conversationId, turnId) { entries ->
@@ -219,6 +224,10 @@ class ChatTurnRunner(
                             state.copy(workingText = event.text)
                         }
                         is ChatEvent.ToolStarted -> {
+                            try {
+                                journal.toolStarted(conversationId, turnId, event.tool, event.arguments)
+                            } catch (_: Throwable) {
+                            }
                             updateEntries(conversationId, turnId) { entries ->
                                 entries.startStep(
                                     id = event.id,
@@ -373,7 +382,7 @@ class ChatTurnRunner(
                         ChatEvent.Completed -> {
                             updateState(conversationId, turnId) { state -> state.copy(retry = null) }
                             val finished = _states.value[conversationId]
-                            finish(conversationId, turnId, null, compactionFailed)
+                            finish(conversationId, turnId, null, compactionFailed, status = "done")
                             if (finished != null && !manualCompact) {
                                 pushReply(finished, null, failed = false, silent = options.silentReply)
                             }
@@ -381,7 +390,7 @@ class ChatTurnRunner(
                         is ChatEvent.Failed -> {
                             persistPartial(conversationId, turnId)
                             val finished = _states.value[conversationId]
-                            finish(conversationId, turnId, event.error, compactionFailed)
+                            finish(conversationId, turnId, event.error, compactionFailed, status = "failed")
                             if (finished != null && !manualCompact) {
                                 pushReply(finished, event.error, failed = true, silent = options.silentReply)
                             }
@@ -391,12 +400,12 @@ class ChatTurnRunner(
             } catch (e: CancellationException) {
                 withContext(NonCancellable) {
                     persistPartial(conversationId, turnId)
-                    finish(conversationId, turnId, null, compactionFailed)
+                    finish(conversationId, turnId, null, compactionFailed, status = "interrupted")
                 }
                 throw e
             } catch (e: Throwable) {
                 persistPartial(conversationId, turnId)
-                finish(conversationId, turnId, e.toAppError(), compactionFailed)
+                finish(conversationId, turnId, e.toAppError(), compactionFailed, status = "failed")
             } finally {
                 val self = coroutineContext[Job]
                 if (self != null) jobs.remove(conversationId, self)
@@ -480,7 +489,17 @@ class ChatTurnRunner(
         }
     }
 
-    private fun finish(conversationId: String, turnId: Long, error: AppError?, compactionFailed: Boolean) {
+    private suspend fun finish(
+        conversationId: String,
+        turnId: Long,
+        error: AppError?,
+        compactionFailed: Boolean,
+        status: String,
+    ) {
+        try {
+            journal.finish(conversationId, turnId, status)
+        } catch (_: Throwable) {
+        }
         val state = _states.value[conversationId] ?: return
         if (state.turnId != turnId) return
         val answer = state.entries

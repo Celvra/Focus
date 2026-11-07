@@ -250,6 +250,10 @@ class SideChatManager(
 
     fun isActive(id: String): Boolean = turns.isRunning(id)
 
+    suspend fun wake() {
+        pump()
+    }
+
     suspend fun deliver(event: AgentEvent): Boolean {
         val id = (event.route as? AgentEventRoute.Side)?.conversationId ?: return false
         if (chats.conversation(id)?.kind != ConversationKind.Side) return false

@@ -116,6 +116,24 @@ class MainChannelSession(
         )
     }
 
+    suspend fun appendWatchdog(text: String) {
+        val body = text.trim()
+        if (body.isBlank()) return
+        val conversation = chats.ensureMainConversation()
+        chats.append(
+            conversationId = conversation.id,
+            role = ChatRole.System,
+            content = body,
+            label = "watchdog",
+        )
+        notifier.notifyReply(
+            conversationId = conversation.id,
+            title = conversation.title.ifBlank { MAIN_TITLE },
+            preview = body.take(140),
+            failed = true,
+        )
+    }
+
     suspend fun appendSideResult(card: SideResultCard) {
         val conversation = chats.ensureMainConversation()
         chats.append(
