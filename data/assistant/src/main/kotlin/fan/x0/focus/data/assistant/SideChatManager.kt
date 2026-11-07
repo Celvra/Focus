@@ -193,6 +193,7 @@ class SideChatManager(
 
     suspend fun showResult(id: String, message: String = "") {
         val conversation = chats.conversation(id) ?: return
+        if (conversation.taskStatus == TaskStatus.Failed) return
         val summary = message.ifBlank { latestSummary(id) }
         main.appendSideResult(
             SideResultCard(
