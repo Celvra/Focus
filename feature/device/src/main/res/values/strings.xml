@@ -88,4 +88,22 @@
     <string name="device_msg_trigger_command">Enter a shell command</string>
     <string name="device_msg_trigger_saved">Trigger saved</string>
     <string name="device_trigger_chat">Chat</string>
+    <string name="device_display_title">Virtual screen</string>
+    <string name="device_display_body">Let the assistant use apps on a background screen without taking over the phone.</string>
+    <string name="device_display_start">Start virtual screen</string>
+    <string name="device_display_stop">Stop virtual screen</string>
+    <string name="device_display_running">Running</string>
+    <string name="device_display_off">Off</string>
+    <string name="device_display_starting">Starting</string>
+    <string name="device_display_backend">Backend</string>
+    <string name="device_display_trusted">Focus isolation</string>
+    <string name="device_display_trusted_on">On</string>
+    <string name="device_display_trusted_off">Degraded</string>
+    <string name="device_display_preview">Live preview</string>
+    <string name="device_display_preview_stop">Stop preview</string>
+    <string name="device_display_size">%1$d x %2$d, %3$d dpi</string>
+    <string name="device_display_requires">Requires Shizuku or root.</string>
+    <string name="device_msg_display_failed">Virtual screen failed: %1$s</string>
+    <string name="device_msg_display_started">Virtual screen %1$s started</string>
+    <string name="device_msg_display_stopped">Virtual screen stopped</string>
 </resources>

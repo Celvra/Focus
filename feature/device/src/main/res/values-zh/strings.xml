@@ -88,4 +88,22 @@
     <string name="device_msg_trigger_command">请输入 shell 命令</string>
     <string name="device_msg_trigger_saved">触发器已保存</string>
     <string name="device_trigger_chat">对话</string>
+    <string name="device_display_title">虚拟屏</string>
+    <string name="device_display_body">让助手在后台屏幕操作应用，不占用当前屏幕。</string>
+    <string name="device_display_start">启动虚拟屏</string>
+    <string name="device_display_stop">停止虚拟屏</string>
+    <string name="device_display_running">运行中</string>
+    <string name="device_display_off">未启动</string>
+    <string name="device_display_starting">启动中</string>
+    <string name="device_display_backend">后端</string>
+    <string name="device_display_trusted">焦点隔离</string>
+    <string name="device_display_trusted_on">开</string>
+    <string name="device_display_trusted_off">降级</string>
+    <string name="device_display_preview">实时预览</string>
+    <string name="device_display_preview_stop">停止预览</string>
+    <string name="device_display_size">%1$d x %2$d，%3$d dpi</string>
+    <string name="device_display_requires">需要 Shizuku 或 root。</string>
+    <string name="device_msg_display_failed">虚拟屏启动失败：%1$s</string>
+    <string name="device_msg_display_started">虚拟屏 %1$s 已启动</string>
+    <string name="device_msg_display_stopped">虚拟屏已停止</string>
 </resources>

@@ -16,6 +16,17 @@ data class DeviceUiState(
     val accessibility: Boolean = false,
     val root: Boolean = false,
     val shizuku: Boolean = false,
+    val displayRunning: Boolean = false,
+    val displayStarting: Boolean = false,
+    val displayId: Int = 0,
+    val displayWidth: Int = 0,
+    val displayHeight: Int = 0,
+    val displayDensity: Int = 0,
+    val displayBackend: String = "",
+    val displayTrusted: Boolean = false,
+    val displayError: String = "",
+    val displayPreview: String? = null,
+    val displayPreviewing: Boolean = false,
     val session: Boolean = false,
     val sessionOwner: String = "",
     val preview: String? = null,
@@ -56,6 +67,9 @@ sealed interface DeviceAction : UiAction {
     data class ToggleLive(val id: String? = null) : DeviceAction
     data object StartLocal : DeviceAction
     data object StopSession : DeviceAction
+    data object StartDisplay : DeviceAction
+    data object StopDisplay : DeviceAction
+    data object ToggleDisplayPreview : DeviceAction
     data object NewPairingCode : DeviceAction
     data object UseFullMode : DeviceAction
     data object RequestShizuku : DeviceAction

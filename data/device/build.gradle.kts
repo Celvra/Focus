@@ -6,6 +6,10 @@ plugins {
 
 android {
     namespace = "fan.x0.focus.data.device"
+
+    buildFeatures {
+        aidl = true
+    }
 }
 
 dependencies {

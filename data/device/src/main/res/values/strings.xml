@@ -8,6 +8,8 @@
     <string name="device_notification_controlled">Focus remote control is active</string>
     <string name="device_notification_stop">Stop</string>
     <string name="device_notification_background">Background command finished</string>
+    <string name="device_notification_display">Virtual screen running</string>
+    <string name="device_notification_display_body">The assistant is working on a background screen</string>
     <string name="device_trigger_service_title">Event triggers active</string>
     <string name="device_trigger_service_body">Focus is watching for trigger events</string>
 </resources>

@@ -45,11 +45,40 @@ object DeviceToolCatalog {
             },
         ),
         ToolSpec(
-            name = "device_snapshot",
-            description = "Read the current screen as indexed accessibility nodes. Screenshot is attached by default. Use the returned node index with device_tap and device_type.",
+            name = "device_display_start",
+            description = "Create a background virtual screen for app automation. Requires Shizuku or root. Returns a display id. Screen tools use it automatically until the display is stopped.",
+            kind = ToolKind.Write,
+            parameters = schema {
+                put("device_id", string("local or a remote device id from device_list"))
+                put("width", number("Display width in pixels, default 1080"))
+                put("height", number("Display height in pixels, default 1920"))
+                put("dpi", number("Display density, default 320"))
+                put("backend", string("auto, shizuku, or root. Default auto"))
+            },
+        ),
+        ToolSpec(
+            name = "device_display_stop",
+            description = "Stop the active virtual screen and release its display and capture resources.",
+            kind = ToolKind.Write,
+            parameters = schema {
+                put("device_id", string("local or a remote device id from device_list"))
+            },
+        ),
+        ToolSpec(
+            name = "device_display_status",
+            description = "Show the virtual screen state, display id, backend, and whether trusted focus isolation is available.",
             kind = ToolKind.Read,
             parameters = schema {
                 put("device_id", string("local or a remote device id from device_list"))
+            },
+        ),
+        ToolSpec(
+            name = "device_snapshot",
+            description = "Read the current screen as indexed accessibility nodes. Screenshot is attached by default. Use the returned node index with device_tap and device_type. When a virtual screen is running, this reads it automatically; pass display_id=0 for the physical screen.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("device_id", string("local or a remote device id from device_list"))
+                put("display_id", displayId())
                 put("include_screenshot", boolean("Attach a screenshot, default true"))
                 put("settle_ms", number("Wait before reading, default 0"))
                 put("max_nodes", number("Maximum nodes, default 180"))
@@ -61,6 +90,7 @@ object DeviceToolCatalog {
             kind = ToolKind.Write,
             parameters = schema {
                 put("device_id", string("local or a remote device id from device_list"))
+                put("display_id", displayId())
                 put("index", number("Node index from the latest snapshot"))
                 put("x", decimal("Relative x from 0 to 1, used when index is absent"))
                 put("y", decimal("Relative y from 0 to 1, used when index is absent"))
@@ -73,6 +103,7 @@ object DeviceToolCatalog {
             kind = ToolKind.Write,
             parameters = schema {
                 put("device_id", string("local or a remote device id from device_list"))
+                put("display_id", displayId())
                 put("index", number("Node index from the latest snapshot"))
                 put("x", decimal("Relative x from 0 to 1"))
                 put("y", decimal("Relative y from 0 to 1"))
@@ -85,6 +116,7 @@ object DeviceToolCatalog {
             kind = ToolKind.Write,
             parameters = schema(required = listOf("direction")) {
                 put("device_id", string("local or a remote device id from device_list"))
+                put("display_id", displayId())
                 put("direction", string("up, down, left, or right"))
                 put("index", number("Node index to swipe inside, optional"))
                 put("include_screenshot", boolean("Attach a screenshot, default true"))
@@ -96,6 +128,7 @@ object DeviceToolCatalog {
             kind = ToolKind.Write,
             parameters = schema(required = listOf("text")) {
                 put("device_id", string("local or a remote device id from device_list"))
+                put("display_id", displayId())
                 put("text", string("Text to type"))
                 put("index", number("Editable node index, optional"))
                 put("clear", boolean("Clear the field first, default true"))
@@ -108,6 +141,7 @@ object DeviceToolCatalog {
             kind = ToolKind.Write,
             parameters = schema(required = listOf("key")) {
                 put("device_id", string("local or a remote device id from device_list"))
+                put("display_id", displayId())
                 put("key", string("back, home, recents, notifications, quick_settings, enter, delete, escape, or wake"))
             },
         ),
@@ -117,6 +151,7 @@ object DeviceToolCatalog {
             kind = ToolKind.Write,
             parameters = schema {
                 put("device_id", string("local or a remote device id from device_list"))
+                put("display_id", displayId())
                 put("app", string("App label, for example 微信"))
                 put("package", string("Package name, used instead of app when present"))
                 put("activity", string("Launch activity class, optional"))
@@ -456,6 +491,7 @@ object DeviceToolCatalog {
             kind = ToolKind.Read,
             parameters = schema {
                 put("device_id", string("local or a remote device id from device_list"))
+                put("display_id", displayId())
             },
         ),
         ToolSpec(
@@ -508,6 +544,11 @@ object DeviceToolCatalog {
     private val byName = all.associateBy { it.name }
 
     fun find(name: String): ToolSpec? = byName[name]
+
+    private fun displayId(): JsonObject = buildJsonObject {
+        put("type", "integer")
+        put("description", "Display id from device_display_start. Omit to use the active screen. Use 0 for the physical screen.")
+    }
 
     private fun schema(required: List<String> = emptyList(), props: JsonObjectBuilder.() -> Unit): JsonObject =
         buildJsonObject {

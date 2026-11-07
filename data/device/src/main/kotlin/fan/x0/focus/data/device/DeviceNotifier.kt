@@ -92,6 +92,10 @@ class DeviceNotifier(@Provided private val context: Context) {
         runCatching { manager?.cancel(SERVER_ID) }
     }
 
+    fun cancelDisplay() {
+        runCatching { manager?.cancel(DISPLAY_ID) }
+    }
+
     fun createChannel() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
         manager?.createNotificationChannel(
@@ -107,6 +111,7 @@ class DeviceNotifier(@Provided private val context: Context) {
         const val CHANNEL = "focus_device_control"
         const val SESSION_ID = 6101
         const val SERVER_ID = 6102
+        const val DISPLAY_ID = 6103
         const val BG_ID = 6200
         const val TRIGGER_ID = 6700
     }

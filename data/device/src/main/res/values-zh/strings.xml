@@ -8,6 +8,8 @@
     <string name="device_notification_controlled">Focus 远程控制已开启</string>
     <string name="device_notification_stop">停止</string>
     <string name="device_notification_background">后台命令已完成</string>
+    <string name="device_notification_display">虚拟屏运行中</string>
+    <string name="device_notification_display_body">助手正在后台屏幕工作</string>
     <string name="device_trigger_service_title">事件触发器运行中</string>
     <string name="device_trigger_service_body">Focus 正在监听触发事件</string>
 </resources>

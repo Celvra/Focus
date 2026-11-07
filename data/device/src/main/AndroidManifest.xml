@@ -40,6 +40,15 @@
         </service>
 
         <service
+            android:name="fan.x0.focus.data.device.system.DeviceDisplayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="virtual_display" />
+        </service>
+
+        <service
             android:name="fan.x0.focus.data.device.system.DeviceTriggerService"
             android:exported="false"
             android:foregroundServiceType="specialUse">

@@ -9,6 +9,7 @@ import fan.x0.focus.data.device.DeviceRpcResponse
 import fan.x0.focus.data.device.DeviceRuntime
 import fan.x0.focus.data.device.DeviceStore
 import fan.x0.focus.data.device.DeviceStep
+import fan.x0.focus.data.device.display.VirtualDisplaySpec
 import fan.x0.focus.data.device.describe
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -90,7 +91,7 @@ class DeviceServer(
                         }
                         val fps = (call.request.queryParameters["fps"]?.toIntOrNull() ?: 5).coerceIn(1, 10)
                         while (runtime.session.value != null) {
-                            val image = runCatching { runtime.screenshot() }.getOrNull()
+                            val image = runCatching { runtime.screenshot(maxWidth = 720) }.getOrNull()
                             if (image != null) {
                                 val bytes = runCatching {
                                     android.util.Base64.decode(image, android.util.Base64.DEFAULT)
@@ -109,7 +110,7 @@ class DeviceServer(
     }
 
     suspend fun stop() = lifecycle.withLock {
-        runtime.stopSession()
+        runtime.stopSessionWithDisplay()
         withContext(Dispatchers.IO) {
             engine?.stop(1_000, 2_000)
             engine = null
@@ -217,7 +218,7 @@ class DeviceServer(
                 })
             }
             "stop" -> {
-                runtime.stopSession()
+                runtime.stopSessionWithDisplay()
                 DeviceRpcResponse(true)
             }
             "snapshot" -> {
@@ -227,12 +228,51 @@ class DeviceServer(
                     maxNodes = (args.int("max_nodes") ?: 180).coerceIn(20, 400),
                     deviceId = store.deviceId(),
                     deviceName = store.deviceName(),
+                    displayId = args.int("display_id") ?: -1,
                 )
                 DeviceRpcResponse(true, data = stepJson(step))
             }
             "action" -> {
                 val action = args.text("action") ?: return DeviceRpcResponse(false, "action is required")
-                DeviceRpcResponse(true, data = stepJson(runtime.action(action, args)))
+                DeviceRpcResponse(
+                    true,
+                    data = stepJson(runtime.action(action, args, args.int("display_id") ?: -1)),
+                )
+            }
+            "display_start" -> {
+                val state = runtime.startVirtualDisplay(
+                    VirtualDisplaySpec(
+                        width = (args.int("width") ?: 1080).coerceIn(320, 2560),
+                        height = (args.int("height") ?: 1920).coerceIn(320, 2560),
+                        density = (args.int("dpi") ?: 320).coerceIn(120, 640),
+                        backend = args.text("backend") ?: "auto",
+                    ),
+                )
+                DeviceRpcResponse(state.running, state.error, data = buildJsonObject {
+                    put("display_id", state.displayId)
+                    put("width", state.width)
+                    put("height", state.height)
+                    put("density", state.density)
+                    put("backend", state.backend.name.lowercase())
+                    put("trusted", state.trusted)
+                })
+            }
+            "display_stop" -> {
+                runtime.stopVirtualDisplay()
+                DeviceRpcResponse(true)
+            }
+            "display_status" -> {
+                val state = runtime.displayState.value
+                DeviceRpcResponse(true, data = buildJsonObject {
+                    put("running", state.running)
+                    put("display_id", state.displayId)
+                    put("width", state.width)
+                    put("height", state.height)
+                    put("density", state.density)
+                    put("backend", state.backend.name.lowercase())
+                    put("trusted", state.trusted)
+                    put("error", state.error)
+                })
             }
             "apps" -> {
                 val list = runtime.apps(args.text("query").orEmpty(), args.int("limit") ?: 60)
@@ -251,7 +291,7 @@ class DeviceServer(
                 })
             }
             "screencap" -> {
-                val image = runtime.screenshot()
+                val image = runtime.screenshot(args.int("display_id") ?: -1)
                 DeviceRpcResponse(image != null, if (image == null) "Screenshot failed" else "", buildJsonObject {
                     image?.let { put("screenshot", it) }
                 })
@@ -527,6 +567,11 @@ class DeviceServer(
             put("shizuku", health.shizuku)
             put("accessibility", health.accessibility)
             put("shell", health.root || health.shizuku)
+            put("virtual_display", health.root || health.shizuku)
+            put("display_active", health.displayRunning)
+            put("display_id", health.displayId)
+            put("display_backend", health.displayBackend)
+            put("display_trusted", health.displayTrusted)
         putJsonArray("ops") {
             listOf(
                 "snapshot", "action", "apps", "shell", "screencap",
@@ -538,6 +583,7 @@ class DeviceServer(
                 "package_list", "package_install", "package_uninstall", "package_clear",
                 "settings_get", "settings_put", "settings_list", "appops_get", "appops_set",
                 "clipboard_get", "clipboard_set", "net", "proc", "reboot",
+                "display_start", "display_stop", "display_status",
             ).forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) }
             }
         }
@@ -550,6 +596,7 @@ class DeviceServer(
 
     private fun stepJson(step: DeviceStep): JsonObject = buildJsonObject {
         put("text", step.text)
+        put("display_id", step.displayId)
         put("changed", step.changed)
         step.screenshot?.let { put("screenshot", it) }
         if (!step.ok) put("error", step.error)

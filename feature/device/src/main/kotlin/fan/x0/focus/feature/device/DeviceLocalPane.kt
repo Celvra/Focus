@@ -88,6 +88,9 @@ fun DeviceLocalPane(state: DeviceUiState, onAction: (DeviceAction) -> Unit) {
             }
         }
         item {
+            DeviceDisplayCard(state = state, onAction = onAction)
+        }
+        item {
             DeviceCard {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (state.session) {
@@ -134,6 +137,13 @@ fun DeviceLocalPane(state: DeviceUiState, onAction: (DeviceAction) -> Unit) {
         state.preview?.let { raw ->
             item {
                 DevicePreview(raw = raw, title = stringResource(R.string.device_preview))
+            }
+        }
+        if (state.displayPreviewing) {
+            state.displayPreview?.let { raw ->
+                item {
+                    DevicePreview(raw = raw, title = stringResource(R.string.device_display_title))
+                }
             }
         }
     }

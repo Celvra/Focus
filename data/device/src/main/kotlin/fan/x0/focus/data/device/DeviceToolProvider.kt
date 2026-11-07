@@ -8,6 +8,7 @@ import fan.x0.focus.data.assistant.ExternalToolProvider
 import fan.x0.focus.data.assistant.ToolApprovalDraft
 import fan.x0.focus.data.assistant.ToolResult
 import fan.x0.focus.data.assistant.ToolSpec
+import fan.x0.focus.data.device.display.VirtualDisplaySpec
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -57,6 +58,9 @@ class DeviceToolProvider(
             "device_capabilities" -> capabilities(args)
             "device_start" -> start(args, conversationId)
             "device_stop" -> stop(args)
+            "device_display_start" -> displayStart(args)
+            "device_display_stop" -> displayStop(args)
+            "device_display_status" -> displayStatus(args)
             "device_snapshot" -> snapshot(args)
             "device_tap" -> action("tap", args)
             "device_long_press" -> action("long_press", args)
@@ -144,6 +148,11 @@ class DeviceToolProvider(
                     put("shizuku", health.shizuku)
                     put("accessibility", health.accessibility)
                     put("shell", health.root || health.shizuku)
+                    put("virtual_display", health.root || health.shizuku)
+                    put("display_backend", health.displayBackend)
+                    put("display_active", health.displayRunning)
+                    put("display_id", health.displayId)
+                    put("display_trusted", health.displayTrusted)
                     put("session", health.session)
                 }.toString(),
                 summary = "Device capabilities",
@@ -183,7 +192,7 @@ class DeviceToolProvider(
     private suspend fun stop(args: JsonObject): ToolResult {
         val target = target(args)
         if (target.endpoint == null) {
-            runtime.stopSession()
+            runtime.stopSessionWithDisplay()
             return ToolResult(ok = true, content = "Device control stopped", summary = "Stopped")
         }
         val response = repository.rpc(target.endpoint, "stop")
@@ -194,8 +203,88 @@ class DeviceToolProvider(
         }
     }
 
+    private suspend fun displayStart(args: JsonObject): ToolResult {
+        val target = target(args)
+        val spec = VirtualDisplaySpec(
+            width = (args.int("width") ?: 1080).coerceIn(320, 2560),
+            height = (args.int("height") ?: 1920).coerceIn(320, 2560),
+            density = (args.int("dpi") ?: 320).coerceIn(120, 640),
+            backend = args.text("backend") ?: "auto",
+        )
+        if (target.endpoint == null) {
+            val state = runtime.startVirtualDisplay(spec)
+            if (!state.running) return fail(state.error.ifBlank { "Virtual screen failed" })
+            return ToolResult(
+                ok = true,
+                content = "display_id=${state.displayId} ${state.width}x${state.height} " +
+                    "dpi=${state.density} backend=${state.backend.name.lowercase()} trusted=${state.trusted}",
+                summary = "Virtual screen ${state.displayId}",
+            )
+        }
+        val response = repository.rpc(target.endpoint, "display_start", buildJsonObject {
+            put("width", spec.width)
+            put("height", spec.height)
+            put("dpi", spec.density)
+            put("backend", spec.backend)
+        })
+        return if (response.ok) {
+            ToolResult(
+                ok = true,
+                content = "display_id=${response.data.text("display_id").orEmpty()} " +
+                    "backend=${response.data.text("backend").orEmpty()} " +
+                    "trusted=${response.data.flag("trusted") ?: false}",
+                summary = "Remote virtual screen",
+            )
+        } else {
+            fail(response.error)
+        }
+    }
+
+    private suspend fun displayStop(args: JsonObject): ToolResult {
+        val target = target(args)
+        if (target.endpoint == null) {
+            requireSession()
+            runtime.stopVirtualDisplay()
+            return ToolResult(ok = true, content = "Virtual screen stopped", summary = "Stopped")
+        }
+        val response = repository.rpc(target.endpoint, "display_stop")
+        return if (response.ok) {
+            ToolResult(ok = true, content = "Remote virtual screen stopped", summary = "Stopped")
+        } else {
+            fail(response.error)
+        }
+    }
+
+    private suspend fun displayStatus(args: JsonObject): ToolResult {
+        val target = target(args)
+        if (target.endpoint == null) {
+            val state = runtime.displayState.value
+            return ToolResult(
+                ok = true,
+                content = buildJsonObject {
+                    put("running", state.running)
+                    put("display_id", state.displayId)
+                    put("width", state.width)
+                    put("height", state.height)
+                    put("density", state.density)
+                    put("backend", state.backend.name.lowercase())
+                    put("trusted", state.trusted)
+                    put("error", state.error)
+                }.toString(),
+                summary = if (state.running) "Virtual screen ${state.displayId}" else "Virtual screen off",
+            )
+        }
+        val response = repository.rpc(target.endpoint, "display_status")
+        return if (response.ok) {
+            ToolResult(ok = true, content = response.data.toString(), summary = "Remote virtual screen")
+        } else {
+            fail(response.error)
+        }
+    }
+
     private suspend fun snapshot(args: JsonObject): ToolResult {
         val target = target(args)
+        val displayId = args.int("display_id") ?: -1
         if (target.endpoint == null) {
             requireSession()
             val step = runtime.snapshot(
@@ -203,6 +292,7 @@ class DeviceToolProvider(
                 settleMs = (args.int("settle_ms") ?: 0).toLong(),
                 maxNodes = (args.int("max_nodes") ?: 180).coerceIn(20, 400),
                 deviceName = store.deviceName(),
+                displayId = displayId,
             )
             return stepResult(step)
         }
@@ -213,9 +303,10 @@ class DeviceToolProvider(
     private suspend fun action(action: String, args: JsonObject): ToolResult {
         val target = target(args)
         val payload = JsonObject(args + ("action" to JsonPrimitive(action)))
+        val displayId = args.int("display_id") ?: -1
         if (target.endpoint == null) {
             requireSession()
-            return stepResult(runtime.action(action, payload))
+            return stepResult(runtime.action(action, payload, displayId))
         }
         val response = repository.rpc(target.endpoint, "action", payload)
         return remoteStep(response)
@@ -587,10 +678,10 @@ class DeviceToolProvider(
     private suspend fun screencap(args: JsonObject): ToolResult {
         val target = target(args)
         if (target.endpoint == null) {
-            val image = runtime.screenshot() ?: return fail("Screenshot failed")
+            val image = runtime.screenshot(args.int("display_id") ?: -1) ?: return fail("Screenshot failed")
             return imageResult(image, "Screen captured")
         }
-        val response = repository.rpc(target.endpoint, "screencap")
+        val response = repository.rpc(target.endpoint, "screencap", args)
         return if (response.ok) {
             val image = response.data.text("screenshot") ?: return fail("Remote screenshot failed")
             imageResult(image, "Remote screen captured")
@@ -665,6 +756,7 @@ class DeviceToolProvider(
         if (!response.ok) return fail(response.error)
         val step = DeviceStep(
             ok = true,
+            displayId = response.data.int("display_id") ?: 0,
             text = response.data.text("text").orEmpty(),
             screenshot = response.data.text("screenshot"),
             changed = response.data.flag("changed") ?: false,
@@ -686,7 +778,12 @@ class DeviceToolProvider(
         val result = ToolResult(
             ok = true,
             content = step.text,
-            summary = if (step.changed) "Screen changed" else "Screen read",
+            summary = when {
+                step.displayId != 0 && step.changed -> "Virtual screen changed"
+                step.displayId != 0 -> "Virtual screen read"
+                step.changed -> "Screen changed"
+                else -> "Screen read"
+            },
         )
         return imageResult(step.screenshot, result)
     }
@@ -743,5 +840,6 @@ class DeviceToolProvider(
         "device_capabilities",
         "device_start",
         "device_stop",
+        "device_display_status",
     )
 }

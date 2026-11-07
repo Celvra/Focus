@@ -12,8 +12,10 @@ import android.content.pm.ResolveInfo
 import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.Rect
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.PowerManager
+import android.util.DisplayMetrics
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -49,19 +51,37 @@ class DeviceAccessibility(@Provided private val context: Context) {
         deviceId: String = "local",
         deviceName: String = Build.MODEL.orEmpty(),
         maxNodes: Int = 180,
+        displayId: Int = 0,
+        displayWidth: Int = 0,
+        displayHeight: Int = 0,
     ): DeviceSnapshot = withContext(Dispatchers.Main) {
         val service = DeviceAccessibilityService.current
             ?: return@withContext DeviceSnapshot(
                 deviceId = deviceId,
+                displayId = displayId,
                 deviceName = deviceName,
                 text = "Accessibility service is not enabled",
             )
-        val metrics = context.resources.displayMetrics
-        val windows = runCatching { service.windows.toList() }.getOrDefault(emptyList())
+        val windows = windowsFor(service, displayId)
+        if (displayId != 0 && windows.isEmpty() && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return@withContext DeviceSnapshot(
+                deviceId = deviceId,
+                displayId = displayId,
+                deviceName = deviceName,
+                text = "Accessibility nodes are unavailable on this Android version",
+            )
+        }
+        val metrics = displayMetrics(displayId)
+        val screenWidth = metrics.widthPixels.takeIf { it > 0 } ?: displayWidth
+        val screenHeight = metrics.heightPixels.takeIf { it > 0 } ?: displayHeight
         val active = targetWindow(windows, context.packageName)
         val root = active?.root
-            ?: service.rootInActiveWindow?.takeIf {
-                it.packageName?.toString() != context.packageName
+            ?: if (displayId == 0) {
+                service.rootInActiveWindow?.takeIf {
+                    it.packageName?.toString() != context.packageName
+                }
+            } else {
+                null
             }
         val keyguard = runCatching {
             context.getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == true
@@ -87,13 +107,14 @@ class DeviceAccessibility(@Provided private val context: Context) {
         val title = active?.title?.toString().orEmpty()
         val snapshot = DeviceSnapshot(
             deviceId = deviceId,
+            displayId = displayId,
             deviceName = deviceName,
             packageName = packageName,
             windowTitle = title,
-            width = metrics.widthPixels,
-            height = metrics.heightPixels,
-            keyguard = keyguard,
-            screenOn = screenOn,
+            width = screenWidth,
+            height = screenHeight,
+            keyguard = if (displayId == 0) keyguard else false,
+            screenOn = if (displayId == 0) screenOn else true,
             keyboard = keyboard,
             nodes = nodes,
         )
@@ -247,10 +268,35 @@ class DeviceAccessibility(@Provided private val context: Context) {
             false
         }
 
-    suspend fun currentPackage(): String? = withContext(Dispatchers.Main) {
+    suspend fun currentPackage(displayId: Int = 0): String? = withContext(Dispatchers.Main) {
         val service = DeviceAccessibilityService.current ?: return@withContext null
-        val windows = runCatching { service.windows.toList() }.getOrDefault(emptyList())
+        val windows = windowsFor(service, displayId)
         targetWindow(windows, context.packageName)?.root?.packageName?.toString()
+    }
+
+    suspend fun typeOnDisplay(
+        text: String,
+        displayId: Int,
+        clear: Boolean = true,
+        submit: Boolean = false,
+    ): Boolean = withContext(Dispatchers.Main) {
+        val service = DeviceAccessibilityService.current ?: return@withContext false
+        val windows = windowsFor(service, displayId)
+        val root = targetWindow(windows, context.packageName)?.root ?: return@withContext false
+        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            ?: findEditable(root)
+            ?: return@withContext false
+        val value = if (clear) text else (focused.text?.toString().orEmpty() + text)
+        val args = android.os.Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
+        }
+        val done = focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        if (done && submit) {
+            runCatching {
+                focused.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+            }
+        }
+        done
     }
 
     suspend fun resolveApp(query: String): DeviceApp? = withContext(Dispatchers.IO) {
@@ -380,6 +426,34 @@ class DeviceAccessibility(@Provided private val context: Context) {
         }
         val accepted = service.dispatchGesture(gesture, callback, null)
         if (!accepted && continuation.isActive) continuation.resume(false)
+    }
+
+    private fun windowsFor(service: AccessibilityService, displayId: Int): List<AccessibilityWindowInfo> {
+        if (displayId == 0) {
+            return runCatching { service.windows.toList() }.getOrDefault(emptyList())
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return emptyList()
+        return runCatching {
+            service.windowsOnAllDisplays.get(displayId).orEmpty()
+        }.getOrDefault(emptyList())
+    }
+
+    private fun displayMetrics(displayId: Int): DisplayMetrics {
+        if (displayId == 0) return context.resources.displayMetrics
+        val manager = context.getSystemService(DisplayManager::class.java)
+        val display = manager?.getDisplay(displayId)
+        return DisplayMetrics().also { metrics ->
+            if (display != null) display.getRealMetrics(metrics)
+        }
+    }
+
+    private fun findEditable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.isEditable && node.isVisibleToUser) return node
+        for (index in 0 until node.childCount) {
+            val child = runCatching { node.getChild(index) }.getOrNull() ?: continue
+            findEditable(child)?.let { return it }
+        }
+        return null
     }
 
     private fun targetWindow(
@@ -565,6 +639,9 @@ class DeviceAccessibility(@Provided private val context: Context) {
     private fun render(snapshot: DeviceSnapshot): String {
         val builder = StringBuilder()
         builder.append("device: ").append(snapshot.deviceName.ifBlank { snapshot.deviceId }).append('\n')
+        if (snapshot.displayId != 0) {
+            builder.append("display: ").append(snapshot.displayId).append(" (virtual)").append('\n')
+        }
         builder.append("app: ").append(snapshot.packageName.ifBlank { "-" })
         builder.append("  title: ").append(snapshot.windowTitle.ifBlank { "-" })
         builder.append("  screen: ").append(snapshot.width).append('x').append(snapshot.height).append('\n')

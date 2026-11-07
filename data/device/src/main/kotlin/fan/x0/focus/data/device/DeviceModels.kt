@@ -65,6 +65,7 @@ data class DeviceNode(
 @Serializable
 data class DeviceSnapshot(
     val deviceId: String = "",
+    val displayId: Int = 0,
     val deviceName: String = "",
     val packageName: String = "",
     val windowTitle: String = "",
@@ -85,6 +86,10 @@ data class DeviceHealth(
     val version: String = "",
     val android: String = "",
     val accessibility: Boolean = false,
+    val displayRunning: Boolean = false,
+    val displayId: Int = 0,
+    val displayBackend: String = "",
+    val displayTrusted: Boolean = false,
     val root: Boolean = false,
     val shizuku: Boolean = false,
     val remoteEnabled: Boolean = false,
@@ -225,6 +230,7 @@ data class DeviceShellStatus(
 
 data class DeviceStep(
     val ok: Boolean,
+    val displayId: Int = 0,
     val text: String,
     val screenshot: String? = null,
     val changed: Boolean = false,

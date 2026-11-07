@@ -7,6 +7,7 @@ import fan.x0.focus.data.device.DeviceRepository
 import fan.x0.focus.data.device.DeviceRole
 import fan.x0.focus.data.device.DeviceRuntime
 import fan.x0.focus.data.device.DeviceServerController
+import fan.x0.focus.data.device.display.VirtualDisplaySpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -55,6 +56,24 @@ class DeviceViewModel(
         runtime.session.onEach { session ->
             updateState { copy(session = session != null, sessionOwner = session?.owner.orEmpty()) }
         }.launchIn(viewModelScope)
+        runtime.displayState.onEach { state ->
+            updateState {
+                copy(
+                    displayRunning = state.running,
+                    displayStarting = state.starting,
+                    displayId = state.displayId,
+                    displayWidth = state.width,
+                    displayHeight = state.height,
+                    displayDensity = state.density,
+                    displayBackend = state.backend.name.lowercase(),
+                    displayTrusted = state.trusted,
+                    displayError = state.error,
+                )
+            }
+        }.launchIn(viewModelScope)
+        runtime.displayPreview.onEach { image ->
+            updateState { copy(displayPreview = image) }
+        }.launchIn(viewModelScope)
         refresh()
     }
 
@@ -72,6 +91,9 @@ class DeviceViewModel(
             is DeviceAction.ToggleLive -> toggleLive(action.id)
             DeviceAction.StartLocal -> startLocal()
             DeviceAction.StopSession -> stopSession()
+            DeviceAction.StartDisplay -> startDisplay()
+            DeviceAction.StopDisplay -> stopDisplay()
+            DeviceAction.ToggleDisplayPreview -> toggleDisplayPreview()
             DeviceAction.NewPairingCode -> {
                 val code = server.newPairingCode()
                 updateState { copy(pairingCode = code) }
@@ -166,8 +188,18 @@ class DeviceViewModel(
             repository.setLocalEnabled(value)
             if (!value) {
                 stopLive()
-                runtime.stopSession()
-                updateState { copy(localEnabled = false, session = false, sessionOwner = "") }
+                runtime.stopSessionWithDisplay()
+                updateState {
+                    copy(
+                        localEnabled = false,
+                        session = false,
+                        sessionOwner = "",
+                        displayRunning = false,
+                        displayId = 0,
+                        displayPreview = null,
+                        displayPreviewing = false,
+                    )
+                }
             } else {
                 updateState { copy(localEnabled = true) }
             }
@@ -290,9 +322,76 @@ class DeviceViewModel(
 
     private fun stopSession() {
         stopLive()
-        runtime.stopSession()
-        updateState { copy(session = false, sessionOwner = "") }
-        sendEffect(DeviceEffect.Message(R.string.device_msg_control_stopped))
+        runtime.setDisplayPreview(false)
+        launchGuarded(onError = ::emitError) {
+            runtime.stopSessionWithDisplay()
+            updateState {
+                copy(
+                    session = false,
+                    sessionOwner = "",
+                    displayRunning = false,
+                    displayId = 0,
+                    displayPreview = null,
+                    displayPreviewing = false,
+                )
+            }
+            sendEffect(DeviceEffect.Message(R.string.device_msg_control_stopped))
+        }
+    }
+
+    private fun startDisplay() {
+        if (currentState.displayRunning || currentState.displayStarting) return
+        if (!currentState.localEnabled) {
+            sendEffect(DeviceEffect.Message(R.string.device_msg_turn_on))
+            return
+        }
+        launchGuarded(onError = ::emitError) {
+            if (runtime.session.value == null) {
+                val session = runtime.startSession("Focus")
+                updateState { copy(session = true, sessionOwner = session.owner) }
+            }
+            val state = runtime.startVirtualDisplay(VirtualDisplaySpec())
+            if (!state.running) {
+                sendEffect(DeviceEffect.Message(R.string.device_msg_display_failed, state.error))
+                return@launchGuarded
+            }
+            updateState {
+                copy(
+                    displayRunning = true,
+                    displayId = state.displayId,
+                    displayWidth = state.width,
+                    displayHeight = state.height,
+                    displayDensity = state.density,
+                    displayBackend = state.backend.name.lowercase(),
+                    displayTrusted = state.trusted,
+                    displayError = "",
+                    displayPreviewing = true,
+                )
+            }
+            sendEffect(DeviceEffect.Message(R.string.device_msg_display_started, state.displayId.toString()))
+        }
+    }
+
+    private fun stopDisplay() {
+        runtime.setDisplayPreview(false)
+        launchGuarded(onError = ::emitError) {
+            runtime.stopVirtualDisplay()
+            updateState {
+                copy(
+                    displayRunning = false,
+                    displayId = 0,
+                    displayPreview = null,
+                    displayPreviewing = false,
+                    displayError = "",
+                )
+            }
+        }
+    }
+
+    private fun toggleDisplayPreview() {
+        val next = !currentState.displayPreviewing
+        runtime.setDisplayPreview(next)
+        updateState { copy(displayPreviewing = next, displayPreview = if (next) displayPreview else null) }
     }
 
     private fun revoke(id: String) {

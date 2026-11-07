@@ -40,6 +40,7 @@ object ToolLabels {
         "bridge_bg_start", "bridge_bg_logs", "bridge_bg_kill", "bridge_bg_list", "bridge_bg_clear" -> "Background command"
         "device_list", "device_capabilities" -> "Devices"
         "device_start", "device_stop" -> "Device control"
+        "device_display_start", "device_display_stop", "device_display_status" -> "Virtual screen"
         "device_snapshot", "device_screencap" -> "Device screen"
         "device_tap", "device_long_press", "device_swipe", "device_type", "device_key", "device_open_app", "device_apps" -> "Device input"
         "device_shell", "device_shell_open", "device_shell_send", "device_shell_read", "device_shell_close", "device_shell_list" -> "Device shell"

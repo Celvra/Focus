@@ -2,6 +2,9 @@ package fan.x0.focus.data.device
 
 import android.content.Context
 import android.os.Build
+import fan.x0.focus.data.device.display.VirtualDisplayController
+import fan.x0.focus.data.device.display.VirtualDisplaySpec
+import fan.x0.focus.data.device.display.VirtualDisplayState
 import fan.x0.focus.data.device.system.DeviceAccessibilityService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -28,6 +31,7 @@ class DeviceRuntime(
     private val store: DeviceStore,
     private val notifier: DeviceNotifier,
     private val automationGate: AutomationGate,
+    private val display: VirtualDisplayController,
 ) {
     private val _session = MutableStateFlow<DeviceSession?>(null)
     val session: StateFlow<DeviceSession?> = _session.asStateFlow()
@@ -66,6 +70,10 @@ class DeviceRuntime(
             version = Build.VERSION.RELEASE.orEmpty(),
             android = Build.VERSION.SDK_INT.toString(),
             accessibility = accessibility.ready(),
+            displayRunning = display.state.value.running,
+            displayId = display.state.value.displayId,
+            displayBackend = display.state.value.backend.name.lowercase(),
+            displayTrusted = display.state.value.trusted,
             root = status.root,
             shizuku = status.shizuku,
             remoteEnabled = store.remoteEnabledOnce(),
@@ -92,6 +100,7 @@ class DeviceRuntime(
         if (current != null) {
             shell.closeAllSessions()
             background.stopAll()
+            display.release()
         }
         val next = DeviceSession(
             id = UUID.randomUUID().toString(),
@@ -116,6 +125,8 @@ class DeviceRuntime(
         _session.value = null
         shell.closeAllSessions()
         background.stopAll()
+        display.release()
+        lastSnapshot = null
         if (hadSession) {
             notifier.cancelSession()
             _automation.value = DeviceAutomationState.Finished(
@@ -185,33 +196,82 @@ class DeviceRuntime(
 
     suspend fun setTriggerEnabled(id: String, enabled: Boolean) = triggerManager.setEnabled(id, enabled)
 
+    fun activeDisplayId(): Int = display.activeDisplayId.value
+
+    val displayState: StateFlow<VirtualDisplayState> get() = display.state
+
+    val displayPreview: StateFlow<String?> get() = display.preview
+
+    fun setDisplayPreview(active: Boolean) = display.setPreviewActive(active)
+
+    suspend fun startVirtualDisplay(spec: VirtualDisplaySpec): VirtualDisplayState =
+        display.start(spec)
+
+    suspend fun stopVirtualDisplay() = display.stop()
+
+    suspend fun refreshVirtualDisplay() = display.refresh()
+
+    suspend fun stopSessionWithDisplay() {
+        runCatching { display.stop() }
+        stopSession()
+    }
+
     suspend fun snapshot(
         includeScreenshot: Boolean = true,
         settleMs: Long = 0,
         maxNodes: Int = 180,
         deviceId: String = "local",
         deviceName: String = "",
+        displayId: Int = -1,
     ): DeviceStep {
         if (settleMs > 0) delay(settleMs.coerceIn(0, 5_000))
+        val target = if (displayId >= 0) displayId else activeDisplayId()
+        if (target != 0) {
+            display.refresh()
+            if (!virtualDisplayReady(target)) {
+                return stepError("Virtual screen $target is not running. Call device_display_start first.")
+            }
+        }
         val name = deviceName.ifBlank { store.deviceName() }
-        val snapshot = accessibility.snapshot(deviceId, name, maxNodes)
-        val signature = snapshot.text.hashCode().toString() + ":" + (DeviceAccessibilityService.lastEventAt / 250)
+        val displayState = display.state.value
+        val snapshot = accessibility.snapshot(
+            deviceId = deviceId,
+            deviceName = name,
+            maxNodes = maxNodes,
+            displayId = target,
+            displayWidth = displayState.width,
+            displayHeight = displayState.height,
+        )
+        val signature = if (target == 0) {
+            "$target:" + snapshot.text.hashCode().toString() + ":" +
+                (DeviceAccessibilityService.lastEventAt / 250)
+        } else {
+            "$target:" + snapshot.text.hashCode().toString()
+        }
         val changed = signature != lastSignature
         lastSignature = signature
         lastSnapshot = snapshot
-        val image = if (includeScreenshot) screenshot() else null
+        val image = if (includeScreenshot) screenshot(target) else null
         return DeviceStep(
             ok = true,
+            displayId = target,
             text = snapshot.text,
             screenshot = image,
             changed = changed,
         )
     }
 
-    suspend fun action(action: String, args: JsonObject): DeviceStep {
+    suspend fun action(action: String, args: JsonObject, displayId: Int = -1): DeviceStep {
+        val target = if (displayId >= 0) displayId else activeDisplayId()
+        if (target != 0) {
+            display.refresh()
+            if (!virtualDisplayReady(target)) {
+                return stepError("Virtual screen $target is not running. Call device_display_start first.")
+            }
+        }
         val settle = (args["settle_ms"]?.jsonPrimitive?.intOrNull ?: 350).coerceIn(0, 5_000).toLong()
         val index = args["index"]?.jsonPrimitive?.intOrNull
-        val node = resolve(index)
+        val node = resolve(index, target)
         val point = when {
             index != null && node == null -> return stepError("Node index $index is not in the latest snapshot")
             else -> node?.bounds
@@ -224,6 +284,16 @@ class DeviceRuntime(
                 ?: return stepError("App not found: $query")
             val activity = args["activity"]?.jsonPrimitive?.content.orEmpty()
                 .ifBlank { app.activity }
+            if (target != 0) {
+                val opened = display.launch(app.packageName, activity)
+                if (!opened) return stepError("Could not open ${app.label} (${app.packageName}) on the virtual screen")
+                delay(settle.coerceAtLeast(700))
+                return snapshot(
+                    includeScreenshot = args["include_screenshot"]?.jsonPrimitive?.booleanOrNull ?: true,
+                    settleMs = 0,
+                    displayId = target,
+                )
+            }
             var opened = accessibility.openApp(app.packageName, activity)
             if (!opened) opened = openAppShell(app.packageName)
             if (!opened) {
@@ -236,30 +306,55 @@ class DeviceRuntime(
             return snapshot(
                 includeScreenshot = args["include_screenshot"]?.jsonPrimitive?.booleanOrNull ?: true,
                 settleMs = 0,
+                displayId = target,
             )
         }
         val ok = when (action) {
             "tap" -> {
-                val bounds = point ?: normalizedBounds(args) ?: return stepError("index or x and y are required")
-                accessibility.tap(bounds)
+                val bounds = point ?: normalizedBounds(args, target) ?: return stepError("index or x and y are required")
+                if (target != 0) display.tap(bounds.centerX, bounds.centerY) else accessibility.tap(bounds)
             }
             "long_press" -> {
-                val bounds = point ?: normalizedBounds(args) ?: return stepError("index or x and y are required")
-                accessibility.tap(bounds, longPress = true)
+                val bounds = point ?: normalizedBounds(args, target) ?: return stepError("index or x and y are required")
+                if (target != 0) {
+                    display.tap(bounds.centerX, bounds.centerY, longPress = true)
+                } else {
+                    accessibility.tap(bounds, longPress = true)
+                }
             }
             "swipe" -> {
                 val direction = args["direction"]?.jsonPrimitive?.content.orEmpty()
-                swipe(direction, point)
+                swipe(direction, point, target)
             }
             "type" -> {
                 val text = args["text"]?.jsonPrimitive?.content ?: return stepError("text is required")
                 val clear = args["clear"]?.jsonPrimitive?.booleanOrNull ?: true
                 val submit = args["submit"]?.jsonPrimitive?.booleanOrNull ?: false
-                accessibility.type(text, point, clear, submit)
+                if (target != 0) {
+                    if (point != null) {
+                        display.tap(point.centerX, point.centerY)
+                        delay(220)
+                    }
+                    var done = accessibility.typeOnDisplay(text, target, clear, submit)
+                    if (!done) done = display.text(text)
+                    done
+                } else {
+                    accessibility.type(text, point, clear, submit)
+                }
             }
             "key" -> {
                 val key = args["key"]?.jsonPrimitive?.content ?: return stepError("key is required")
-                accessibility.key(key)
+                if (target != 0) {
+                    val supported = key.lowercase() in setOf("back", "enter", "delete", "escape", "tab", "space")
+                    if (!supported) {
+                        return stepError(
+                            "Key $key is not available on the virtual screen. Use back, enter, delete, escape, tab, or space.",
+                        )
+                    }
+                    display.key(key)
+                } else {
+                    accessibility.key(key)
+                }
             }
             else -> false
         }
@@ -268,6 +363,7 @@ class DeviceRuntime(
         return snapshot(
             includeScreenshot = args["include_screenshot"]?.jsonPrimitive?.booleanOrNull ?: true,
             settleMs = 0,
+            displayId = target,
         )
     }
 
@@ -277,7 +373,13 @@ class DeviceRuntime(
     suspend fun apps(query: String = "", limit: Int = 60): List<DeviceApp> =
         accessibility.apps(query, limit)
 
-    suspend fun screenshot(): String? {
+    suspend fun screenshot(displayId: Int = -1, maxWidth: Int = 0): String? {
+        val target = if (displayId >= 0) displayId else activeDisplayId()
+        if (target != 0) {
+            if (!virtualDisplayReady(target)) return null
+            val width = if (maxWidth > 0) maxWidth else 720
+            return display.captureBase64(quality = 80, maxWidth = width)
+        }
         if (_automation.value is DeviceAutomationState.Idle) return capture()
         return automationGate.conceal { capture() }
     }
@@ -450,24 +552,26 @@ class DeviceRuntime(
 
     fun lastSnapshotNodes(): List<DeviceNode> = lastSnapshot?.nodes.orEmpty()
 
-    private fun resolve(index: Int?): DeviceNode? {
+    private fun resolve(index: Int?, displayId: Int): DeviceNode? {
         if (index == null) return null
-        return lastSnapshot?.nodes?.firstOrNull { it.index == index }
+        val snapshot = lastSnapshot ?: return null
+        if (snapshot.displayId != displayId) return null
+        return snapshot.nodes.firstOrNull { it.index == index }
     }
 
-    private fun normalizedBounds(args: JsonObject): DeviceBounds? {
+    private fun normalizedBounds(args: JsonObject, displayId: Int): DeviceBounds? {
         val x = args["x"]?.jsonPrimitive?.content?.toFloatOrNull() ?: return null
         val y = args["y"]?.jsonPrimitive?.content?.toFloatOrNull() ?: return null
-        val metrics = context.resources.displayMetrics
-        val cx = (x.coerceIn(0f, 1f) * metrics.widthPixels).toInt()
-        val cy = (y.coerceIn(0f, 1f) * metrics.heightPixels).toInt()
+        val size = displaySize(displayId)
+        val cx = (x.coerceIn(0f, 1f) * (size.first - 1).coerceAtLeast(1)).toInt()
+        val cy = (y.coerceIn(0f, 1f) * (size.second - 1).coerceAtLeast(1)).toInt()
         return DeviceBounds(cx, cy, cx + 2, cy + 2)
     }
 
-    private suspend fun swipe(direction: String, node: DeviceBounds?): Boolean {
-        val metrics = context.resources.displayMetrics
-        val width = metrics.widthPixels.toFloat()
-        val height = metrics.heightPixels.toFloat()
+    private suspend fun swipe(direction: String, node: DeviceBounds?, displayId: Int): Boolean {
+        val size = displaySize(displayId)
+        val width = size.first.toFloat()
+        val height = size.second.toFloat()
         val bounds = node ?: DeviceBounds(0, 0, width.toInt(), height.toInt())
         val cx = bounds.centerX.toFloat()
         val cy = bounds.centerY.toFloat()
@@ -480,7 +584,24 @@ class DeviceRuntime(
             "right" -> listOf(cx - dx, cy, cx + dx, cy)
             else -> return false
         }
+        if (displayId != 0) {
+            return display.swipe(sx.toInt(), sy.toInt(), ex.toInt(), ey.toInt(), 300)
+        }
         return accessibility.swipe(sx, sy, ex, ey, 300)
+    }
+
+    private fun virtualDisplayReady(displayId: Int): Boolean {
+        val state = display.state.value
+        return state.running && state.displayId == displayId
+    }
+
+    private fun displaySize(displayId: Int): Pair<Int, Int> {
+        if (displayId != 0) {
+            val state = display.state.value
+            if (state.width > 0 && state.height > 0) return state.width to state.height
+        }
+        val metrics = context.resources.displayMetrics
+        return metrics.widthPixels to metrics.heightPixels
     }
 
     private suspend fun openAppShell(packageName: String): Boolean {

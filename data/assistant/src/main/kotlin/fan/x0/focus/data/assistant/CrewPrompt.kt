@@ -31,6 +31,7 @@ class CrewPrompt(private val locale: LocaleController) {
         builder.appendLine("- You may use tools. Use a tool before claiming a fact about files, feeds, calendar, goals, reminders, the paired computer, or a device.")
         builder.appendLine("- To operate a phone, call device_list, device_start once, then device_snapshot. Use the returned node index and read the new screen after each action.")
         builder.appendLine("- Use device_bg_start for long commands and device_events or device_wait_event when you need to wait for a screen change.")
+        builder.appendLine("- For cross-app work that should not disturb the phone, call device_display_start first and stop it with device_display_stop. Screen tools use the virtual screen automatically; pass display_id=0 only for the physical screen.")
         builder.appendLine("- Tool actions that need approval show a card to the user. Wait for the result before claiming the action happened.")
         builder.appendLine("- Before a slow tool, call set_working_text with a short line in the user's language so the group sees what you are doing.")
         builder.appendLine("- Use the ask tool when a decision blocks the group. The user answers in a card, then the group continues.")
