@@ -59,7 +59,7 @@ class MainChannelSession(
         )
         val threadKey = replyToId?.let { "main:$it" } ?: "main:$messageId"
         val attachmentJson = if (attachments.isEmpty()) "" else json.encodeToString(attachmentsSerializer, attachments)
-        bus.publish(
+        val stored = bus.publish(
             AgentEvent.userMessage(
                 text = text,
                 threadKey = threadKey,
@@ -68,7 +68,7 @@ class MainChannelSession(
                 dedupeKey = "main:user:$messageId",
             ),
         )
-        return messageId
+        return messageId.takeIf { stored?.status == AgentEventStatus.Pending }
     }
 
     suspend fun appendAssistant(text: String, label: String? = "router") {

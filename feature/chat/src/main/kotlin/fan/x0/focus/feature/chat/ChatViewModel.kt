@@ -795,11 +795,15 @@ class ChatViewModel(
         localTurnId = if (state.isMain) {
             mainSubmitting = true
             viewModelScope.launch {
-                mainChannel.submit(
+                val delivered = mainChannel.submit(
                     text = text,
                     attachments = attachments.map { it.toModel() },
                     replyToId = replyToId,
                 )
+                if (delivered == null) {
+                    mainSubmitting = false
+                    updateState { copy(sending = false, workingText = "") }
+                }
             }
             0L
         } else {

@@ -116,6 +116,7 @@ class RoleModelsViewModel(
                 ?: fallbackProvider?.model.orEmpty()
             val requestedModel = own?.model?.takeIf { it.isNotBlank() }
                 ?: inheritedConfig?.model?.takeIf { it.isNotBlank() }
+                ?: if (own == null && inherited == null) fallbackProvider?.model else null
             val metaProviderId = provider?.id ?: inheritedProvider?.id ?: fallbackProvider?.id
             val tools = requestedModel?.let { meta[metaProviderId to it] }
             RoleModelRowUi(
