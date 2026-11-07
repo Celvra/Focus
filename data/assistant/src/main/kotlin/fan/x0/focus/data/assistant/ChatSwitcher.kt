@@ -28,6 +28,7 @@ class ChatSwitcher {
 
     fun requestAssist() {
         _assistRequest.value = true
+        open(ChatStore.MAIN_CONVERSATION_ID)
     }
 
     fun consumeAssistRequest() {
