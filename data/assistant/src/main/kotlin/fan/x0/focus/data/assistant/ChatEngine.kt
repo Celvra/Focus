@@ -47,6 +47,10 @@ data class TurnOptions(
     val mentionedSkills: List<String> = emptyList(),
     val silentReply: Boolean = false,
     val autoTitle: Boolean = true,
+    val promptOverride: String? = null,
+    val allowedTools: Set<String>? = null,
+    val toolSpecs: List<ToolSpec>? = null,
+    val toolHandler: (suspend (CompletedToolCall) -> ToolResult?)? = null,
 )
 
 sealed interface ChatEvent {
@@ -199,14 +203,17 @@ class ChatEngine(
                         ),
                     )
                 }
-                val specs = when (mode) {
+                val specs = (options.toolSpecs ?: when (mode) {
                     ChatMode.Chat -> tools.specsFor(agentMode)
                     ChatMode.Onboarding -> ToolCatalog.onboarding()
+                }).let { list ->
+                    val allowed = options.allowedTools
+                    if (allowed != null) list.filter { it.name in allowed } else list
                 }.let { list ->
                     if (completesOnboarding) list.filterNot { it.name == "complete_onboarding" } else list
                 }
                 val context = chats.context(conversationId)
-                val system = when (mode) {
+                val system = options.promptOverride ?: when (mode) {
                     ChatMode.Chat -> prompt.chatPrompt(
                         title = chats.conversation(conversationId)?.title.orEmpty(),
                         mode = agentMode,
@@ -296,7 +303,7 @@ class ChatEngine(
                         ),
                     )
                 }
-                val results = executeTools(message.toolCalls, conversationId, agentMode, providerId, model)
+                val results = executeTools(message.toolCalls, conversationId, agentMode, providerId, model, options)
                 pendingMedia = results.flatMap { it.media }
                 for ((index, call) in message.toolCalls.withIndex()) {
                     var result = results[index]
@@ -308,7 +315,7 @@ class ChatEngine(
                             emit(ChatEvent.TrustResolved(trust, trusted))
                             workspaceTrust.decide(trust, trusted)
                         }
-                        result = executeTool(call, conversationId, agentMode, providerId, model)
+                        result = executeTool(call, conversationId, agentMode, providerId, model, options)
                         pendingMedia += result.media
                     }
                     stepCount++
@@ -522,6 +529,7 @@ class ChatEngine(
         mode: AgentMode,
         providerId: String,
         model: String,
+        options: TurnOptions,
     ): List<ToolResult> = coroutineScope {
         val semaphore = Semaphore(TOOL_CONCURRENCY)
         val readCalls = calls.filter { call ->
@@ -530,7 +538,7 @@ class ChatEngine(
         val deferred = readCalls.associate { call ->
             call.id to async {
                 semaphore.withPermit {
-                    executeTool(call, conversationId, mode, providerId, model)
+                    executeTool(call, conversationId, mode, providerId, model, options)
                 }
             }
         }
@@ -538,7 +546,7 @@ class ChatEngine(
             if (call.id in deferred) {
                 deferred.getValue(call.id).await()
             } else {
-                executeTool(call, conversationId, mode, providerId, model)
+                executeTool(call, conversationId, mode, providerId, model, options)
             }
         }
     }
@@ -549,12 +557,23 @@ class ChatEngine(
         mode: AgentMode,
         providerId: String,
         model: String,
+        options: TurnOptions,
     ): ToolResult {
         val startedAt = System.currentTimeMillis()
-        val result = if (call.name == "spawn_agent") {
-            runSubAgent(call, providerId, model)
+        val allowed = options.allowedTools
+        val result = if (allowed != null && call.name !in allowed) {
+            ToolResult(
+                ok = false,
+                content = "Tool is not available in this turn: ${call.name}",
+                summary = "Tool blocked",
+            )
         } else {
-            tools.execute(call, conversationId, mode)
+            options.toolHandler?.invoke(call)
+                ?: if (call.name == "spawn_agent") {
+                    runSubAgent(call, providerId, model)
+                } else {
+                    tools.execute(call, conversationId, mode)
+                }
         }
         return result.copy(durationMs = System.currentTimeMillis() - startedAt)
     }
