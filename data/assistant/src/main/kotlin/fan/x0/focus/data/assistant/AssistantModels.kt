@@ -97,6 +97,71 @@ data class ChatAttachment(
         get() = base64?.let { "data:$mime;base64,$it" }
 }
 
+enum class ConversationKind {
+    Chat,
+    Main,
+    Router,
+    Side,
+    ;
+
+    val wire: String get() = name.lowercase()
+
+    companion object {
+        fun fromWire(value: String): ConversationKind =
+            entries.firstOrNull { it.wire == value.lowercase() } ?: Chat
+    }
+}
+
+enum class ConversationOrigin {
+    User,
+    Agent,
+    Im,
+    System,
+    ;
+
+    val wire: String get() = name.lowercase()
+
+    companion object {
+        fun fromWire(value: String): ConversationOrigin =
+            entries.firstOrNull { it.wire == value.lowercase() } ?: User
+    }
+}
+
+enum class TaskStatus {
+    None,
+    Queued,
+    Running,
+    Waiting,
+    Done,
+    Failed,
+    Interrupted,
+    NoResult,
+    ;
+
+    val wire: String get() = name.lowercase()
+
+    val active: Boolean get() = this == Queued || this == Running || this == Waiting
+
+    companion object {
+        fun fromWire(value: String): TaskStatus =
+            entries.firstOrNull { it.wire == value.lowercase() } ?: None
+    }
+}
+
+enum class WorkerProfile {
+    Light,
+    Standard,
+    Heavy,
+    ;
+
+    val wire: String get() = name.lowercase()
+
+    companion object {
+        fun fromWire(value: String): WorkerProfile =
+            entries.firstOrNull { it.wire == value.lowercase() } ?: Standard
+    }
+}
+
 data class Conversation(
     val id: String,
     val title: String,
@@ -110,6 +175,13 @@ data class Conversation(
     val plan: ProposedPlan? = null,
     val planStatus: PlanStatus = PlanStatus.None,
     val planRequestId: String = "",
+    val kind: ConversationKind = ConversationKind.Chat,
+    val parentId: String = "",
+    val origin: ConversationOrigin = ConversationOrigin.User,
+    val taskStatus: TaskStatus = TaskStatus.None,
+    val workerProfile: WorkerProfile = WorkerProfile.Standard,
+    val taskNote: String = "",
+    val resultSeen: Boolean = true,
 )
 
 enum class GoalStatus { Active, Paused, Done }

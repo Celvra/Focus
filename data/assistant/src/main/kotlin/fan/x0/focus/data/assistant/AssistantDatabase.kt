@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 19) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 20) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -23,7 +23,14 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 mode TEXT NOT NULL DEFAULT 'build',
                 plan_json TEXT,
                 plan_status TEXT NOT NULL DEFAULT 'none',
-                plan_request_id TEXT NOT NULL DEFAULT ''
+                plan_request_id TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL DEFAULT 'chat',
+                parent_id TEXT NOT NULL DEFAULT '',
+                origin TEXT NOT NULL DEFAULT 'user',
+                task_status TEXT NOT NULL DEFAULT 'none',
+                worker_profile TEXT NOT NULL DEFAULT 'standard',
+                task_note TEXT NOT NULL DEFAULT '',
+                result_seen INTEGER NOT NULL DEFAULT 1
             )
             """.trimIndent(),
         )
@@ -307,6 +314,55 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             """.trimIndent(),
         )
         db.execSQL("CREATE INDEX idx_im_seen_time ON im_seen(seen_at)")
+        db.execSQL(
+            """
+            CREATE TABLE agent_events(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                target TEXT NOT NULL,
+                thread_key TEXT NOT NULL DEFAULT '',
+                payload TEXT NOT NULL DEFAULT '{}',
+                dedupe_key TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                due_at INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                processed_at INTEGER,
+                error TEXT
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE UNIQUE INDEX idx_agent_events_dedupe ON agent_events(dedupe_key)")
+        db.execSQL("CREATE INDEX idx_agent_events_pending ON agent_events(status, due_at, id)")
+        db.execSQL(
+            """
+            CREATE TABLE thread_subscriptions(
+                thread_key TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY(thread_key, conversation_id)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX idx_thread_subscriptions_conversation ON thread_subscriptions(conversation_id)")
+        db.execSQL(
+            """
+            CREATE TABLE turn_journal(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id TEXT NOT NULL,
+                turn_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'running',
+                tool_calls TEXT NOT NULL DEFAULT '',
+                repeated_calls INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT '',
+                started_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX idx_turn_journal_conversation ON turn_journal(conversation_id, id)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -606,6 +662,70 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
         if (oldVersion < 19) {
             db.execSQL("ALTER TABLE im_chats ADD COLUMN send_thinking INTEGER NOT NULL DEFAULT 1")
             db.execSQL("ALTER TABLE im_chats ADD COLUMN send_tools INTEGER NOT NULL DEFAULT 1")
+        }
+        if (oldVersion < 20) {
+            db.execSQL("ALTER TABLE conversations ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN parent_id TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN origin TEXT NOT NULL DEFAULT 'user'")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN task_status TEXT NOT NULL DEFAULT 'none'")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN worker_profile TEXT NOT NULL DEFAULT 'standard'")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN task_note TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE conversations ADD COLUMN result_seen INTEGER NOT NULL DEFAULT 1")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS agent_events(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    target TEXT NOT NULL,
+                    thread_key TEXT NOT NULL DEFAULT '',
+                    payload TEXT NOT NULL DEFAULT '{}',
+                    dedupe_key TEXT,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    due_at INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    processed_at INTEGER,
+                    error TEXT
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_events_dedupe ON agent_events(dedupe_key)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_agent_events_pending ON agent_events(status, due_at, id)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS thread_subscriptions(
+                    thread_key TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL,
+                    reason TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL,
+                    PRIMARY KEY(thread_key, conversation_id)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_thread_subscriptions_conversation " +
+                    "ON thread_subscriptions(conversation_id)",
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS turn_journal(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    conversation_id TEXT NOT NULL,
+                    turn_id INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'running',
+                    tool_calls TEXT NOT NULL DEFAULT '',
+                    repeated_calls INTEGER NOT NULL DEFAULT 0,
+                    note TEXT NOT NULL DEFAULT '',
+                    started_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_turn_journal_conversation " +
+                    "ON turn_journal(conversation_id, id)",
+            )
         }
     }
 
