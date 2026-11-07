@@ -65,7 +65,19 @@ class ContextAssembler(
                     ChatRole.System -> "App"
                     ChatRole.Tool -> "Tool"
                 }
-                val body = message.content.trim().replace('\n', ' ').take(500)
+                val body = if (message.label == MainChannelSession.SIDE_RESULT_LABEL) {
+                    val card = runCatching {
+                        kotlinx.serialization.json.Json
+                            .decodeFromString(SideResultCard.serializer(), message.content)
+                    }.getOrNull()
+                    if (card == null) {
+                        ""
+                    } else {
+                        "Side chat result: ${card.title} (${if (card.failed) "failed" else "done"}): ${card.summary}"
+                    }
+                } else {
+                    message.content.trim().replace('\n', ' ')
+                }.take(500)
                 if (body.isNotBlank()) builder.appendLine("$who: $body")
             }
         }

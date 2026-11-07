@@ -49,6 +49,10 @@ class DataUsageStore(private val database: AssistantDatabase) {
         try {
             db.delete("conversation_todos", null, null)
             db.delete("messages", null, null)
+            db.delete("compactions", null, null)
+            db.delete("thread_subscriptions", null, null)
+            db.delete("turn_journal", null, null)
+            db.delete("agent_events", null, null)
             db.delete("conversations", null, null)
             db.setTransactionSuccessful()
         } finally {

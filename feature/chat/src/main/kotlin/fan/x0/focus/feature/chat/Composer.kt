@@ -291,6 +291,7 @@ internal fun Composer(
 
 @Composable
 private fun ChatUiState.inputPlaceholder(): String {
+    if (isMain && sending && workingText.isNotBlank()) return workingText
     val title = title.trim()
     return if (title.isBlank()) {
         stringResource(R.string.chat_input_hint)

@@ -1414,6 +1414,10 @@ class ChatViewModel(
     private suspend fun reload() {
         val id = currentState.conversationId
         if (id.isBlank()) return
+        if (chats.conversation(id) == null) {
+            load(chats.ensureMainConversation().id)
+            return
+        }
         if (turns.isRunning(id)) return
         val generation = loadGeneration
         val messages = chats.messages(id)
@@ -1459,6 +1463,10 @@ class ChatViewModel(
     }
 
     private suspend fun load(conversationId: String) {
+        if (chats.conversation(conversationId) == null) {
+            load(chats.ensureMainConversation().id)
+            return
+        }
         val generation = ++loadGeneration
         resetDisplay(conversationId)
         resetLiveUser()
