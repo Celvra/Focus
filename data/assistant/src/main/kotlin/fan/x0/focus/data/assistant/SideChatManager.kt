@@ -68,6 +68,7 @@ class SideChatManager(
                         chats.setTaskStatus(conversationId, TaskStatus.Running)
                     }
                 }
+                main.setActivities(workerActivities(states))
             }
         }
         scope.launch {
@@ -442,6 +443,26 @@ class SideChatManager(
     private val TaskStatus.settledSide: Boolean
         get() = this == TaskStatus.Done || this == TaskStatus.Failed || this == TaskStatus.NoResult ||
             this == TaskStatus.Interrupted
+
+    private suspend fun workerActivities(states: Map<String, ChatTurnState>): List<WorkerActivity> =
+        states.mapNotNull { (conversationId, turn) ->
+            if (!turn.running) return@mapNotNull null
+            val conversation = chats.conversation(conversationId) ?: return@mapNotNull null
+            if (conversation.kind != ConversationKind.Side) return@mapNotNull null
+            val waiting = waitingKey(turn)
+            val step = turn.entries
+                .filterIsInstance<ChatTurnEntry.Trace>()
+                .flatMap { it.steps }
+                .lastOrNull()
+            val label = waiting ?: step?.label ?: "正在处理"
+            WorkerActivity(
+                id = conversationId,
+                title = conversation.title.ifBlank { "旁聊" },
+                label = label,
+                running = waiting == null && step?.status != ChatTurnStepStatus.Done &&
+                    step?.status != ChatTurnStepStatus.Failed,
+            )
+        }
 
     private fun waitingKey(turn: ChatTurnState): String? {
         turn.entries.forEach { entry ->

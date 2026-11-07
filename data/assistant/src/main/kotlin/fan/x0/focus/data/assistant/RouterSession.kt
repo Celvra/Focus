@@ -125,6 +125,14 @@ class RouterSession(
                                 journal.touch(router.id, turnId)
                             }
                         }
+                        is ChatEvent.ReasoningDelta -> {
+                            outcome.reasoning += event.text
+                            main.setReasoning(outcome.reasoning, outcome.reasoningMs)
+                        }
+                        is ChatEvent.ReasoningTimed -> {
+                            outcome.reasoningMs = event.durationMs
+                            main.setReasoningDone(event.durationMs)
+                        }
                         is ChatEvent.StatsUpdated -> {
                             val now = System.currentTimeMillis()
                             if (now - lastTouch > TOUCH_MS) {
@@ -158,7 +166,13 @@ class RouterSession(
                 val text = outcome.answer.trim().ifBlank {
                     if (flags.started > 0) "已开始旁聊，完成后会通知你。" else ""
                 }
-                if (text.isNotBlank()) main.appendAssistant(text)
+                if (text.isNotBlank()) {
+                    main.appendAssistant(
+                        text = text,
+                        reasoning = outcome.reasoning,
+                        reasoningMs = outcome.reasoningMs,
+                    )
+                }
             }
             claimed.forEach { events.complete(it.id) }
             journalStatus = "done"
@@ -200,5 +214,7 @@ class RouterSession(
 
 private class TurnOutcome(
     var answer: String = "",
+    var reasoning: String = "",
+    var reasoningMs: Long = 0,
     var error: String? = null,
 )

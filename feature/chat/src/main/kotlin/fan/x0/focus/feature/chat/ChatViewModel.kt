@@ -257,6 +257,9 @@ class ChatViewModel(
                     )
                 }
                 if (!isMain || currentState.loading) return@collect
+                if (channel.reasoning.isNotBlank() || channel.reasoningMs > 0) {
+                    updateMainReasoning(channel.reasoning, channel.reasoningMs)
+                }
                 if (channel.streaming.isNotBlank() && currentState.conversationId == ChatStore.MAIN_CONVERSATION_ID) {
                     updateDisplayTarget(currentState.conversationId, 0L, channel.streaming)
                     updateState { copy(sending = true) }
@@ -863,7 +866,6 @@ class ChatViewModel(
                 }
             }
             SlashCommandId.Effort -> {
-                if (currentState.isMain) return
                 val level = ReasoningLevel.entries.firstOrNull {
                     it.name.equals(argument, ignoreCase = true)
                 }
@@ -1317,7 +1319,7 @@ class ChatViewModel(
 
     private fun selectRouterModel(providerId: String, model: String) {
         launchGuarded(onError = {}) {
-            roles.set(AgentRole.Router, providerId, model, ReasoningLevel.Auto.name)
+            roles.set(AgentRole.Router, providerId, model, currentState.routerReasoning.name)
             val config = settings.configOnce()
             val name = config.providers.firstOrNull { it.id == providerId }?.name ?: providerId
             val label = "$name · $model"
@@ -1334,6 +1336,23 @@ class ChatViewModel(
     }
 
     private fun selectReasoning(level: ReasoningLevel) {
+        if (currentState.isMain) {
+            launchGuarded(onError = {}) {
+                val config = settings.configOnce()
+                val assigned = roles.configsOnce()[AgentRole.Router]
+                val providerId = currentState.routerProviderId
+                    .ifBlank { assigned?.providerId.orEmpty() }
+                    .ifBlank { config.activeProviderId }
+                val model = currentState.routerModelId
+                    .ifBlank { assigned?.model.orEmpty() }
+                    .ifBlank { config.activeProvider?.model.orEmpty() }
+                if (providerId.isNotBlank() && model.isNotBlank()) {
+                    roles.set(AgentRole.Router, providerId, model, level.name)
+                }
+                updateState { copy(routerReasoning = level) }
+            }
+            return
+        }
         persistTurnSettings(reasoning = level.name)
         updateState { copy(reasoningLevel = level) }
     }
@@ -1494,6 +1513,7 @@ class ChatViewModel(
                 routerModel = routerLabel.ifBlank { mainChannel.state.value.routerModel },
                 routerProviderId = routerConfig?.providerId.orEmpty(),
                 routerModelId = routerConfig?.model.orEmpty(),
+                routerReasoning = ReasoningLevel.fromName(routerConfig?.reasoning),
                 sideActiveCount = mainChannel.state.value.activeSideChats,
                 sideUnreadCount = mainChannel.state.value.unreadResults,
                 providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon, it.models) },
@@ -1573,6 +1593,7 @@ class ChatViewModel(
                 routerModel = routerLabel.ifBlank { mainChannel.state.value.routerModel },
                 routerProviderId = routerConfig?.providerId.orEmpty(),
                 routerModelId = routerConfig?.model.orEmpty(),
+                routerReasoning = ReasoningLevel.fromName(routerConfig?.reasoning),
                 sideActiveCount = mainChannel.state.value.activeSideChats,
                 sideUnreadCount = mainChannel.state.value.unreadResults,
                 name = name,
@@ -1858,6 +1879,40 @@ class ChatViewModel(
                 if (displayText.length >= displayTarget.length) break
                 displayText = displayTarget.take((displayText.length + step).coerceAtMost(displayTarget.length))
                 showDisplayText()
+            }
+        }
+    }
+
+    private fun updateMainReasoning(reasoning: String, reasoningMs: Long) {
+        updateState {
+            val index = live.indexOfLast { it is ChatEntry.Assistant }
+            if (index >= 0) {
+                val entry = live[index] as ChatEntry.Assistant
+                val startedAt = when {
+                    reasoningMs > 0 -> 0L
+                    entry.reasoningStartedAt > 0 -> entry.reasoningStartedAt
+                    else -> System.currentTimeMillis()
+                }
+                copy(
+                    live = live.toMutableList().also {
+                        it[index] = entry.copy(
+                            reasoning = reasoning,
+                            reasoningMs = reasoningMs,
+                            reasoningStartedAt = startedAt,
+                        )
+                    },
+                )
+            } else {
+                copy(
+                    live = live + ChatEntry.Assistant(
+                        key = "live-answer-final-0",
+                        text = "",
+                        live = true,
+                        reasoning = reasoning,
+                        reasoningMs = reasoningMs,
+                        reasoningStartedAt = if (reasoningMs > 0) 0L else System.currentTimeMillis(),
+                    ),
+                )
             }
         }
     }

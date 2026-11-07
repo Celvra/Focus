@@ -30,11 +30,37 @@ class OverlayViewModel(
         }
         viewModelScope.launch {
             main.state.collect { channel ->
+                val streaming = channel.streaming
+                val reasoning = channel.reasoning
+                updateState { copy(toolSteps = channel.activities.toSteps()) }
+                if (streaming.isNotBlank() || reasoning.isNotBlank() || channel.reasoningMs > 0) {
+                    pendingSubmit = false
+                    wasWorking = true
+                    updateState {
+                        val base = messages.filterNot { it.id == STREAMING_ID }
+                        copy(
+                            sending = true,
+                            messages = base + OverlayMessage(
+                                id = STREAMING_ID,
+                                role = OverlayRole.Assistant,
+                                text = streaming,
+                                streaming = true,
+                                reasoning = reasoning,
+                                reasoningMs = channel.reasoningMs,
+                            ),
+                        )
+                    }
+                }
                 when {
                     channel.working -> {
                         pendingSubmit = false
                         wasWorking = true
-                        updateState { copy(sending = true) }
+                        updateState {
+                            copy(
+                                sending = true,
+                                toolSteps = channel.activities.toSteps(),
+                            )
+                        }
                     }
                     wasWorking -> {
                         wasWorking = false
@@ -61,7 +87,13 @@ class OverlayViewModel(
                 router.stopCurrent()
                 wasWorking = false
                 pendingSubmit = false
-                updateState { copy(sending = false) }
+                updateState {
+                    copy(
+                        sending = false,
+                        messages = messages.filterNot { it.id == STREAMING_ID } +
+                            OverlayMessage(-2, OverlayRole.Assistant, "已停止。"),
+                    )
+                }
             }
             OverlayAction.CaptureRequested -> updateState {
                 copy(capturing = true, error = null, errorDetail = null)
@@ -115,11 +147,18 @@ class OverlayViewModel(
                 approval = null,
                 trust = null,
                 ask = null,
-                messages = messages + OverlayMessage(
-                    id = -System.currentTimeMillis(),
-                    role = OverlayRole.User,
-                    text = message.ifBlank { "看一下这张图片" },
-                ),
+                messages = messages +
+                    OverlayMessage(
+                        id = -System.currentTimeMillis(),
+                        role = OverlayRole.User,
+                        text = message.ifBlank { "看一下这张图片" },
+                    ) +
+                    OverlayMessage(
+                        id = STREAMING_ID,
+                        role = OverlayRole.Assistant,
+                        text = "",
+                        streaming = true,
+                    ),
             )
         }
         launchGuarded(
@@ -130,6 +169,7 @@ class OverlayViewModel(
                         sending = false,
                         error = OverlayError.SendFailed,
                         errorDetail = error.serverMessage ?: error.serverTitle,
+                        messages = messages.filterNot { it.id == STREAMING_ID },
                     )
                 }
             },
@@ -145,6 +185,7 @@ class OverlayViewModel(
                         sending = false,
                         error = OverlayError.SendFailed,
                         errorDetail = null,
+                        messages = messages.filterNot { it.id == STREAMING_ID },
                     )
                 }
             }
@@ -160,9 +201,36 @@ class OverlayViewModel(
                     else -> return@mapNotNull null
                 }
                 val text = message.content.trim()
-                if (text.isBlank()) return@mapNotNull null
-                OverlayMessage(id = message.id, role = role, text = text)
+                val reasoning = message.reasoning.trim()
+                if (text.isBlank() && reasoning.isBlank()) return@mapNotNull null
+                OverlayMessage(
+                    id = message.id,
+                    role = role,
+                    text = text,
+                    reasoning = reasoning,
+                    reasoningMs = message.elapsedMs,
+                )
             }
-        updateState { copy(messages = messages) }
+        val activities = main.state.value.activities.toSteps()
+        updateState {
+            copy(
+                messages = messages,
+                sending = main.state.value.working,
+                toolSteps = activities,
+            )
+        }
+    }
+
+    private fun List<fan.x0.focus.data.assistant.WorkerActivity>.toSteps(): List<OverlayToolStep> =
+        map { activity ->
+            OverlayToolStep(
+                id = activity.id,
+                label = "${activity.title} · ${activity.label}",
+                status = if (activity.running) OverlayStepStatus.Running else OverlayStepStatus.Done,
+            )
+        }
+
+    private companion object {
+        const val STREAMING_ID = -1L
     }
 }

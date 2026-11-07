@@ -199,6 +199,13 @@ internal fun Composer(
                         compact = true,
                         onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.RouterModel)) },
                     )
+                    FocusComposerPill(
+                        label = stringResource(state.routerReasoning.labelRes()),
+                        icon = FocusIcons.Idea,
+                        selected = state.routerReasoning.isEnabled,
+                        compact = true,
+                        onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Reasoning)) },
+                    )
                 } else {
                     FocusComposerPill(
                         label = modelLabel.ifBlank { stringResource(R.string.chat_picker_model_empty) },
@@ -300,8 +307,8 @@ internal fun Composer(
             )
         }
         ComposerPicker.Reasoning -> ReasoningPickerSheet(
-            level = state.reasoningLevel,
-            model = state.model,
+            level = if (state.isMain) state.routerReasoning else state.reasoningLevel,
+            model = if (state.isMain) state.routerModelId else state.model,
             onSelect = { onAction(ChatAction.SelectReasoning(it)) },
             onDismiss = { onAction(ChatAction.OpenPicker(null)) },
         )

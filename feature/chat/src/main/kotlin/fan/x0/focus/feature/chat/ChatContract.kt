@@ -323,6 +323,7 @@ data class ChatUiState(
     val routerModel: String = "",
     val routerProviderId: String = "",
     val routerModelId: String = "",
+    val routerReasoning: ReasoningLevel = ReasoningLevel.Auto,
     val sideActiveCount: Int = 0,
     val sideUnreadCount: Int = 0,
     val sidePanel: SidePanelUi = SidePanelUi(),

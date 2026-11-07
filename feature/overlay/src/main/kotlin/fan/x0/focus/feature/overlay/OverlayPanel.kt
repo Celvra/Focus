@@ -255,8 +255,11 @@ internal fun OverlayResultContent(
                                 },
                                 label = "overlayTurn",
                             ) { animatedState ->
-                                val question = animatedState.messages.lastOrNull { it.role == OverlayRole.User }
-                                val answer = animatedState.messages.lastOrNull { it.role == OverlayRole.Assistant }
+                                val questionIndex = animatedState.messages.indexOfLast { it.role == OverlayRole.User }
+                                val question = animatedState.messages.getOrNull(questionIndex)
+                                val answer = animatedState.messages
+                                    .drop(questionIndex + 1)
+                                    .lastOrNull { it.role == OverlayRole.Assistant }
                                 Box(
                                     modifier = Modifier
                                         .widthIn(max = 640.dp)
@@ -359,6 +362,32 @@ private fun AnswerBlock(
             )
             Spacer(modifier = Modifier.height(10.dp))
         }
+        answer?.reasoning?.takeIf { it.isNotBlank() }?.let { reasoning ->
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = scheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.overlay_reasoning),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = scheme.primary,
+                    )
+                    FocusMarkdown(
+                        text = reasoning,
+                        modifier = Modifier.fillMaxWidth(),
+                        color = scheme.onSurfaceVariant,
+                        streaming = answer.streaming && answer.text.isBlank(),
+                        bodyStyle = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+        }
         if (state.toolSteps.isNotEmpty()) {
             ToolSteps(state.toolSteps)
             Spacer(modifier = Modifier.height(10.dp))
@@ -408,6 +437,11 @@ private fun AnswerBlock(
                     )
                 }
             }
+            question != null && (answer == null || (answer.text.isBlank() && answer.reasoning.isBlank())) -> Text(
+                text = stringResource(R.string.overlay_no_reply),
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+            )
         }
     }
 }

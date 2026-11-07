@@ -15,6 +15,8 @@ data class OverlayMessage(
     val role: OverlayRole,
     val text: String,
     val streaming: Boolean = false,
+    val reasoning: String = "",
+    val reasoningMs: Long = 0,
 )
 
 data class OverlayAttachment(
@@ -88,11 +90,13 @@ data class OverlayUiState(
 val OverlayUiState.hasResult: Boolean
     get() {
         val answer = messages.lastOrNull { it.role == OverlayRole.Assistant }
+        val lastIsUser = messages.lastOrNull()?.role == OverlayRole.User
         return error != null ||
             approval != null ||
             trust != null ||
             toolSteps.isNotEmpty() ||
-            (answer != null && (answer.text.isNotBlank() || answer.streaming))
+            lastIsUser ||
+            (answer != null && (answer.text.isNotBlank() || answer.streaming || answer.reasoning.isNotBlank()))
     }
 
 sealed interface OverlayAction : UiAction {

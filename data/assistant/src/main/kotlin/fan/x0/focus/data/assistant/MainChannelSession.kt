@@ -11,10 +11,20 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import org.koin.core.annotation.Single
 
+data class WorkerActivity(
+    val id: String,
+    val title: String,
+    val label: String,
+    val running: Boolean,
+)
+
 data class MainChannelState(
     val working: Boolean = false,
     val workingText: String = "",
     val streaming: String = "",
+    val reasoning: String = "",
+    val reasoningMs: Long = 0,
+    val activities: List<WorkerActivity> = emptyList(),
     val activeSideChats: Int = 0,
     val unreadResults: Int = 0,
     val routerModel: String = "",
@@ -72,7 +82,12 @@ class MainChannelSession(
         return messageId.takeIf { stored?.status == AgentEventStatus.Pending }
     }
 
-    suspend fun appendAssistant(text: String, label: String? = "router") {
+    suspend fun appendAssistant(
+        text: String,
+        label: String? = "router",
+        reasoning: String = "",
+        reasoningMs: Long = 0,
+    ) {
         val body = text.trim()
         if (body.isBlank()) return
         val conversation = chats.ensureMainConversation()
@@ -80,6 +95,8 @@ class MainChannelSession(
             conversationId = conversation.id,
             role = ChatRole.Assistant,
             content = body,
+            reasoning = reasoning,
+            elapsedMs = reasoningMs,
             label = label,
         )
         notifier.notifyReply(
@@ -185,13 +202,28 @@ class MainChannelSession(
             it.copy(
                 working = working,
                 workingText = if (working) text.ifBlank { it.workingText } else "",
-                streaming = if (working) it.streaming else "",
+                streaming = if (working) "" else "",
+                reasoning = if (working) "" else "",
+                reasoningMs = if (working) 0 else it.reasoningMs,
+                activities = if (working) it.activities else emptyList(),
             )
         }
     }
 
     fun setStreaming(text: String) {
         _state.update { it.copy(streaming = text) }
+    }
+
+    fun setReasoning(text: String, durationMs: Long = 0) {
+        _state.update { it.copy(reasoning = text, reasoningMs = durationMs) }
+    }
+
+    fun setReasoningDone(durationMs: Long) {
+        _state.update { it.copy(reasoningMs = durationMs) }
+    }
+
+    fun setActivities(activities: List<WorkerActivity>) {
+        _state.update { it.copy(activities = activities) }
     }
 
     fun setWorkingText(text: String) {
