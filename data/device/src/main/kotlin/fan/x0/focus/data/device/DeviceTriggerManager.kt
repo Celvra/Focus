@@ -1,6 +1,8 @@
 package fan.x0.focus.data.device
 
 import android.content.Context
+import fan.x0.focus.data.assistant.AgentEvent
+import fan.x0.focus.data.assistant.AgentEventBus
 import fan.x0.focus.data.assistant.AssistantTriggerBus
 import fan.x0.focus.data.assistant.AssistantTriggerEvent
 import fan.x0.focus.data.device.system.DeviceTriggerService
@@ -22,6 +24,7 @@ class DeviceTriggerManager(
     private val shell: DeviceShell,
     private val notifier: DeviceNotifier,
     private val triggerBus: AssistantTriggerBus,
+    private val agentEvents: AgentEventBus,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lastFired = ConcurrentHashMap<String, Long>()
@@ -74,6 +77,13 @@ class DeviceTriggerManager(
                                                 conversationId = trigger.conversationId,
                                                 label = trigger.name,
                                                 prompt = trigger.command,
+                                            ),
+                                        )
+                                        agentEvents.publish(
+                                            AgentEvent.deviceTrigger(
+                                                label = trigger.name,
+                                                prompt = trigger.command,
+                                                conversationId = trigger.conversationId,
                                             ),
                                         )
                                     }

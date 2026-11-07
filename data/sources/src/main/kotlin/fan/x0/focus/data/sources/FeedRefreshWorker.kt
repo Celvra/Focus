@@ -26,6 +26,12 @@ class FeedRefreshWorker(context: Context, params: WorkerParameters) : CoroutineW
             runCatching {
                 KoinPlatform.getKoin().get<MessageNotifier>().notifyFeeds(report.added)
             }
+            runCatching {
+                val koin = KoinPlatform.getKoin()
+                koin.getAll<FeedUpdateEmitter>().forEach { emitter ->
+                    emitter.feedUpdated(report.added)
+                }
+            }
         }
         Result.success()
     } catch (e: CancellationException) {

@@ -30,6 +30,9 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             } catch (e: Exception) {
                 // The notification already fired; a missing store must not retry.
             }
+            runCatching {
+                KoinPlatform.getKoin().get<AgentEventBus>().publish(AgentEvent.reminder(id, text))
+            }
         }
         return Result.success()
     }

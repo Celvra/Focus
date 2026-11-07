@@ -33,6 +33,7 @@ data class BackgroundJobSnapshot(
 class BackgroundCommandMonitor(
     private val chats: ChatStore,
     private val bridge: BridgeRepository,
+    private val bus: AgentEventBus,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, Job>()
@@ -76,6 +77,7 @@ class BackgroundCommandMonitor(
                     logs = tail,
                 ),
             )
+            bus.publish(AgentEvent.backgroundCommand(conversationId, jobId, snapshot.summary, tail))
             jobs.remove(jobId)
         }
     }
@@ -135,6 +137,7 @@ class BackgroundCommandMonitor(
                     logs = tail,
                 ),
             )
+            bus.publish(AgentEvent.backgroundCommand(conversationId, jobId, summary, tail))
             jobs.remove(jobId)
         }
     }
