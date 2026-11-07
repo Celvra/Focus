@@ -111,12 +111,13 @@ class ChatStore(private val database: AssistantDatabase) {
         providerId: String = "",
         model: String = "",
         reasoning: String = "",
+        origin: ConversationOrigin = ConversationOrigin.Agent,
     ): Conversation = withContext(Dispatchers.IO) {
         insertConversation(
             id = UUID.randomUUID().toString(),
             title = title,
             kind = ConversationKind.Side,
-            origin = ConversationOrigin.Agent,
+            origin = origin,
             parentId = parentId,
             taskStatus = TaskStatus.Queued,
             workerProfile = profile,

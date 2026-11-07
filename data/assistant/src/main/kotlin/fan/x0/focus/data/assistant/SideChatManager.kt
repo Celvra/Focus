@@ -138,6 +138,7 @@ class SideChatManager(
             providerId = resolved?.providerId.orEmpty(),
             model = resolved?.model.orEmpty(),
             reasoning = (resolved?.reasoning ?: ReasoningLevel.Auto).name,
+            origin = ConversationOrigin.User,
         )
         threads.subscribe("side:${conversation.id}", conversation.id, "self")
         chats.setTaskStatus(conversation.id, TaskStatus.None)
