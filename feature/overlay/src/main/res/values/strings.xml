@@ -51,4 +51,9 @@
     <string name="overlay_display_window_waiting">Waiting for the screen</string>
     <string name="overlay_display_window_hint">Tap or swipe to take over</string>
     <string name="overlay_display_window_screen">Virtual screen content</string>
+    <string name="overlay_display_window_more">More actions</string>
+    <string name="overlay_display_window_hover">Float</string>
+    <string name="overlay_display_window_minimize">Minimize</string>
+    <string name="overlay_display_window_resize">Resize</string>
+    <string name="overlay_display_window_restore">Restore virtual screen</string>
 </resources>

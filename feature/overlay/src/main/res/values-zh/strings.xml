@@ -51,4 +51,9 @@
     <string name="overlay_display_window_waiting">等待画面</string>
     <string name="overlay_display_window_hint">点击或滑动接管</string>
     <string name="overlay_display_window_screen">虚拟屏内容</string>
+    <string name="overlay_display_window_more">更多操作</string>
+    <string name="overlay_display_window_hover">悬浮小窗</string>
+    <string name="overlay_display_window_minimize">最小化</string>
+    <string name="overlay_display_window_resize">调整大小</string>
+    <string name="overlay_display_window_restore">恢复虚拟屏</string>
 </resources>
