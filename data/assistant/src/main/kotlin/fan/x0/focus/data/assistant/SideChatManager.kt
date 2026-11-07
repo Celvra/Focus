@@ -1,5 +1,6 @@
 package fan.x0.focus.data.assistant
 
+import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.MessageNotifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +32,7 @@ class SideChatManager(
     private val models: ModelResolver,
     private val main: MainChannelSession,
     private val notifier: MessageNotifier,
+    private val presence: AppPresence,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -304,7 +306,9 @@ class SideChatManager(
             "后台命令完成：${event.text()}\n${event.payloadObject()["logs"].stringValue().take(2_000)}"
         AgentEventKind.Reminder -> "提醒：${event.text()}"
         AgentEventKind.DeviceTrigger -> "设备触发器：${event.text()}"
-        AgentEventKind.FeedUpdate -> "订阅源更新：${event.text()}"
+        AgentEventKind.FeedUpdate ->
+            "订阅源更新：${event.payloadObject()["title"].stringValue()} " +
+                "新增 ${event.payloadObject()["count"].stringValue()} 篇"
         AgentEventKind.WatchdogAlarm -> "看门狗：${event.text()}"
         else -> event.text().ifBlank { event.note() }
     }
@@ -366,7 +370,7 @@ class SideChatManager(
         val summary = result.error?.let { it.serverMessage ?: it.serverTitle ?: it.type.name }
             ?: result.answer.trim().take(600)
         chats.setTaskStatus(conversation.id, status)
-        chats.setResultSeen(conversation.id, false)
+        chats.setResultSeen(conversation.id, presence.visibleConversationId.value == conversation.id)
         release(conversation.id)
         if (status == TaskStatus.Failed) {
             main.appendSideResult(

@@ -124,7 +124,8 @@ class ContextAssembler(
             "Background command finished: ${event.text()}\n${event.payloadObject()["logs"].stringValue().take(1_200)}"
         AgentEventKind.Reminder -> "Reminder: ${event.text()}"
         AgentEventKind.DeviceTrigger -> "Device trigger ${event.payloadObject()["label"].stringValue()}: ${event.text()}"
-        AgentEventKind.FeedUpdate -> "Feed update: ${event.text()}"
+        AgentEventKind.FeedUpdate -> "Feed update: ${event.payloadObject()["title"].stringValue()} " +
+            "(${event.payloadObject()["count"].stringValue()} new)"
         AgentEventKind.WatchdogAlarm -> "Watchdog: ${event.text()}"
     }
 

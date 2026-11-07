@@ -1434,7 +1434,8 @@ class ChatViewModel(
         val provider = config.providers.firstOrNull { it.id == providerId } ?: config.activeProvider
         val model = conversation?.model?.ifBlank { null } ?: provider?.model.orEmpty()
         val todos = chats.todos(id)
-        val entries = messages.toEntries(compaction) + listOfNotNull(planEntry(conversation))
+        val entries = messages.toEntries(compaction, main = conversation?.kind == ConversationKind.Main) +
+            listOfNotNull(planEntry(conversation))
         if (currentState.conversationId != id || generation != loadGeneration) return
         if (turns.isRunning(id)) return
         resetDisplay(id)
@@ -1510,7 +1511,8 @@ class ChatViewModel(
             messages
         }
         if (runningTurn.running) localTurnId = 0
-        val entries = visibleMessages.toEntries(compaction) + listOfNotNull(planEntry(conversation))
+        val entries = visibleMessages.toEntries(compaction, main = conversation?.kind == ConversationKind.Main) +
+            listOfNotNull(planEntry(conversation))
         updateState {
             copy(
                 loading = false,
@@ -1696,6 +1698,7 @@ class ChatViewModel(
     private suspend fun handleResult(result: ChatTurnResult) {
         if (result.conversationId != currentState.conversationId) return
         if (!turns.consumeResult(result.conversationId, result.turnId)) return
+        if (currentState.isSide) sideChats.markSeen(result.conversationId)
         statsJob?.cancel()
         completeDisplay(result)
         awaitingUserTurn = false
@@ -1942,7 +1945,10 @@ class ChatViewModel(
         ChatTurnTrustPhase.Declined -> TrustPhase.Declined
     }
 
-    private suspend fun List<ChatMessage>.toEntries(compaction: ConversationCompaction?): List<ChatEntry> {
+    private suspend fun List<ChatMessage>.toEntries(
+        compaction: ConversationCompaction?,
+        main: Boolean = currentState.isMain,
+    ): List<ChatEntry> {
         val quotes = chats.messagesByIds(mapNotNull { it.replyToId }.toSet())
         val argumentsByCall = flatMap { it.toolCalls }.associate { it.id to it.arguments }
         val entries = mutableListOf<ChatEntry>()
@@ -2000,7 +2006,7 @@ class ChatViewModel(
                     }
                 }
                 ChatRole.Tool -> {
-                    if (!currentState.isMain && message.name != ToolCatalog.SET_WORKING_TEXT) {
+                    if (!main && message.name != ToolCatalog.SET_WORKING_TEXT) {
                         entries += ChatEntry.Trace(
                             key = "m${message.id}",
                             steps = message.toSteps(argumentsByCall[message.toolCallId.orEmpty()].orEmpty()),

@@ -242,6 +242,7 @@ class ChatStore(private val database: AssistantDatabase) {
             db.delete("compactions", "conversation_id = ?", arrayOf(id))
             db.delete("thread_subscriptions", "conversation_id = ?", arrayOf(id))
             db.delete("turn_journal", "conversation_id = ?", arrayOf(id))
+            db.delete("agent_events", "target = ?", arrayOf("side:$id"))
             db.delete("conversations", "id = ?", arrayOf(id))
             db.setTransactionSuccessful()
         } finally {
