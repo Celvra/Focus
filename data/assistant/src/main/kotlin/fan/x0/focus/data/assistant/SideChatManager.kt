@@ -169,6 +169,10 @@ class SideChatManager(
     suspend fun stop(id: String, reason: String = "") {
         val conversation = chats.conversation(id) ?: return
         if (conversation.kind != ConversationKind.Side) return
+        mutex.withLock {
+            queue.remove(id)
+            pendingTasks.remove(id)
+        }
         turns.stop(id)
         chats.setTaskStatus(id, TaskStatus.Interrupted)
         release(id)
