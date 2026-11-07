@@ -21,6 +21,7 @@ data class SuperAgentUiState(
     val maxConcurrent: Int = AgentEventConfig.DEFAULT_MAX_CONCURRENT,
     val watchdog: Boolean = true,
     val rateLimit: Int = AgentEventConfig.DEFAULT_RATE_LIMIT,
+    val postToToday: Boolean = false,
 ) : fan.x0.focus.core.mvi.UiState
 
 sealed interface SuperAgentAction : fan.x0.focus.core.mvi.UiAction {
@@ -29,6 +30,7 @@ sealed interface SuperAgentAction : fan.x0.focus.core.mvi.UiAction {
     data class SetConcurrent(val value: Int) : SuperAgentAction
     data class ToggleWatchdog(val enabled: Boolean) : SuperAgentAction
     data class SetRateLimit(val value: Int) : SuperAgentAction
+    data class ToggleToday(val enabled: Boolean) : SuperAgentAction
 }
 
 sealed interface SuperAgentEffect : fan.x0.focus.core.mvi.UiEffect {
@@ -56,6 +58,7 @@ class SuperAgentViewModel(
                         maxConcurrent = config.maxConcurrentSideChats,
                         watchdog = config.watchdogEnabled,
                         rateLimit = config.rateLimitPerMinute,
+                        postToToday = config.postResultsToToday,
                     )
                 }
             }
@@ -78,6 +81,9 @@ class SuperAgentViewModel(
             }
             is SuperAgentAction.SetRateLimit -> persist {
                 settings.setRateLimit(action.value)
+            }
+            is SuperAgentAction.ToggleToday -> persist {
+                settings.setPostResultsToToday(action.enabled)
             }
         }
     }

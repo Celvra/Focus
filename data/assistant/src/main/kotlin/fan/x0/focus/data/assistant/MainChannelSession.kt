@@ -33,6 +33,8 @@ class MainChannelSession(
     private val chats: ChatStore,
     private val bus: AgentEventBus,
     private val notifier: MessageNotifier,
+    private val settings: AgentEventSettings,
+    private val today: TodayStore,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
     private val attachmentsSerializer = ListSerializer(ChatAttachment.serializer())
@@ -143,6 +145,18 @@ class MainChannelSession(
             label = SIDE_RESULT_LABEL,
         )
         val preview = card.summary.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(140)
+        if (settings.configOnce().postResultsToToday) {
+            runCatching {
+                today.postUpdate(
+                    headline = card.title.ifBlank { "旁聊" },
+                    body = card.summary,
+                    reason = if (card.failed) "旁聊失败" else "旁聊完成",
+                    category = "旁聊",
+                    icon = if (card.failed) "warning" else "task",
+                    articleId = null,
+                )
+            }
+        }
         notifier.notifyReply(
             conversationId = card.sideChatId,
             title = card.title.ifBlank { MAIN_TITLE },

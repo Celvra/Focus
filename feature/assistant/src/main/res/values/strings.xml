@@ -601,5 +601,7 @@
     <string name="settings_super_rate_limit_body">Above %1$d events per source in a minute, new events are filtered.</string>
     <string name="settings_super_watchdog">Watchdog</string>
     <string name="settings_super_watchdog_body">Stop work that times out, repeats a tool, or never reports.</string>
+    <string name="settings_super_today">Post results to Today</string>
+    <string name="settings_super_today_body">Add a card to Today when a side chat result is shown.</string>
     <string name="settings_super_saved">Saved</string>
 </resources>

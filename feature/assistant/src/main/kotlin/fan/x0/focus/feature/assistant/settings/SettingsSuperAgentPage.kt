@@ -212,6 +212,27 @@ fun SettingsSuperAgentRoute(
                                 viewModel.onAction(SuperAgentAction.ToggleWatchdog(!state.watchdog))
                             },
                         )
+                        item(
+                            headlineContent = { Text(stringResource(R.string.settings_super_today)) },
+                            supportingContent = {
+                                Text(
+                                    text = stringResource(R.string.settings_super_today_body),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            },
+                            leadingContent = { FocusCardGroupIcon(icon = FocusIcons.Today) },
+                            trailingContent = {
+                                Switch(
+                                    checked = state.postToToday,
+                                    onCheckedChange = {
+                                        viewModel.onAction(SuperAgentAction.ToggleToday(it))
+                                    },
+                                )
+                            },
+                            onClick = {
+                                viewModel.onAction(SuperAgentAction.ToggleToday(!state.postToToday))
+                            },
+                        )
                     }
                 }
             }

@@ -18,6 +18,7 @@ data class AgentEventConfig(
     val maxConcurrentSideChats: Int,
     val watchdogEnabled: Boolean,
     val rateLimitPerMinute: Int,
+    val postResultsToToday: Boolean = false,
 ) {
     fun enabled(source: AgentEventSource): Boolean = sources[source] ?: true
 
@@ -39,6 +40,7 @@ data class AgentEventConfig(
             maxConcurrentSideChats = DEFAULT_MAX_CONCURRENT,
             watchdogEnabled = true,
             rateLimitPerMinute = DEFAULT_RATE_LIMIT,
+            postResultsToToday = false,
         )
     }
 }
@@ -50,6 +52,7 @@ private data class AgentEventConfigPayload(
     val maxConcurrentSideChats: Int = AgentEventConfig.DEFAULT_MAX_CONCURRENT,
     val watchdogEnabled: Boolean = true,
     val rateLimitPerMinute: Int = AgentEventConfig.DEFAULT_RATE_LIMIT,
+    val postResultsToToday: Boolean = false,
 )
 
 private val Context.agentEventDataStore by preferencesDataStore(name = "agent_events")
@@ -74,6 +77,7 @@ class AgentEventSettings(@Provided private val context: Context) {
                 .coerceIn(1, AgentEventConfig.MAX_CONCURRENT_LIMIT),
             watchdogEnabled = stored.watchdogEnabled,
             rateLimitPerMinute = stored.rateLimitPerMinute.coerceIn(5, 300),
+            postResultsToToday = stored.postResultsToToday,
         )
     }
 
@@ -93,6 +97,10 @@ class AgentEventSettings(@Provided private val context: Context) {
 
     suspend fun setWatchdogEnabled(value: Boolean) = edit { payload ->
         payload.copy(watchdogEnabled = value)
+    }
+
+    suspend fun setPostResultsToToday(value: Boolean) = edit { payload ->
+        payload.copy(postResultsToToday = value)
     }
 
     suspend fun setRateLimit(value: Int) = edit { payload ->
