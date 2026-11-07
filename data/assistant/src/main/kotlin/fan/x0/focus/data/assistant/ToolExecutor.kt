@@ -105,6 +105,7 @@ class ToolExecutor(
     private val skills: SkillsToolHandler,
     private val providers: ToolProviderGroup,
     private val events: AssistantEventSink,
+    private val asyncOps: AsyncToolRegistry,
 ) {
     fun allSpecs(): List<ToolSpec> = ToolCatalog.chat() + providers.specs()
 
@@ -857,6 +858,27 @@ class ToolExecutor(
                     summary = text.take(40),
                     workingText = text.take(40),
                 )
+            }
+            "async_list" -> {
+                val all = args.flag("all_conversations") == true
+                val items = asyncOps.list(if (all) "" else conversationId)
+                if (items.isEmpty()) {
+                    ok("No background operations.", "No background operations.")
+                } else {
+                    val lines = items.joinToString("\n") { item ->
+                        "- ${item.id} | ${item.tool} | ${item.label} | started ${item.startedAt}"
+                    }
+                    ok(lines, "${items.size} background operations.")
+                }
+            }
+            "async_stop" -> {
+                val id = args.text("id") ?: return fail("id is required")
+                val stopped = asyncOps.stop(id, conversationId)
+                if (stopped) {
+                    ok("Stopped $id", "Background operation stopped.")
+                } else {
+                    fail("No running operation: $id")
+                }
             }
             "post_update" -> {
                 val headline = args.text("headline") ?: return fail("headline is required")

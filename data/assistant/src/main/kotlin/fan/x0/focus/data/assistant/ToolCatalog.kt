@@ -942,6 +942,22 @@ object ToolCatalog {
                 put("text", string("Message text"))
             },
         ),
+        ToolSpec(
+            name = "async_list",
+            description = "List long-running background operations started in this conversation.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("all_conversations", boolean("List operations from every conversation. Default false"))
+            },
+        ),
+        ToolSpec(
+            name = "async_stop",
+            description = "Stop one long-running background operation by id.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("id")) {
+                put("id", string("Operation id from async_list"))
+            },
+        ),
     ) + SkillToolCatalog.specs + CrewToolCatalog.assistantSpecs
 
     private val byName = all.associateBy { it.name }

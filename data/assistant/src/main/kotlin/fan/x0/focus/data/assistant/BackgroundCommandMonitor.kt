@@ -34,6 +34,7 @@ class BackgroundCommandMonitor(
     private val chats: ChatStore,
     private val bridge: BridgeRepository,
     private val bus: AgentEventBus,
+    private val async: AsyncToolRegistry,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, Job>()
@@ -47,7 +48,7 @@ class BackgroundCommandMonitor(
         poll: suspend () -> BackgroundJobSnapshot,
     ) {
         if (conversationId.isBlank() || jobs.containsKey(jobId)) return
-        jobs[jobId] = scope.launch {
+        val job = scope.launch {
             var snapshot = BackgroundJobSnapshot(done = false, summary = jobId)
             while (!snapshot.done) {
                 snapshot = try {
@@ -61,7 +62,7 @@ class BackgroundCommandMonitor(
             }
             val tail = snapshot.logs.takeLast(LOG_TAIL_CHARS)
             val content = if (tail.isBlank()) snapshot.summary else "${snapshot.summary}\n\nLogs:\n$tail"
-            if (chats.conversation(conversationId) != null) {
+            if (chats.conversation(conversationId)?.kind == ConversationKind.Chat) {
                 chats.append(
                     conversationId = conversationId,
                     role = ChatRole.System,
@@ -80,11 +81,13 @@ class BackgroundCommandMonitor(
             bus.publish(AgentEvent.backgroundCommand(conversationId, jobId, snapshot.summary, tail))
             jobs.remove(jobId)
         }
+        jobs[jobId] = job
+        async.track(conversationId, jobId, "background", jobId, job)
     }
 
     fun register(conversationId: String, endpoint: BridgeEndpoint, jobId: String) {
         if (conversationId.isBlank() || jobs.containsKey(jobId)) return
-        jobs[jobId] = scope.launch {
+        val job = scope.launch {
             var after = 0L
             var done = false
             var job: BridgeBgJob? = null
@@ -121,7 +124,7 @@ class BackgroundCommandMonitor(
             }
             val tail = logs.toString().takeLast(LOG_TAIL_CHARS)
             val content = if (tail.isBlank()) summary else "$summary\n\nLogs:\n$tail"
-            if (chats.conversation(conversationId) != null) {
+            if (chats.conversation(conversationId)?.kind == ConversationKind.Chat) {
                 chats.append(
                     conversationId = conversationId,
                     role = ChatRole.System,
@@ -140,6 +143,8 @@ class BackgroundCommandMonitor(
             bus.publish(AgentEvent.backgroundCommand(conversationId, jobId, summary, tail))
             jobs.remove(jobId)
         }
+        jobs[jobId] = job
+        async.track(conversationId, jobId, "bridge_background", jobId, job)
     }
 
     companion object {
