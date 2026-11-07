@@ -85,12 +85,18 @@ class AgentWatchdog(
             val conversation = chats.conversation(entry.conversationId) ?: return@forEach
             val tooLong = now - entry.startedAt > TURN_TIMEOUT_MS
             val repeated = entry.repeatedCalls >= REPEAT_LIMIT
-            if (!tooLong && !repeated) return@forEach
-            val code = if (repeated) "repeated_tools" else "timeout"
-            val text = if (repeated) {
-                "重复调用同一个工具，已停止。"
-            } else {
-                "运行超过 30 分钟，已停止。"
+            val stalled = conversation.kind == ConversationKind.Router &&
+                now - entry.updatedAt > NO_PROGRESS_MS
+            if (!tooLong && !repeated && !stalled) return@forEach
+            val code = when {
+                repeated -> "repeated_tools"
+                stalled -> "no_progress"
+                else -> "timeout"
+            }
+            val text = when {
+                repeated -> "重复调用同一个工具，已停止。"
+                stalled -> "长时间没有输出，已停止。"
+                else -> "运行超过 30 分钟，已停止。"
             }
             if (conversation.kind == ConversationKind.Router) {
                 alarm(conversation.id, code, "Router $text")

@@ -96,6 +96,7 @@ class RouterSession(
             runCatching { journal.begin(router.id, turnId, eventText.take(500)) }
             val job = scope.async {
                 val outcome = TurnOutcome()
+                var lastTouch = 0L
                 engine.send(
                     conversationId = router.id,
                     text = eventText,
@@ -115,7 +116,21 @@ class RouterSession(
                     appendUser = false,
                 ).collect { event ->
                     when (event) {
-                        is ChatEvent.Delta -> outcome.answer += event.text
+                        is ChatEvent.Delta -> {
+                            outcome.answer += event.text
+                            val now = System.currentTimeMillis()
+                            if (now - lastTouch > TOUCH_MS) {
+                                lastTouch = now
+                                journal.touch(router.id, turnId)
+                            }
+                        }
+                        is ChatEvent.StatsUpdated -> {
+                            val now = System.currentTimeMillis()
+                            if (now - lastTouch > TOUCH_MS) {
+                                lastTouch = now
+                                journal.touch(router.id, turnId)
+                            }
+                        }
                         is ChatEvent.Failed -> outcome.error = event.error.serverMessage
                             ?: event.error.serverTitle
                             ?: event.error.type.name
@@ -178,6 +193,7 @@ class RouterSession(
         const val MAX_ATTEMPTS = 3
         const val RETRY_DELAY_MS = 20_000L
         const val RETRY_SCAN_MS = 15_000L
+        const val TOUCH_MS = 5_000L
     }
 }
 

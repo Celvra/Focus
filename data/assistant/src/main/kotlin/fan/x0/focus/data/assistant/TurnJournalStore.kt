@@ -58,6 +58,16 @@ class TurnJournalStore(private val database: AssistantDatabase) {
         )
     }
 
+    suspend fun touch(conversationId: String, turnId: Long) = withContext(Dispatchers.IO) {
+        val values = ContentValues().apply { put("updated_at", System.currentTimeMillis()) }
+        database.writableDatabase.update(
+            "turn_journal",
+            values,
+            "conversation_id = ? AND turn_id = ?",
+            arrayOf(conversationId, turnId.toString()),
+        )
+    }
+
     suspend fun finish(conversationId: String, turnId: Long, status: String, note: String = "") =
         withContext(Dispatchers.IO) {
             val row = latest(conversationId, turnId) ?: return@withContext
