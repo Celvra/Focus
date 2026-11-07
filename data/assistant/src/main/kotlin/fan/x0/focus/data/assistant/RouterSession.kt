@@ -61,7 +61,7 @@ class RouterSession(
         chats.ensureMainConversation()
         chats.ensureRouterConversation()
         models.resolve(AgentRole.Router)?.let { resolved ->
-            main.setRouterModel("${resolved.provider.name} · ${resolved.model}")
+            main.setRouterModel(resolved.model)
         }
     }
 

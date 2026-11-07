@@ -42,6 +42,7 @@ import fan.x0.focus.data.assistant.MentionItemUi
 import fan.x0.focus.data.assistant.MentionKind
 import fan.x0.focus.data.assistant.MentionText
 import fan.x0.focus.data.assistant.MentionUi
+import fan.x0.focus.data.assistant.modelOptions
 import fan.x0.focus.data.assistant.ModelResolver
 import fan.x0.focus.data.assistant.SideResultCard
 import fan.x0.focus.data.assistant.SideChatManager
@@ -1321,8 +1322,12 @@ class ChatViewModel(
         launchGuarded(onError = {}) {
             roles.set(AgentRole.Router, providerId, model, currentState.routerReasoning.name)
             val config = settings.configOnce()
-            val name = config.providers.firstOrNull { it.id == providerId }?.name ?: providerId
-            val label = "$name · $model"
+            val provider = config.providers.firstOrNull { it.id == providerId }
+            val label = provider?.modelOptions
+                ?.firstOrNull { it.id == model }
+                ?.name
+                ?.ifBlank { model }
+                ?: model
             mainChannel.setRouterModel(label)
             updateState {
                 copy(
@@ -1951,7 +1956,11 @@ class ChatViewModel(
 
     private suspend fun routerLabel(): String =
         models.resolve(AgentRole.Router)?.let { resolved ->
-            "${resolved.provider.name} · ${resolved.model}"
+            resolved.provider.modelOptions
+                .firstOrNull { it.id == resolved.model }
+                ?.name
+                ?.ifBlank { resolved.model }
+                ?: resolved.model
         }.orEmpty()
 
     private suspend fun refreshTitle() {
