@@ -24,7 +24,6 @@
     <string name="overlay_capture_failed">无法截取屏幕。请启用 Focus 无障碍服务、root 或 Shizuku。</string>
     <string name="overlay_send_failed">发送失败。</string>
     <string name="overlay_thinking">正在思考</string>
-    <string name="overlay_reasoning">思考</string>
     <string name="overlay_no_reply">还没有回复。</string>
     <string name="overlay_approval">需要确认</string>
     <string name="overlay_plan">计划</string>

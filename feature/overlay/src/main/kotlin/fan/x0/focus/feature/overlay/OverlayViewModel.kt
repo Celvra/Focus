@@ -31,9 +31,8 @@ class OverlayViewModel(
         viewModelScope.launch {
             main.state.collect { channel ->
                 val streaming = channel.streaming
-                val reasoning = channel.reasoning
                 updateState { copy(toolSteps = channel.activities.toSteps()) }
-                if (streaming.isNotBlank() || reasoning.isNotBlank() || channel.reasoningMs > 0) {
+                if (streaming.isNotBlank()) {
                     pendingSubmit = false
                     wasWorking = true
                     updateState {
@@ -45,8 +44,6 @@ class OverlayViewModel(
                                 role = OverlayRole.Assistant,
                                 text = streaming,
                                 streaming = true,
-                                reasoning = reasoning,
-                                reasoningMs = channel.reasoningMs,
                             ),
                         )
                     }
@@ -201,14 +198,11 @@ class OverlayViewModel(
                     else -> return@mapNotNull null
                 }
                 val text = message.content.trim()
-                val reasoning = message.reasoning.trim()
-                if (text.isBlank() && reasoning.isBlank()) return@mapNotNull null
+                if (text.isBlank()) return@mapNotNull null
                 OverlayMessage(
                     id = message.id,
                     role = role,
                     text = text,
-                    reasoning = reasoning,
-                    reasoningMs = message.elapsedMs,
                 )
             }
         val activities = main.state.value.activities.toSteps()
