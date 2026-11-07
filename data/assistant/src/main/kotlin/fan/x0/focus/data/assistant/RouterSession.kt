@@ -73,7 +73,13 @@ class RouterSession(
         val claimed = batch.filter { events.claim(it.id) }
         synchronized(queuedIds) { batch.forEach { queuedIds.remove(it.id) } }
         if (claimed.isEmpty()) return
-        main.setWorking(true, "Router 正在处理")
+        val sideResults = claimed.filter { it.kind == AgentEventKind.SideChatResult }
+        val workingText = when {
+            sideResults.size > 1 -> "${sideResults.size} 个旁聊已结束，正在整理"
+            sideResults.size == 1 -> "旁聊 ${sideResults.first().payloadObject()["title"].stringValue()} 已结束，正在整理"
+            else -> "Router 正在处理"
+        }
+        main.setWorking(true, workingText)
         keepAlive.start()
         var journalStatus = "failed"
         try {

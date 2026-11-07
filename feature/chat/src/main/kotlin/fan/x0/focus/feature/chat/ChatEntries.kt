@@ -167,6 +167,31 @@ internal fun ChatNoticeCard(
 }
 
 @Composable
+internal fun RouterProgressCard(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = FocusShapeTokens.card,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            FocusLoadingBlob(size = 24.dp)
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 internal fun ChatSideResultCard(
     card: SideResultUi,
     onOpen: () -> Unit,

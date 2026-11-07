@@ -25,6 +25,7 @@
     <string name="overlay_send_failed">Could not send the message.</string>
     <string name="overlay_thinking">Thinking</string>
     <string name="overlay_no_reply">No reply yet.</string>
+    <string name="overlay_router_working">Preparing a reply</string>
     <string name="overlay_approval">Approval</string>
     <string name="overlay_plan">Plan</string>
     <string name="overlay_allow">Allow</string>
