@@ -81,7 +81,8 @@ class ChatTurnRunner(
     init {
         scope.launch {
             triggerBus.events.collect { event ->
-                if (chats.conversation(event.conversationId) == null) return@collect
+                val conversation = chats.conversation(event.conversationId) ?: return@collect
+                if (conversation.kind != ConversationKind.Chat) return@collect
                 chats.append(
                     conversationId = event.conversationId,
                     role = ChatRole.System,
@@ -100,7 +101,8 @@ class ChatTurnRunner(
         }
         scope.launch {
             background.completed.collect { completion ->
-                if (chats.conversation(completion.conversationId) == null) return@collect
+                val conversation = chats.conversation(completion.conversationId) ?: return@collect
+                if (conversation.kind != ConversationKind.Chat) return@collect
                 if (!isRunning(completion.conversationId)) {
                     start(
                         conversationId = completion.conversationId,
