@@ -30,6 +30,7 @@ import fan.x0.focus.feature.assistant.settings.SettingsHomePage
 import fan.x0.focus.feature.assistant.settings.SettingsImRoute
 import fan.x0.focus.feature.assistant.settings.SettingsMcpRoute
 import fan.x0.focus.feature.assistant.settings.SettingsModelPickerSheet
+import fan.x0.focus.feature.assistant.settings.SettingsModelsRoute
 import fan.x0.focus.feature.assistant.settings.SettingsNotificationsPage
 import fan.x0.focus.feature.assistant.settings.SettingsOverlayPage
 import fan.x0.focus.feature.assistant.settings.SettingsSkillsRoute
@@ -145,6 +146,10 @@ internal fun SettingsScreen(
                         state = latestState.value,
                         onAction = onAction,
                         onBack = { backStack.removeLastOrNull() },
+                    )
+                    SettingsDestination.Models -> SettingsModelsRoute(
+                        onBack = { backStack.removeLastOrNull() },
+                        snackbar = snackbar,
                     )
                     SettingsDestination.Tools -> SettingsToolsPage(
                         state = latestState.value,
