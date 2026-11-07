@@ -192,19 +192,28 @@ internal fun Composer(
                 }
             },
             pills = {
-                FocusComposerPill(
-                    label = modelLabel.ifBlank { stringResource(R.string.chat_picker_model_empty) },
-                    icon = FocusIcons.Assistant,
-                    compact = true,
-                    onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Model)) },
-                )
-                FocusComposerPill(
-                    label = stringResource(state.reasoningLevel.labelRes()),
-                    icon = FocusIcons.Idea,
-                    selected = state.reasoningLevel.isEnabled,
-                    compact = true,
-                    onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Reasoning)) },
-                )
+                if (state.isMain) {
+                    FocusComposerPill(
+                        label = state.routerModel.ifBlank { stringResource(R.string.chat_router_model) },
+                        icon = FocusIcons.Bolt,
+                        compact = true,
+                        onClick = { onAction(ChatAction.OpenSettings) },
+                    )
+                } else {
+                    FocusComposerPill(
+                        label = modelLabel.ifBlank { stringResource(R.string.chat_picker_model_empty) },
+                        icon = FocusIcons.Assistant,
+                        compact = true,
+                        onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Model)) },
+                    )
+                    FocusComposerPill(
+                        label = stringResource(state.reasoningLevel.labelRes()),
+                        icon = FocusIcons.Idea,
+                        selected = state.reasoningLevel.isEnabled,
+                        compact = true,
+                        onClick = { onAction(ChatAction.OpenPicker(ComposerPicker.Reasoning)) },
+                    )
+                }
             },
         )
     }

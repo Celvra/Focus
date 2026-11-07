@@ -51,6 +51,7 @@ import fan.x0.focus.data.assistant.PolicySettings
 import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ProviderModelCatalog
 import fan.x0.focus.data.assistant.ReasoningLevel
+import fan.x0.focus.data.assistant.RouterSession
 import fan.x0.focus.data.assistant.SkillEntry
 import fan.x0.focus.data.assistant.SkillRepository
 import fan.x0.focus.data.assistant.SubAgentRunState
@@ -106,6 +107,7 @@ class ChatViewModel(
     private val imChats: ImChatStore,
     private val mainChannel: MainChannelSession,
     private val sideChats: SideChatManager,
+    private val router: RouterSession,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
@@ -1346,6 +1348,7 @@ class ChatViewModel(
         val conversationId = currentState.conversationId
         if (conversationId.isBlank()) return
         if (currentState.isMain) {
+            router.stopCurrent()
             updateState { copy(sending = false, workingText = "") }
             return
         }
