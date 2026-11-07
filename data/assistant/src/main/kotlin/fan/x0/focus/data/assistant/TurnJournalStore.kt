@@ -82,6 +82,15 @@ class TurnJournalStore(private val database: AssistantDatabase) {
         database.writableDatabase.update("turn_journal", values, "status = 'running'", null)
     }
 
+    suspend fun cleanup(days: Int = 7): Int = withContext(Dispatchers.IO) {
+        val before = System.currentTimeMillis() - days.coerceAtLeast(1) * 24L * 60 * 60 * 1000
+        database.writableDatabase.delete(
+            "turn_journal",
+            "status != 'running' AND updated_at < ?",
+            arrayOf(before.toString()),
+        )
+    }
+
     suspend fun running(): List<TurnJournalEntry> = withContext(Dispatchers.IO) {
         database.readableDatabase.rawQuery(
             "SELECT $COLUMNS FROM turn_journal WHERE status = 'running' ORDER BY started_at",

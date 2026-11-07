@@ -29,6 +29,7 @@ class AgentRuntime(
         dispatcher.resume()
         watchdog.start()
         bus.cleanup()
+        journal.cleanup()
         scope.launch {
             while (true) {
                 delay(CLEANUP_INTERVAL_MS)

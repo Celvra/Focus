@@ -672,6 +672,10 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             db.execSQL("ALTER TABLE conversations ADD COLUMN task_note TEXT NOT NULL DEFAULT ''")
             db.execSQL("ALTER TABLE conversations ADD COLUMN result_seen INTEGER NOT NULL DEFAULT 1")
             db.execSQL(
+                "UPDATE conversations SET kind = 'side', task_status = 'done', result_seen = 1 " +
+                    "WHERE kind = 'chat' AND id NOT IN ('main', 'router')",
+            )
+            db.execSQL(
                 """
                 CREATE TABLE IF NOT EXISTS agent_events(
                     id INTEGER PRIMARY KEY AUTOINCREMENT,

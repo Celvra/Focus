@@ -76,7 +76,9 @@ class AutoPilotGate(
     }
 
     private suspend fun resolveTarget(config: PolicyConfig): JudgeTarget? {
-        models.resolveAssigned(AgentRole.Judge)?.let { resolved ->
+        val assigned = models.resolveAssigned(AgentRole.Judge)
+            ?: models.resolveAssigned(AgentRole.Router)
+        assigned?.let { resolved ->
             val key = secrets.apiKey(resolved.providerId)?.takeIf { it.isNotBlank() } ?: return@let
             return JudgeTarget(
                 baseUrl = resolved.provider.baseUrl,
