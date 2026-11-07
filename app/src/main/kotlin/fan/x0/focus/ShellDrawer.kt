@@ -43,6 +43,7 @@ import fan.x0.focus.plugin.PluginPageRef
 fun ShellDrawer(
     state: ShellState,
     current: FocusRoute,
+    currentConversationId: String,
     pluginPages: List<PluginPageRef>,
     controlledOnly: Boolean = false,
     onNavigate: (FocusRoute) -> Unit,
@@ -63,7 +64,7 @@ fun ShellDrawer(
         DrawerEntry(
             FocusIcons.Assistant,
             stringResource(R.string.drawer_main_session),
-            current == FocusRoute.Chat,
+            current == FocusRoute.Chat && currentConversationId == state.main?.id,
             onOpenMain,
         )
         if (!controlledOnly) {
@@ -127,7 +128,11 @@ fun ShellDrawer(
                 )
             } else {
                 state.recent.forEach { conversation ->
-                    ConversationRow(conversation = conversation, onClick = { onOpenConversation(conversation.id) })
+                    ConversationRow(
+                        conversation = conversation,
+                        selected = conversation.id == currentConversationId,
+                        onClick = { onOpenConversation(conversation.id) },
+                    )
                 }
             }
             DrawerEntry(
@@ -214,7 +219,11 @@ private fun DrawerSectionLabel(text: String) {
 }
 
 @Composable
-private fun ConversationRow(conversation: Conversation, onClick: () -> Unit) {
+private fun ConversationRow(
+    conversation: Conversation,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     NavigationDrawerItem(
         label = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -237,7 +246,7 @@ private fun ConversationRow(conversation: Conversation, onClick: () -> Unit) {
                 )
             }
         },
-        selected = false,
+        selected = selected,
         onClick = hapticSelect(onClick),
         shape = MaterialTheme.shapes.medium,
         colors = NavigationDrawerItemDefaults.colors(

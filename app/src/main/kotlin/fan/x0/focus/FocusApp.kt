@@ -148,6 +148,7 @@ private fun MainShell() {
         turns.states.map { it.isNotEmpty() }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
     val openRequest by switcher.openRequest.collectAsStateWithLifecycle()
+    val currentConversation by switcher.current.collectAsStateWithLifecycle()
     val assistRequest by switcher.assistRequest.collectAsStateWithLifecycle()
     val crewRequest by crewSwitcher.openRequest.collectAsStateWithLifecycle()
     val pluginRoute by PluginNavigation.route.collectAsStateWithLifecycle()
@@ -190,6 +191,7 @@ private fun MainShell() {
             ShellDrawer(
                 state = shellState.value,
                 current = backStack.current,
+                currentConversationId = currentConversation.orEmpty(),
                 pluginPages = pluginPages,
                 controlledOnly = deviceRole == DeviceRole.Controlled,
                 onNavigate = navigate,
