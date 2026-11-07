@@ -1,5 +1,6 @@
 package fan.x0.focus.data.im.weixin
 
+import fan.x0.focus.data.im.ImReply
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
@@ -7,6 +8,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsBytes
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -22,8 +24,11 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.spec.SecretKeySpec
 
 internal class WeixinHttp(private val http: HttpClient) {
     private val json = Json {
@@ -130,6 +135,151 @@ internal class WeixinHttp(private val http: HttpClient) {
         text: String,
         contextToken: String?,
         clientId: String,
+        reply: ImReply? = null,
+    ): WeixinSendResponse {
+        val item = buildJsonObject {
+            put("type", TYPE_TEXT)
+            put("text_item", buildJsonObject { put("text", text) })
+            reply?.let { put("ref_msg", refMessage(it)) }
+        }
+        return sendItems(baseUrl, token, toUserId, contextToken, clientId, listOf(item))
+    }
+
+    suspend fun sendMedia(
+        baseUrl: String,
+        token: String,
+        toUserId: String,
+        contextToken: String?,
+        clientId: String,
+        upload: WeixinUpload,
+        fileName: String,
+        image: Boolean,
+        reply: ImReply? = null,
+    ): WeixinSendResponse {
+        val media = buildJsonObject {
+            put("encrypt_query_param", upload.encryptQueryParam)
+            put("aes_key", upload.aesKey)
+            put("encrypt_type", 1)
+        }
+        val item = buildJsonObject {
+            if (image) {
+                put("type", TYPE_IMAGE)
+                put(
+                    "image_item",
+                    buildJsonObject {
+                        put("media", media)
+                        put("mid_size", upload.encryptedSize)
+                    },
+                )
+            } else {
+                put("type", TYPE_FILE)
+                put(
+                    "file_item",
+                    buildJsonObject {
+                        put("media", media)
+                        put("file_name", fileName)
+                        put("len", upload.rawSize.toString())
+                        put("md5", upload.md5)
+                    },
+                )
+            }
+            reply?.let { put("ref_msg", refMessage(it)) }
+        }
+        return sendItems(baseUrl, token, toUserId, contextToken, clientId, listOf(item))
+    }
+
+    suspend fun uploadMedia(
+        baseUrl: String,
+        token: String,
+        toUserId: String,
+        bytes: ByteArray,
+        image: Boolean,
+    ): WeixinUpload {
+        val key = ByteArray(16).also(random::nextBytes)
+        val cipher = encrypt(bytes, key)
+        val filekey = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
+        val md5 = MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02x".format(it) }
+        val body = buildJsonObject {
+            put("filekey", filekey)
+            put("media_type", if (image) MEDIA_IMAGE else MEDIA_FILE)
+            put("to_user_id", toUserId)
+            put("rawsize", bytes.size)
+            put("rawfilemd5", md5)
+            put("filesize", cipher.size)
+            put("no_need_thumb", true)
+            put("aeskey", key.joinToString("") { "%02x".format(it) })
+            put("base_info", baseInfo())
+        }
+        val raw = post("ilink/bot/getuploadurl", body.toString(), token, 20_000, baseUrl)
+        val root = parseObject(raw) ?: error("上传配置响应无效")
+        val fullUrl = root.string("upload_full_url")
+        val uploadParam = root.string("upload_param")
+        if (fullUrl.isBlank() && uploadParam.isBlank()) error("上传配置缺少地址")
+        val url = fullUrl.ifBlank {
+            "$CDN_BASE_URL/upload?encrypted_query_param=${encode(uploadParam)}&filekey=${encode(filekey)}"
+        }
+        val response = http.post(url) {
+            contentType(ContentType.Application.OctetStream)
+            setBody(cipher)
+            timeout {
+                requestTimeoutMillis = 60_000
+                socketTimeoutMillis = 60_000
+            }
+        }
+        if (!response.status.isSuccess()) {
+            val message = response.headers["x-error-message"].orEmpty()
+            error("CDN 上传失败 ${response.status.value}: $message")
+        }
+        val encryptQueryParam = response.headers["x-encrypted-param"].orEmpty()
+        if (encryptQueryParam.isBlank()) error("CDN 上传响应缺少参数")
+        val aesKey = Base64.getEncoder().encodeToString(
+            key.joinToString("") { "%02x".format(it) }.toByteArray(Charsets.UTF_8),
+        )
+        return WeixinUpload(
+            encryptQueryParam = encryptQueryParam,
+            aesKey = aesKey,
+            rawSize = bytes.size,
+            encryptedSize = cipher.size,
+            md5 = md5,
+        )
+    }
+
+    suspend fun downloadMedia(media: WeixinMedia): ByteArray? = try {
+        val url = when {
+            media.encryptQueryParam.isNotBlank() ->
+                "$CDN_BASE_URL/download?encrypted_query_param=${encode(media.encryptQueryParam)}"
+            media.url.isNotBlank() -> media.url
+            else -> return null
+        }
+        val response = http.get(url) {
+            timeout {
+                requestTimeoutMillis = 30_000
+                socketTimeoutMillis = 30_000
+            }
+        }
+        if (!response.status.isSuccess()) {
+            null
+        } else {
+            val bytes = response.bodyAsBytes()
+            if (media.aesKey.isBlank()) {
+                bytes
+            } else {
+                runCatching { decrypt(bytes, decodeKey(media.aesKey)) }.getOrNull()
+            }
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        null
+    }
+
+    private suspend fun sendItems(
+        baseUrl: String,
+        token: String,
+        toUserId: String,
+        contextToken: String?,
+        clientId: String,
+        items: List<JsonObject>,
     ): WeixinSendResponse {
         val message = buildJsonObject {
             put("from_user_id", "")
@@ -141,15 +291,7 @@ internal class WeixinHttp(private val http: HttpClient) {
             put(
                 "item_list",
                 buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("type", 1)
-                            put(
-                                "text_item",
-                                buildJsonObject { put("text", text) },
-                            )
-                        },
-                    )
+                    items.forEach(::add)
                 },
             )
         }
@@ -165,6 +307,17 @@ internal class WeixinHttp(private val http: HttpClient) {
             return WeixinSendResponse(false, clientId, root.string("errmsg").ifBlank { "发送失败 $ret" })
         }
         return WeixinSendResponse(true, root.string("message_id").ifBlank { clientId }, "")
+    }
+
+    private fun refMessage(reply: ImReply): JsonObject = buildJsonObject {
+        put("title", reply.senderName)
+        put(
+            "message_item",
+            buildJsonObject {
+                put("type", TYPE_TEXT)
+                put("text_item", buildJsonObject { put("text", reply.text) })
+            },
+        )
     }
 
     suspend fun notify(baseUrl: String, token: String, start: Boolean) {
@@ -224,6 +377,9 @@ internal class WeixinHttp(private val http: HttpClient) {
         if (from.isBlank()) return null
         val items = message["item_list"] as? JsonArray ?: return null
         val texts = mutableListOf<String>()
+        val media = mutableListOf<WeixinMedia>()
+        val quotedMedia = mutableListOf<WeixinMedia>()
+        var reply: ImReply? = null
         var itemId = ""
         items.forEach { element ->
             val item = element as? JsonObject ?: return@forEach
@@ -232,17 +388,43 @@ internal class WeixinHttp(private val http: HttpClient) {
                 TYPE_TEXT -> item.objectOrNull("text_item")?.string("text")
                     ?.takeIf { it.isNotBlank() }
                     ?.let(texts::add)
-                TYPE_IMAGE -> texts.add("[图片]")
+                TYPE_IMAGE -> item.objectOrNull("image_item")?.let { image ->
+                    media.add(imageMedia(image))
+                }
                 TYPE_VOICE -> {
                     val voice = item.objectOrNull("voice_item")?.string("text").orEmpty()
                     texts.add(voice.ifBlank { "[语音]" })
                 }
-                TYPE_FILE -> texts.add("[文件]")
+                TYPE_FILE -> item.objectOrNull("file_item")?.let { file ->
+                    media.add(fileMedia(file))
+                }
                 TYPE_VIDEO -> texts.add("[视频]")
             }
+            item.objectOrNull("ref_msg")?.let { ref ->
+                val refItem = ref.objectOrNull("message_item")
+                val refText = refItem?.objectOrNull("text_item")?.string("text").orEmpty()
+                val title = ref.string("title")
+                val quoted = listOf(title, refText).filter { it.isNotBlank() }.joinToString("\n")
+                if (quoted.isNotBlank()) {
+                    reply = ImReply(
+                        messageId = "",
+                        senderName = "",
+                        text = quoted,
+                    )
+                }
+                when (refItem?.int("type")) {
+                    TYPE_IMAGE -> refItem.objectOrNull("image_item")?.let {
+                        quotedMedia.add(imageMedia(it))
+                    }
+                    TYPE_FILE -> refItem.objectOrNull("file_item")?.let {
+                        quotedMedia.add(fileMedia(it))
+                    }
+                }
+            }
         }
+        val files = media.ifEmpty { quotedMedia }
         val text = texts.joinToString("\n").trim()
-        if (text.isBlank()) return null
+        if (text.isBlank() && files.isEmpty()) return null
         val sentAt = message.long("create_time_ms")
         val messageId = message.string("message_id")
             .ifBlank { itemId }
@@ -255,8 +437,77 @@ internal class WeixinHttp(private val http: HttpClient) {
             contextToken = message.string("context_token"),
             sentAt = sentAt,
             messageType = message.int("message_type"),
+            media = files,
+            reply = reply,
         )
     }
+
+    private fun imageMedia(image: JsonObject): WeixinMedia {
+        val media = image.objectOrNull("media")
+        val name = listOf("image", image.string("uuid"), "jpg")
+            .filter { it.isNotBlank() }
+            .joinToString(".")
+        return WeixinMedia(
+            kind = fan.x0.focus.data.im.ImAttachmentKind.Image,
+            name = name,
+            mime = "image/jpeg",
+            encryptQueryParam = media?.string("encrypt_query_param").orEmpty(),
+            aesKey = media?.string("aes_key").orEmpty().ifBlank { image.string("aeskey") },
+            url = image.string("url"),
+            size = image.long("mid_size"),
+        )
+    }
+
+    private fun fileMedia(file: JsonObject): WeixinMedia {
+        val media = file.objectOrNull("media")
+        val name = file.string("file_name").ifBlank { "file" }
+        return WeixinMedia(
+            kind = fan.x0.focus.data.im.ImAttachmentKind.File,
+            name = name,
+            mime = mimeOf(name),
+            encryptQueryParam = media?.string("encrypt_query_param").orEmpty(),
+            aesKey = media?.string("aes_key").orEmpty(),
+            size = file.long("len"),
+        )
+    }
+
+    private fun mimeOf(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "gif" -> "image/gif"
+        "webp" -> "image/webp"
+        "pdf" -> "application/pdf"
+        "txt", "md", "json", "csv", "xml", "log" -> "text/plain"
+        else -> "application/octet-stream"
+    }
+
+    private fun encrypt(bytes: ByteArray, key: ByteArray): ByteArray {
+        val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"))
+        return cipher.doFinal(bytes)
+    }
+
+    private fun decrypt(bytes: ByteArray, key: ByteArray): ByteArray {
+        val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"))
+        return cipher.doFinal(bytes)
+    }
+
+    private fun decodeKey(value: String): ByteArray {
+        if (Regex("^[0-9a-fA-F]{32}$").matches(value)) {
+            return value.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        }
+        val decoded = Base64.getDecoder().decode(value)
+        if (decoded.size == 16) return decoded
+        val hex = String(decoded, Charsets.UTF_8)
+        if (Regex("^[0-9a-fA-F]{32}$").matches(hex)) {
+            return hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        }
+        error("无效的 AES 密钥")
+    }
+
+    private fun encode(value: String): String =
+        java.net.URLEncoder.encode(value, "UTF-8")
 
     private fun JsonObject.string(key: String): String {
         val value = this[key] as? JsonPrimitive ?: return ""
@@ -285,11 +536,14 @@ internal class WeixinHttp(private val http: HttpClient) {
         const val BOT_AGENT = "Focus/1.0"
         const val APP_ID = "bot"
         const val CLIENT_VERSION = 132106
+        private const val CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c"
         private const val QR_TIMEOUT_MS = 35_000L
         private const val TYPE_TEXT = 1
         private const val TYPE_IMAGE = 2
         private const val TYPE_VOICE = 3
         private const val TYPE_FILE = 4
         private const val TYPE_VIDEO = 5
+        private const val MEDIA_IMAGE = 1
+        private const val MEDIA_FILE = 3
     }
 }

@@ -11,6 +11,7 @@ class PromptBuilder(
     private val locale: LocaleController,
     private val workspaceTrust: WorkspaceTrustService,
     private val skills: SkillRepository,
+    private val external: ExternalPromptProvider,
 ) {
     @Volatile
     private var trustCache: CachedSection? = null
@@ -30,6 +31,7 @@ class PromptBuilder(
         } else {
             async { mentionedSkillsSection(mentionedSkills) }
         }
+        val pluginJob = async { pluginSection() }
         val name = workspace.assistantName()
         val documents = workspace.readAll()
         val builder = StringBuilder()
@@ -51,6 +53,13 @@ class PromptBuilder(
         builder.appendLine("- You can configure models yourself. Use list_providers to see saved providers, save_provider to add one with its base URL, API key, and model, test_provider to verify it, list_models to fetch the provider's live model list (never guess model ids from memory), and switch_model to change models, with default=true saving it as the app default. Never repeat an API key back to the user.")
         builder.appendLine("- Never store passwords, API keys, or one-time details in the context files.")
         builder.appendLine("- Use web_search for current facts and cite the result links. Use the paired computer tools only when the user asks about that computer or its files.")
+        builder.appendLine("- You can control this phone and trusted remote phones with the device_* tools. Call device_list to see targets, device_start once, then device_snapshot before acting. Use the index from the latest snapshot with device_tap or device_type. One action per response, then read the returned screen.")
+        builder.appendLine("- device_shell is the full system escape hatch. It uses root when available, then Shizuku. Use device_file_*, device_package_*, device_settings_*, and device_appops_* for structured work, and device_shell for everything else.")
+        builder.appendLine("- Device control is real. Verify the result from the returned screen or command output instead of claiming success. Call device_stop when the task is done.")
+        builder.appendLine("- For long commands use device_bg_start, poll device_bg_logs, and stop with device_bg_kill. For interactive work use device_shell_open, device_shell_send, device_shell_read, and device_shell_close.")
+        builder.appendLine("- Use device_events or device_wait_event when you need to wait for an app or window change instead of polling the screen.")
+        builder.appendLine("- Use device_trigger_add to run a shell command when a matching event arrives. List them with device_trigger_list, and disable or remove them when they are no longer needed.")
+        builder.appendLine("- You can build a script plugin yourself with plugin_create. Write a focus-plugin.json manifest with runtime set to script, declare tools, then provide main.js with runTool(name, argsJson). The app asks the user to approve installation. Use plugin_list and plugin_logs to inspect installed code.")
         builder.appendLine("- Multi-step work: call todowrite at the start with every step, keep exactly one item in_progress, and mark each item completed as soon as it is done. Do not put the todo list in a normal reply.")
         builder.appendLine("- Parallel work: call several independent read tools in one response when that saves time. Keep writes ordered when they touch the same resource.")
         builder.appendLine("- For a self-contained subtask that would flood this chat, call spawn_agent with a clear task and a read-only or limited tool set. Wait for its summary and continue here.")
@@ -83,6 +92,10 @@ class PromptBuilder(
         val mentioned = mentionJob?.await().orEmpty()
         if (mentioned.isNotBlank()) {
             builder.appendLine(mentioned)
+        }
+        val pluginSection = pluginJob.await()
+        if (pluginSection.isNotBlank()) {
+            builder.appendLine(pluginSection)
         }
         appendDocuments(builder, documents)
         return@coroutineScope builder.toString()
@@ -118,6 +131,14 @@ class PromptBuilder(
 
     private suspend fun mentionedSkillsSection(names: List<String>): String =
         withTimeoutOrNull(SECTION_TIMEOUT_MS) { skills.mentionSection(names) }.orEmpty()
+
+    private suspend fun pluginSection(): String =
+        withTimeoutOrNull(SECTION_TIMEOUT_MS) { external.sections() }
+            .orEmpty()
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+            .take(MAX_PLUGIN_CHARS)
+            .trim()
 
     private fun fresh(section: CachedSection): Boolean =
         System.currentTimeMillis() - section.at < SECTION_TTL_MS
@@ -189,5 +210,6 @@ class PromptBuilder(
         private const val SECTION_TTL_MS = 30_000L
         private const val SECTION_TIMEOUT_MS = 2_000L
         private const val FIRST_SECTION_TIMEOUT_MS = 5_000L
+        private const val MAX_PLUGIN_CHARS = 4_000
     }
 }

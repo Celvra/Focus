@@ -54,16 +54,24 @@ import fan.x0.focus.data.assistant.AssistantSettings
 import fan.x0.focus.data.assistant.ChatSwitcher
 import fan.x0.focus.data.assistant.ChatTurnRunner
 import fan.x0.focus.data.assistant.CrewSwitcher
+import fan.x0.focus.data.device.DeviceRepository
+import fan.x0.focus.data.device.DeviceRole
+import fan.x0.focus.data.plugin.PluginManager
+import fan.x0.focus.data.plugin.PluginNavigation
 import fan.x0.focus.feature.assistant.AssistantRoute
 import fan.x0.focus.feature.assistant.SettingsRoute
 import fan.x0.focus.feature.bridge.BridgeRoute
 import fan.x0.focus.feature.chat.ChatRoute
 import fan.x0.focus.feature.crew.CrewRoute
+import fan.x0.focus.feature.device.DeviceRoute
 import fan.x0.focus.feature.goals.GoalsRoute
 import fan.x0.focus.feature.library.LibraryRoute
 import fan.x0.focus.feature.onboarding.OnboardingRoute
+import fan.x0.focus.feature.plugin.PluginPageRoute
 import fan.x0.focus.feature.today.TodayRoute
 import fan.x0.focus.feature.update.UpdateHost
+import fan.x0.focus.plugin.PluginPageRef
+import fan.x0.focus.plugin.PluginPlacement
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -115,6 +123,11 @@ private fun MainShell() {
     val backStack = rememberSaveable(saver = ShellBackStack.Saver) {
         ShellBackStack(FocusRoute.Chat)
     }
+    val devices = koinInject<DeviceRepository>()
+    val deviceRole by devices.role.collectAsStateWithLifecycle(initialValue = DeviceRole.Full)
+    LaunchedEffect(deviceRole) {
+        if (deviceRole == DeviceRole.Controlled) backStack.open(FocusRoute.Device)
+    }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val activity = LocalActivity.current
@@ -123,11 +136,21 @@ private fun MainShell() {
     val turns = koinInject<ChatTurnRunner>()
     val switcher = koinInject<ChatSwitcher>()
     val crewSwitcher = koinInject<CrewSwitcher>()
+    val plugins = koinInject<PluginManager>()
+    val pluginStatuses by plugins.statuses.collectAsStateWithLifecycle()
+    val pluginPages = remember(pluginStatuses) {
+        pluginStatuses.values
+            .flatMap { it.pages }
+            .filter { PluginPlacement.Drawer in it.placement }
+            .distinctBy { it.pluginId to it.pageId }
+    }
     val working by remember(turns) {
         turns.states.map { it.isNotEmpty() }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
     val openRequest by switcher.openRequest.collectAsStateWithLifecycle()
+    val assistRequest by switcher.assistRequest.collectAsStateWithLifecycle()
     val crewRequest by crewSwitcher.openRequest.collectAsStateWithLifecycle()
+    val pluginRoute by PluginNavigation.route.collectAsStateWithLifecycle()
 
     val navigate: (FocusRoute) -> Unit = { route ->
         backStack.open(route)
@@ -144,10 +167,21 @@ private fun MainShell() {
             switcher.consumeOpenRequest()
         }
     }
+    LaunchedEffect(assistRequest) {
+        if (assistRequest) {
+            backStack.open(FocusRoute.Chat)
+            switcher.consumeAssistRequest()
+        }
+    }
     LaunchedEffect(crewRequest) {
         if (crewRequest != null) {
             backStack.open(FocusRoute.Crew)
         }
+    }
+    LaunchedEffect(pluginRoute) {
+        val route = pluginRoute ?: return@LaunchedEffect
+        backStack.push(FocusRoute.PluginPage(route.pluginId, route.pageId, route.args))
+        PluginNavigation.consume()
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -156,6 +190,8 @@ private fun MainShell() {
             ShellDrawer(
                 state = shellState.value,
                 current = backStack.current,
+                pluginPages = pluginPages,
+                controlledOnly = deviceRole == DeviceRole.Controlled,
                 onNavigate = navigate,
                 onNewChat = {
                     shell.newChat()
@@ -178,6 +214,7 @@ private fun MainShell() {
                     ShellContent(
                         backStack = backStack,
                         shellState = shellState,
+                        pluginPages = pluginPages,
                         onOpenConversation = { id ->
                             shell.openConversation(id)
                             navigate(FocusRoute.Chat)
@@ -188,6 +225,7 @@ private fun MainShell() {
                         },
                         onArchiveConversation = shell::archiveConversation,
                         onDeleteConversation = shell::deleteConversation,
+                        controlledOnly = deviceRole == DeviceRole.Controlled,
                         onExit = { activity?.finish() },
                     )
                     UpdateHost()
@@ -229,16 +267,24 @@ private fun MainShell() {
 private fun ShellContent(
     backStack: ShellBackStack,
     shellState: State<ShellState>,
+    pluginPages: List<PluginPageRef>,
     onOpenConversation: (String) -> Unit,
     onOpenArchivedConversation: (String) -> Unit,
     onArchiveConversation: (String) -> Unit,
     onDeleteConversation: (String) -> Unit,
+    controlledOnly: Boolean,
     onExit: () -> Unit,
 ) {
     val motion = FocusMotionDefaults
     NavDisplay(
         backStack = backStack.entries,
-        onBack = { if (!backStack.back()) onExit() },
+        onBack = {
+            if (controlledOnly && backStack.current == FocusRoute.Device) {
+                onExit()
+            } else if (!backStack.back()) {
+                onExit()
+            }
+        },
         transitionSpec = {
             (
                 slideInHorizontally(motion.spatialDefault()) { it / 5 } +
@@ -267,7 +313,7 @@ private fun ShellContent(
             when (route) {
                 FocusRoute.Chat -> NavEntry(
                     key = route,
-                    contentKey = route,
+                    contentKey = route.contentKey,
                     metadata = NavDisplay.transitionSpec {
                         fadeIn(motion.effectsDefault()) togetherWith fadeOut(motion.effectsFast())
                     } + NavDisplay.popTransitionSpec {
@@ -278,18 +324,24 @@ private fun ShellContent(
                 ) {
                     ChatRoute()
                 }
-                FocusRoute.Today -> NavEntry(route) {
+                FocusRoute.Today -> NavEntry(key = route, contentKey = route.contentKey) {
                     TodayRoute(onOpenChat = { backStack.open(FocusRoute.Chat) })
                 }
-                FocusRoute.Crew -> NavEntry(route) { CrewRoute() }
-                FocusRoute.Goals -> NavEntry(route) { GoalsRoute() }
-                FocusRoute.Library -> NavEntry(route) { LibraryRoute() }
-                FocusRoute.Bridge -> NavEntry(route) { BridgeRoute() }
-                FocusRoute.Assistant -> NavEntry(route) { AssistantRoute() }
-                FocusRoute.Settings -> NavEntry(route) {
-                    SettingsRoute(onExit = { backStack.back() })
+                FocusRoute.Crew -> NavEntry(key = route, contentKey = route.contentKey) { CrewRoute() }
+                FocusRoute.Goals -> NavEntry(key = route, contentKey = route.contentKey) { GoalsRoute() }
+                FocusRoute.Library -> NavEntry(key = route, contentKey = route.contentKey) { LibraryRoute() }
+                FocusRoute.Bridge -> NavEntry(key = route, contentKey = route.contentKey) { BridgeRoute() }
+                FocusRoute.Device -> NavEntry(key = route, contentKey = route.contentKey) { DeviceRoute() }
+                FocusRoute.Assistant -> NavEntry(key = route, contentKey = route.contentKey) { AssistantRoute() }
+                FocusRoute.Settings -> NavEntry(key = route, contentKey = route.contentKey) {
+                    SettingsRoute(
+                        onExit = { backStack.back() },
+                        onOpenPluginPage = { pluginId, pageId ->
+                            backStack.push(FocusRoute.PluginPage(pluginId, pageId))
+                        },
+                    )
                 }
-                FocusRoute.History -> NavEntry(route) {
+                FocusRoute.History -> NavEntry(key = route, contentKey = route.contentKey) {
                     val state = shellState.value
                     HistoryRoute(
                         conversations = state.conversations,
@@ -298,6 +350,17 @@ private fun ShellContent(
                         onOpenArchived = onOpenArchivedConversation,
                         onArchive = onArchiveConversation,
                         onDelete = onDeleteConversation,
+                    )
+                }
+                is FocusRoute.PluginPage -> NavEntry(key = route, contentKey = route.contentKey) {
+                    PluginPageRoute(
+                        pluginId = route.pluginId,
+                        pageId = route.pageId,
+                        args = route.args,
+                        onBack = { backStack.back() },
+                        onNavigate = { pageId, args ->
+                            backStack.push(FocusRoute.PluginPage(route.pluginId, pageId, args))
+                        },
                     )
                 }
             }

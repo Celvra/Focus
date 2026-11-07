@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_overlay_shortcut"
+        android:shortcutId="ask_focus"
+        android:shortcutLongLabel="@string/overlay_shortcut_long"
+        android:shortcutShortLabel="@string/overlay_shortcut_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="fan.x0.focus.feature.overlay.OverlayShortcutActivity"
+            android:targetPackage="fan.x0.focus" />
+    </shortcut>
+</shortcuts>

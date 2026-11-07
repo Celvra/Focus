@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +54,9 @@ class ChatTurnRunner(
     private val keepAlive: ChatTurnKeepAlive,
     private val background: BackgroundCommandMonitor,
     private val notifier: MessageNotifier,
+    private val events: AssistantEventSink,
+    private val triggerBus: AssistantTriggerBus,
+    private val turnGuard: AssistantTurnGuard,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<String, Job>()
@@ -74,6 +78,25 @@ class ChatTurnRunner(
     val actions: SharedFlow<ChatAction> = _actions.asSharedFlow()
 
     init {
+        scope.launch {
+            triggerBus.events.collect { event ->
+                if (chats.conversation(event.conversationId) == null) return@collect
+                chats.append(
+                    conversationId = event.conversationId,
+                    role = ChatRole.System,
+                    content = "Trigger ${event.label}: ${event.prompt}",
+                    label = "trigger:${event.label}",
+                )
+                if (!isRunning(event.conversationId)) {
+                    start(
+                        conversationId = event.conversationId,
+                        text = "",
+                        options = TurnOptions(),
+                        appendUser = false,
+                    )
+                }
+            }
+        }
         scope.launch {
             background.completed.collect { completion ->
                 if (chats.conversation(completion.conversationId) == null) return@collect
@@ -158,6 +181,14 @@ class ChatTurnRunner(
             progressChannels.put(conversationId, progress)?.close()
         }
         keepAlive.start()
+        events.emit(
+            "chat.turn.start",
+            conversationId,
+            kotlinx.serialization.json.buildJsonObject {
+                put("turn", turnId)
+                put("text", userText.take(2000))
+            },
+        )
         val completion = CompletableDeferred<ChatTurnResult?>()
         handles[conversationId] = completion
         var compactionFailed = false
@@ -375,6 +406,7 @@ class ChatTurnRunner(
                 if (handles.remove(conversationId, completion)) {
                     completion.complete(_results.value[conversationId])
                 }
+                runCatching { turnGuard.turnFinished(conversationId) }
             }
         }
         jobs[conversationId] = job
@@ -457,10 +489,24 @@ class ChatTurnRunner(
             ?.text
             ?.trim()
             .orEmpty()
+        val media = state.entries
+            .filterIsInstance<ChatTurnEntry.Trace>()
+            .flatMap { it.steps }
+            .flatMap { it.media }
+            .distinctBy { it.id }
         _states.update { it - conversationId }
-        val result = ChatTurnResult(conversationId, turnId, error, compactionFailed, answer)
+        val result = ChatTurnResult(conversationId, turnId, error, compactionFailed, answer, media)
         _results.update { it + (conversationId to result) }
         handles.remove(conversationId)?.complete(result)
+        events.emit(
+            "chat.turn.end",
+            conversationId,
+            kotlinx.serialization.json.buildJsonObject {
+                put("turn", turnId)
+                put("answer", answer.take(4000))
+                put("failed", error != null)
+            },
+        )
     }
 
     private fun pushReply(

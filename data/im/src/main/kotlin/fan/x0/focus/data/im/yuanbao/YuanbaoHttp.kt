@@ -1,5 +1,6 @@
 package fan.x0.focus.data.im.yuanbao
 
+import android.graphics.BitmapFactory
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -11,6 +12,7 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -89,6 +91,68 @@ internal class YuanbaoHttp(
         throw YuanbaoRetryException(lastError)
     }
 
+    suspend fun uploadMedia(
+        token: YuanbaoToken,
+        botId: String,
+        fileName: String,
+        mime: String,
+        bytes: ByteArray,
+        baseUrl: String,
+    ): YuanbaoUpload {
+        val fileId = ByteArray(16).also(random::nextBytes).joinToString("") { "%02x".format(it) }
+        val md5 = md5Hex(bytes)
+        val body = UploadInfoBody(fileName = fileName, fileId = fileId)
+        val domain = baseUrl.trim().ifBlank { DEFAULT_API_DOMAIN }
+            .removePrefix("https://")
+            .removePrefix("http://")
+            .trimEnd('/')
+        val response = http.post("https://$domain$UPLOAD_INFO_PATH") {
+            contentType(ContentType.Application.Json)
+            authHeaders(token, botId)
+            setBody(json.encodeToString(UploadInfoBody.serializer(), body))
+        }
+        val raw = response.bodyAsText()
+        val envelope = runCatching {
+            json.decodeFromString(UploadInfoEnvelope.serializer(), raw)
+        }.getOrNull() ?: error("上传配置响应无效")
+        if (envelope.code != 0) error(envelope.msg.ifBlank { "上传配置失败 ${envelope.code}" })
+        val config = envelope.data ?: runCatching {
+            json.decodeFromString(CosUploadConfig.serializer(), raw)
+        }.getOrNull() ?: error("上传配置为空")
+        putCosObject(http, config, bytes, mime)
+        val (width, height) = imageSize(bytes)
+        return YuanbaoUpload(
+            url = config.resourceUrl,
+            uuid = md5,
+            size = bytes.size,
+            width = width,
+            height = height,
+        )
+    }
+
+    private fun io.ktor.client.request.HttpRequestBuilder.authHeaders(token: YuanbaoToken, botId: String) {
+        header("X-ID", botId)
+        header("X-Token", token.token)
+        header("X-Source", token.source)
+        header("X-AppVersion", appVersion)
+        header("X-OperationSystem", "Android")
+        header("X-Instance-Id", "16")
+        header("X-Bot-Version", appVersion)
+    }
+
+    private fun imageSize(bytes: ByteArray): Pair<Int, Int> {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        return if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+            bounds.outWidth to bounds.outHeight
+        } else {
+            0 to 0
+        }
+    }
+
+    private fun md5Hex(bytes: ByteArray): String =
+        MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02x".format(it) }
+
     private fun signature(appSecret: String, nonce: String, timestamp: String, appKey: String): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(appSecret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
@@ -99,9 +163,33 @@ internal class YuanbaoHttp(
     companion object {
         private const val DEFAULT_API_DOMAIN = "bot.yuanbao.tencent.com"
         private const val SIGN_PATH = "/api/v5/robotLogic/sign-token"
+        private const val UPLOAD_INFO_PATH = "/api/resource/genUploadInfo"
         private const val RETRYABLE_CODE = 10099
     }
 }
+
+internal data class YuanbaoUpload(
+    val url: String,
+    val uuid: String,
+    val size: Int,
+    val width: Int,
+    val height: Int,
+)
+
+@Serializable
+private data class UploadInfoBody(
+    val fileName: String,
+    val fileId: String,
+    val docFrom: String = "localDoc",
+    val docOpenId: String = "",
+)
+
+@Serializable
+private data class UploadInfoEnvelope(
+    val code: Int = 0,
+    val msg: String = "",
+    val data: CosUploadConfig? = null,
+)
 
 @Serializable
 private data class SignBody(

@@ -5,6 +5,7 @@
     <string name="onboarding_ready_subtitle">Set up your assistant</string>
     <string name="onboarding_input_hint">Message %1$s</string>
     <string name="onboarding_connect_model">Connect your own model</string>
+    <string name="onboarding_controlled_only">Use this phone only as a controlled device</string>
     <string name="onboarding_gate_title">Connect a model first</string>
     <string name="onboarding_gate_body">Add your own endpoint and key. Setup continues after it is saved.</string>
     <string name="onboarding_model_settings">Model settings</string>

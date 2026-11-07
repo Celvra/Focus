@@ -1,6 +1,6 @@
 package fan.x0.focus.data.assistant
 
-enum class SkillSource { App, Workspace }
+enum class SkillSource { App, Workspace, Plugin }
 
 data class SkillEntry(
     val id: String,
@@ -16,6 +16,7 @@ data class SkillEntry(
     val treeUri: String = "",
     val dirPath: String = "",
     val dirUri: String = "",
+    val pluginId: String = "",
 )
 
 data class SkillContent(

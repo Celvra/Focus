@@ -80,6 +80,7 @@ sealed interface OnboardingAction : UiAction {
     data object ToggleApiKeyVisibility : OnboardingAction
     data object TestProvider : OnboardingAction
     data object SaveProvider : OnboardingAction
+    data object UseAsControlled : OnboardingAction
     data object FetchModels : OnboardingAction
     data object OpenModelPicker : OnboardingAction
     data object CloseModelPicker : OnboardingAction

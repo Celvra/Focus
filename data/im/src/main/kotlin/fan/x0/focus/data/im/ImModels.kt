@@ -31,6 +31,25 @@ data class ImUserRef(
     val name: String,
 )
 
+enum class ImAttachmentKind {
+    Image,
+    File,
+}
+
+data class ImAttachment(
+    val kind: ImAttachmentKind,
+    val name: String,
+    val mime: String = "",
+    val bytes: ByteArray = ByteArray(0),
+)
+
+data class ImReply(
+    val messageId: String,
+    val senderName: String,
+    val text: String,
+    val fromBot: Boolean = false,
+)
+
 data class ImInbound(
     val messageId: String,
     val chat: ImChatRef,
@@ -40,11 +59,14 @@ data class ImInbound(
     val sentAt: Long,
     val platformContext: String? = null,
     val ownerId: String? = null,
+    val reply: ImReply? = null,
+    val attachments: List<ImAttachment> = emptyList(),
 )
 
 data class ImOutbound(
     val text: String,
-    val replyToMessageId: String? = null,
+    val reply: ImReply? = null,
+    val attachments: List<ImAttachment> = emptyList(),
 )
 
 data class ImSendTarget(

@@ -37,11 +37,14 @@ import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.hapticSelect
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.data.assistant.Conversation
+import fan.x0.focus.plugin.PluginPageRef
 
 @Composable
 fun ShellDrawer(
     state: ShellState,
     current: FocusRoute,
+    pluginPages: List<PluginPageRef>,
+    controlledOnly: Boolean = false,
     onNavigate: (FocusRoute) -> Unit,
     onNewChat: () -> Unit,
     onOpenConversation: (String) -> Unit,
@@ -56,51 +59,74 @@ fun ShellDrawer(
     ) {
         DrawerHeader(state, onOpenSettings = { onNavigate(FocusRoute.Settings) })
         Spacer(Modifier.height(8.dp))
-        NewChatButton(onClick = onNewChat)
-        Spacer(Modifier.height(8.dp))
-        DrawerEntry(FocusIcons.Today, stringResource(R.string.tab_today), current == FocusRoute.Today) {
-            onNavigate(FocusRoute.Today)
+        if (!controlledOnly) {
+            NewChatButton(onClick = onNewChat)
+            Spacer(Modifier.height(8.dp))
+            DrawerEntry(FocusIcons.Today, stringResource(R.string.tab_today), current == FocusRoute.Today) {
+                onNavigate(FocusRoute.Today)
+            }
+            DrawerEntry(FocusIcons.Groups, stringResource(R.string.tab_groups), current == FocusRoute.Crew) {
+                onNavigate(FocusRoute.Crew)
+            }
+            DrawerEntry(FocusIcons.Goals, stringResource(R.string.tab_goals), current == FocusRoute.Goals) {
+                onNavigate(FocusRoute.Goals)
+            }
+            DrawerEntry(FocusIcons.Library, stringResource(R.string.tab_library), current == FocusRoute.Library) {
+                onNavigate(FocusRoute.Library)
+            }
+            DrawerEntry(FocusIcons.Terminal, stringResource(R.string.tab_bridge), current == FocusRoute.Bridge) {
+                onNavigate(FocusRoute.Bridge)
+            }
         }
-        DrawerEntry(FocusIcons.Groups, stringResource(R.string.tab_groups), current == FocusRoute.Crew) {
-            onNavigate(FocusRoute.Crew)
+        DrawerEntry(FocusIcons.Device, stringResource(R.string.device_title), current == FocusRoute.Device) {
+            onNavigate(FocusRoute.Device)
         }
-        DrawerEntry(FocusIcons.Goals, stringResource(R.string.tab_goals), current == FocusRoute.Goals) {
-            onNavigate(FocusRoute.Goals)
+        if (!controlledOnly) {
+            DrawerEntry(FocusIcons.Assistant, stringResource(R.string.tab_assistant), current == FocusRoute.Assistant) {
+                onNavigate(FocusRoute.Assistant)
+            }
         }
-        DrawerEntry(FocusIcons.Library, stringResource(R.string.tab_library), current == FocusRoute.Library) {
-            onNavigate(FocusRoute.Library)
-        }
-        DrawerEntry(FocusIcons.Terminal, stringResource(R.string.tab_bridge), current == FocusRoute.Bridge) {
-            onNavigate(FocusRoute.Bridge)
-        }
-        DrawerEntry(FocusIcons.Assistant, stringResource(R.string.tab_assistant), current == FocusRoute.Assistant) {
-            onNavigate(FocusRoute.Assistant)
+        if (!controlledOnly && pluginPages.isNotEmpty()) {
+            DrawerSectionLabel(stringResource(R.string.plugins_drawer_section))
+            pluginPages.forEach { page ->
+                DrawerEntry(
+                    icon = FocusIcons.Tool,
+                    label = page.title,
+                    selected = current is FocusRoute.PluginPage &&
+                        current.pluginId == page.pluginId &&
+                        current.pageId == page.pageId,
+                ) {
+                    onNavigate(FocusRoute.PluginPage(page.pluginId, page.pageId))
+                }
+            }
         }
         DrawerEntry(FocusIcons.Settings, stringResource(R.string.settings_title), current == FocusRoute.Settings) {
             onNavigate(FocusRoute.Settings)
         }
-        Spacer(Modifier.height(10.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Spacer(Modifier.height(6.dp))
-        DrawerSectionLabel(stringResource(R.string.drawer_recent))
-        if (state.recent.isEmpty()) {
-            Text(
-                text = stringResource(R.string.drawer_no_conversations),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            )
-        } else {
-            state.recent.forEach { conversation ->
-                ConversationRow(conversation = conversation, onClick = { onOpenConversation(conversation.id) })
+        if (!controlledOnly) {
+            Spacer(Modifier.height(10.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(6.dp))
+            DrawerSectionLabel(stringResource(R.string.drawer_recent))
+            if (state.recent.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.drawer_no_conversations),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            } else {
+                state.recent.forEach { conversation ->
+                    ConversationRow(conversation = conversation, onClick = { onOpenConversation(conversation.id) })
+                }
             }
+            DrawerEntry(
+                icon = FocusIcons.History,
+                label = stringResource(R.string.drawer_history),
+                selected = current == FocusRoute.History,
+                onClick = { onNavigate(FocusRoute.History) },
+            )
         }
-        DrawerEntry(
-            icon = FocusIcons.History,
-            label = stringResource(R.string.drawer_history),
-            selected = current == FocusRoute.History,
-            onClick = { onNavigate(FocusRoute.History) },
-        )
     }
 }
 

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PersonAdd
+import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RssFeed
@@ -114,6 +115,7 @@ object FocusIcons {
     val MoreHoriz: ImageVector = Icons.Rounded.MoreHoriz
     val Checklist: ImageVector = Icons.Rounded.Checklist
     val Terminal: ImageVector = Icons.Rounded.Terminal
+    val Device: ImageVector = Icons.Rounded.Phone
     val Groups: ImageVector = Icons.Rounded.Groups
     val PersonAdd: ImageVector = Icons.Rounded.PersonAdd
 }

@@ -3,6 +3,7 @@ package fan.x0.focus.data.assistant
 import fan.x0.focus.data.bridge.BridgeBgJob
 import fan.x0.focus.data.bridge.BridgeEndpoint
 import fan.x0.focus.data.bridge.BridgeRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,6 +23,12 @@ data class BackgroundCompletion(
     val logs: String,
 )
 
+data class BackgroundJobSnapshot(
+    val done: Boolean,
+    val summary: String,
+    val logs: String = "",
+)
+
 @Single
 class BackgroundCommandMonitor(
     private val chats: ChatStore,
@@ -32,6 +39,46 @@ class BackgroundCommandMonitor(
 
     private val _completed = MutableSharedFlow<BackgroundCompletion>(extraBufferCapacity = 8)
     val completed: SharedFlow<BackgroundCompletion> = _completed.asSharedFlow()
+
+    fun register(
+        conversationId: String,
+        jobId: String,
+        poll: suspend () -> BackgroundJobSnapshot,
+    ) {
+        if (conversationId.isBlank() || jobs.containsKey(jobId)) return
+        jobs[jobId] = scope.launch {
+            var snapshot = BackgroundJobSnapshot(done = false, summary = jobId)
+            while (!snapshot.done) {
+                snapshot = try {
+                    poll()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    BackgroundJobSnapshot(done = true, summary = "Background job failed: ${e.message}")
+                }
+                if (!snapshot.done) delay(POLL_MS)
+            }
+            val tail = snapshot.logs.takeLast(LOG_TAIL_CHARS)
+            val content = if (tail.isBlank()) snapshot.summary else "${snapshot.summary}\n\nLogs:\n$tail"
+            if (chats.conversation(conversationId) != null) {
+                chats.append(
+                    conversationId = conversationId,
+                    role = ChatRole.System,
+                    content = content,
+                    label = "bg:$jobId",
+                )
+            }
+            _completed.tryEmit(
+                BackgroundCompletion(
+                    conversationId = conversationId,
+                    jobId = jobId,
+                    summary = snapshot.summary,
+                    logs = tail,
+                ),
+            )
+            jobs.remove(jobId)
+        }
+    }
 
     fun register(conversationId: String, endpoint: BridgeEndpoint, jobId: String) {
         if (conversationId.isBlank() || jobs.containsKey(jobId)) return

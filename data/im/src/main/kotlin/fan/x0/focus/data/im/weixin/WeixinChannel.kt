@@ -3,6 +3,8 @@ package fan.x0.focus.data.im.weixin
 import fan.x0.focus.data.assistant.SecretStore
 import fan.x0.focus.data.im.ImAccount
 import fan.x0.focus.data.im.ImAccountStore
+import fan.x0.focus.data.im.ImAttachment
+import fan.x0.focus.data.im.ImAttachmentKind
 import fan.x0.focus.data.im.ImChannel
 import fan.x0.focus.data.im.ImChatKind
 import fan.x0.focus.data.im.ImChatRef
@@ -62,29 +64,61 @@ internal class WeixinChannel(
     override suspend fun send(target: ImSendTarget, message: ImOutbound): ImSendResult {
         val token = token()
         if (token.isBlank()) return ImSendResult(false, error = "微信未登录")
-        val clientId = "focus-weixin:${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(8)}"
         ImLog.d(
             TAG,
-            "send to=${target.chat.externalId} chars=${message.text.length}",
+            "send to=${target.chat.externalId} chars=${message.text.length} media=${message.attachments.size}",
         )
-        return try {
-            val response = api.sendText(
-                baseUrl = baseUrl,
-                token = token,
-                toUserId = target.chat.externalId,
-                text = message.text,
-                contextToken = target.context,
-                clientId = clientId,
-            )
-            if (!response.ok) ImLog.w(TAG, "send failed: ${response.error}")
-            ImSendResult(response.ok, response.messageId, response.error)
+        var last = ImSendResult(true)
+        try {
+            if (message.text.isNotBlank()) {
+                last = api.sendText(
+                    baseUrl = baseUrl,
+                    token = token,
+                    toUserId = target.chat.externalId,
+                    text = message.text,
+                    contextToken = target.context,
+                    clientId = clientId(),
+                    reply = message.reply,
+                ).toResult()
+            }
+            message.attachments.forEachIndexed { index, attachment ->
+                if (!last.ok) return@forEachIndexed
+                val image = attachment.kind == ImAttachmentKind.Image
+                val upload = api.uploadMedia(
+                    baseUrl = baseUrl,
+                    token = token,
+                    toUserId = target.chat.externalId,
+                    bytes = attachment.bytes,
+                    image = image,
+                )
+                val reply = if (message.text.isBlank() && index == 0) message.reply else null
+                last = api.sendMedia(
+                    baseUrl = baseUrl,
+                    token = token,
+                    toUserId = target.chat.externalId,
+                    contextToken = target.context,
+                    clientId = clientId(),
+                    upload = upload,
+                    fileName = attachment.name,
+                    image = image,
+                    reply = reply,
+                ).toResult()
+            }
+            if (!last.ok) ImLog.w(TAG, "send failed: ${last.error}")
+            return last
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
             ImLog.e(TAG, "send failed", e)
-            ImSendResult(false, error = e.message.orEmpty().ifBlank { "发送失败" })
+            return ImSendResult(false, error = e.message.orEmpty().ifBlank { "发送失败" })
         }
     }
+
+    private fun clientId(): String =
+        "focus-weixin:${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(8)}"
+
+    private fun WeixinSendResponse.toResult(): ImSendResult =
+        ImSendResult(ok, messageId, error)
 
     override suspend fun disconnect() {
         closed = true
@@ -254,7 +288,7 @@ internal class WeixinChannel(
                 cursor = response.cursor
                 accounts.setCursor(account.id, cursor)
             }
-            response.messages.forEach(::emitInbound)
+            response.messages.forEach { message -> emitInbound(message) }
         }
     }
 
@@ -285,7 +319,7 @@ internal class WeixinChannel(
         ImLog.i(TAG, "login saved bot=$botId base=$baseUrl")
     }
 
-    private fun emitInbound(message: WeixinInbound) {
+    private suspend fun emitInbound(message: WeixinInbound) {
         if (message.messageType == MESSAGE_TYPE_BOT) return
         if (message.fromUserId == botId) return
         val title = message.fromUserId.removeSuffix("@im.wechat").ifBlank { "微信用户" }
@@ -294,10 +328,21 @@ internal class WeixinChannel(
             kind = ImChatKind.Direct,
             title = title,
         )
+        val attachments = message.media.mapNotNull { media ->
+            if (media.size > MAX_MEDIA_BYTES) return@mapNotNull null
+            val bytes = api.downloadMedia(media) ?: return@mapNotNull null
+            if (bytes.isEmpty() || bytes.size > MAX_MEDIA_BYTES) return@mapNotNull null
+            ImAttachment(
+                kind = media.kind,
+                name = media.name,
+                mime = media.mime,
+                bytes = bytes,
+            )
+        }
         ImLog.i(
             TAG,
             "inbound from=${message.fromUserId} chars=${message.text.length} " +
-                "context=${message.contextToken.isNotBlank()}",
+                "media=${attachments.size} context=${message.contextToken.isNotBlank()}",
         )
         _events.tryEmit(
             ImEvent.Inbound(
@@ -309,6 +354,8 @@ internal class WeixinChannel(
                     isBotMentioned = true,
                     sentAt = if (message.sentAt > 0) message.sentAt else System.currentTimeMillis(),
                     platformContext = message.contextToken.ifBlank { null },
+                    reply = message.reply,
+                    attachments = attachments,
                 ),
             ),
         )
@@ -338,5 +385,6 @@ internal class WeixinChannel(
         private const val CODE_TIMEOUT_MS = 5 * 60_000L
         private const val MAX_QR_REFRESH = 3
         private const val DEFAULT_LONG_POLL_MS = 35_000L
+        private const val MAX_MEDIA_BYTES = 10 * 1024 * 1024
     }
 }

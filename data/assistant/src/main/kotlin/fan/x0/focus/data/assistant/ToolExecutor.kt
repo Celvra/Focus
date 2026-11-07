@@ -103,11 +103,28 @@ class ToolExecutor(
     private val crew: CrewToolHandler,
     private val workspaceTrust: WorkspaceTrustService,
     private val skills: SkillsToolHandler,
+    private val providers: ToolProviderGroup,
+    private val events: AssistantEventSink,
 ) {
-    val specs: List<ToolSpec> = ToolCatalog.chat()
+    fun allSpecs(): List<ToolSpec> = ToolCatalog.chat() + providers.specs()
 
-    fun specsFor(mode: AgentMode): List<ToolSpec> =
-        if (mode == AgentMode.Plan) specs.filter { it.kind == ToolKind.Read || it.kind == ToolKind.Ask || it.kind == ToolKind.Plan } else specs
+    fun specsFor(mode: AgentMode): List<ToolSpec> {
+        val specs = allSpecs()
+        return if (mode == AgentMode.Plan) {
+            specs.filter { it.kind == ToolKind.Read || it.kind == ToolKind.Ask || it.kind == ToolKind.Plan }
+        } else {
+            specs
+        }
+    }
+
+    fun find(name: String): ToolSpec? = ToolCatalog.find(name) ?: providers.find(name)
+
+    fun redactArguments(name: String, arguments: String): String =
+        providers.redactArguments(name, arguments) ?: ToolCatalog.redactArguments(name, arguments)
+
+    fun label(name: String?): String = providers.label(name) ?: ToolLabels.of(name)
+
+    fun approval(name: String, args: JsonObject): ToolApprovalDraft? = providers.approval(name, args)
 
     suspend fun execute(
         call: CompletedToolCall,
@@ -119,7 +136,7 @@ class ToolExecutor(
         dispatch(name, arguments, allowApproval = false, conversationId = "", mode = AgentMode.Build)
 
     suspend fun runStep(step: ApprovalStep, conversationId: String = "", mode: AgentMode = AgentMode.Build): StepOutcome {
-        val spec = ToolCatalog.find(step.tool)
+        val spec = find(step.tool)
         val args = parseObject(step.arguments)
         return when {
             spec == null || spec.kind == ToolKind.Plan || spec.kind == ToolKind.Ask ->
@@ -148,8 +165,16 @@ class ToolExecutor(
         conversationId: String,
         mode: AgentMode = AgentMode.Build,
     ): ToolResult {
-        val spec = ToolCatalog.find(name) ?: return fail("Unknown tool: $name")
+        val spec = find(name) ?: return fail("Unknown tool: $name")
         val args = parseObject(rawArguments) ?: return fail("Invalid arguments for $name")
+        events.emit(
+            "tool.before",
+            conversationId,
+            buildJsonObject {
+                put("tool", name)
+                put("arguments", redactArguments(name, args.toString()).take(2000))
+            },
+        )
         if (mode == AgentMode.Plan && spec.kind !in setOf(ToolKind.Read, ToolKind.Ask, ToolKind.Plan)) {
             return fail("Plan mode only allows read-only tools. $name would change something. Ask the user to approve the plan first.")
         }
@@ -233,6 +258,7 @@ class ToolExecutor(
     }
 
     private suspend fun runTool(spec: ToolSpec, args: JsonObject, conversationId: String): ToolResult = try {
+        providers.execute(spec.name, args, conversationId)?.let { return it }
         skills.handle(spec.name, args)?.let { return it }
         when (spec.name) {
             "list_calendar_events" -> {
@@ -1529,6 +1555,15 @@ class ToolExecutor(
         trust: TrustGate,
     ): ToolResult {
         val result = runTool(spec, args, conversationId)
+        events.emit(
+            "tool.after",
+            conversationId,
+            buildJsonObject {
+                put("tool", spec.name)
+                put("ok", result.ok)
+                put("summary", result.summary.take(500))
+            },
+        )
         workspaceTrust.onToolFinished(spec.name, args, result)
         if (trust is TrustGate.Declined && result.ok) {
             return result.copy(
@@ -1741,7 +1776,19 @@ class ToolExecutor(
                 label = "Delete skill: $name",
             )
         }
-        else -> null
+        else -> {
+            approval(spec.name, args)?.let {
+                SimpleDraft(it.title, it.summary, it.label)
+            } ?: if (ToolCatalog.find(spec.name) == null) {
+                SimpleDraft(
+                    spec.name,
+                    args.toString().take(400),
+                    spec.description.take(80),
+                )
+            } else {
+                null
+            }
+        }
     }
 
     private fun askRequest(args: JsonObject): AskRequest? {
@@ -1810,7 +1857,7 @@ class ToolExecutor(
                 is JsonObject -> raw.toString()
                 else -> null
             } ?: return@mapNotNull null
-            val spec = ToolCatalog.find(tool) ?: return@mapNotNull null
+            val spec = find(tool) ?: return@mapNotNull null
             if (spec.kind == ToolKind.Plan || spec.kind == ToolKind.Ask ||
                 tool == ToolCatalog.SET_WORKING_TEXT
             ) {

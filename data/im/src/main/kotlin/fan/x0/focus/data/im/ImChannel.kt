@@ -20,12 +20,26 @@ interface ImLoginChannel {
     suspend fun submitLoginCode(code: String): Boolean
 }
 
-class ImChannelRegistry(private val factories: List<ImChannelFactory>) {
-    val descriptors: List<ImChannelDescriptor> = factories.map { it.descriptor }
+class ImChannelRegistry(factories: List<ImChannelFactory>) {
+    private val base = factories.toList()
+    private val extra = java.util.concurrent.CopyOnWriteArrayList<ImChannelFactory>()
+
+    val descriptors: List<ImChannelDescriptor>
+        get() = (base + extra).map { it.descriptor }
+
+    fun register(factory: ImChannelFactory) {
+        if ((base + extra).none { it.descriptor.id == factory.descriptor.id }) {
+            extra += factory
+        }
+    }
+
+    fun unregister(factory: ImChannelFactory) {
+        extra.removeAll { it.descriptor.id == factory.descriptor.id }
+    }
 
     fun descriptor(id: String): ImChannelDescriptor? =
         descriptors.firstOrNull { it.id == id }
 
     fun create(account: ImAccount): ImChannel? =
-        factories.firstOrNull { it.descriptor.id == account.channel }?.create(account)
+        (base + extra).firstOrNull { it.descriptor.id == account.channel }?.create(account)
 }

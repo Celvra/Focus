@@ -2,6 +2,7 @@ package fan.x0.focus.data.im
 
 import fan.x0.focus.core.notify.NotifyActionKind
 import fan.x0.focus.data.assistant.ChatAction
+import fan.x0.focus.data.assistant.ChatAttachment
 import fan.x0.focus.data.assistant.ChatStore
 import fan.x0.focus.data.assistant.ChatTurnProgress
 import fan.x0.focus.data.assistant.ChatTurnResult
@@ -37,6 +38,7 @@ class ImGateway(
     private val conversations: ChatStore,
     private val turns: ChatTurnRunner,
     private val registry: ImChannelRegistry,
+    private val media: ImMediaMapper,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val reloadMutex = Mutex()
@@ -125,6 +127,7 @@ class ImGateway(
             channel = channel,
             scope = activeScope,
             queues = ConcurrentHashMap(),
+            pending = ConcurrentHashMap(),
             job = job,
         )
         active[account.id] = item
@@ -211,19 +214,52 @@ class ImGateway(
                 return
             }
         }
+        val key = "${message.chat.kind.name}:${message.chat.externalId}"
         if (message.chat.kind == ImChatKind.Group && account.config.requireMention) {
             if (!message.isBotMentioned) {
-                ImLog.d(TAG, "skip group without mention chat=${message.chat.externalId}")
+                val line = media.messageLine(message)
+                if (line.isNotBlank()) {
+                    val files = message.attachments.mapNotNull { media.toChatAttachment(it) }
+                    recordPending(item, key, "${message.sender.name}: $line", files)
+                }
+                ImLog.d(TAG, "record group without mention chat=${message.chat.externalId}")
                 return
             }
         }
-        val key = "${message.chat.kind.name}:${message.chat.externalId}"
         val queue = item.queues.getOrPut(key) {
             Channel<ImInbound>(Channel.UNLIMITED).also { channel ->
                 item.scope.launch { consume(item, channel) }
             }
         }
         queue.trySend(message)
+    }
+
+    private fun recordPending(
+        item: Active,
+        key: String,
+        line: String,
+        attachments: List<ChatAttachment>,
+    ) {
+        val list = item.pending.getOrPut(key) { mutableListOf() }
+        synchronized(list) {
+            list.add(PendingLine(line, attachments))
+            while (list.size > PENDING_LIMIT) list.removeAt(0)
+            var count = list.sumOf { it.attachments.size }
+            while (count > PENDING_ATTACHMENT_LIMIT) {
+                val index = list.indexOfFirst { it.attachments.isNotEmpty() }
+                if (index < 0) break
+                val entry = list[index]
+                list[index] = entry.copy(attachments = emptyList())
+                count -= entry.attachments.size
+            }
+        }
+    }
+
+    private fun takePending(item: Active, key: String): List<PendingLine> {
+        val list = item.pending.remove(key) ?: return emptyList()
+        synchronized(list) {
+            return list.toList()
+        }
     }
 
     private suspend fun consume(item: Active, queue: Channel<ImInbound>) {
@@ -243,19 +279,18 @@ class ImGateway(
         val chat = chats.ensure(account, message.chat, message.sentAt)
         if (!chat.enabled) return
         chats.setContext(chat.id, message.platformContext.orEmpty())
-        if (message.text.isBlank()) {
+        if (message.text.isBlank() && message.attachments.isEmpty()) {
             if (chat.kind == ImChatKind.Direct) {
                 sendText(item, chat, "暂不支持这种消息类型", message.platformContext)
             }
             return
         }
+        val pending = takePending(item, "${message.chat.kind.name}:${message.chat.externalId}")
         val conversationId = ensureConversation(account, chat)
         activeTurns[conversationId] = chat.id
-        val prompt = if (chat.kind == ImChatKind.Group) {
-            "${message.sender.name}: ${message.text}"
-        } else {
-            message.text
-        }
+        val prompt = buildPrompt(chat, message, pending)
+        val files = pending.flatMap { it.attachments } +
+            message.attachments.mapNotNull { media.toChatAttachment(it) }
         ImLog.i(
             TAG,
             "turn start conversation=$conversationId chat=${chat.title} chars=${prompt.length}",
@@ -293,6 +328,7 @@ class ImGateway(
                     providerId = conversation?.providerId.orEmpty(),
                     model = conversation?.model.orEmpty(),
                     reasoning = reasoning,
+                    attachments = files,
                     silentReply = true,
                     autoTitle = false,
                 ),
@@ -311,11 +347,72 @@ class ImGateway(
                 "answerChars=${result?.answer?.length ?: 0}",
         )
         val context = message.platformContext
+        val reply = ImReply(
+            messageId = message.messageId,
+            senderName = message.sender.name,
+            text = media.messageLine(message).take(MAX_REPLY_CHARS),
+        )
         when {
-            result == null -> sendText(item, chat, "处理超时，请稍后重试。", context)
-            result.error != null -> sendText(item, chat, "处理失败：${result.errorText()}", context)
-            result.answer.isBlank() -> sendText(item, chat, "已完成。", context)
-            else -> sendText(item, chat, result.answer, context)
+            result == null -> sendText(item, chat, "处理超时，请稍后重试。", context, reply)
+            result.error != null -> sendText(item, chat, "处理失败：${result.errorText()}", context, reply)
+            result.answer.isBlank() -> sendText(item, chat, "已完成。", context, reply)
+            else -> sendText(item, chat, result.answer, context, reply)
+        }
+        if (result != null && result.error == null && result.media.isNotEmpty()) {
+            sendAttachments(item, chat, result.media, context)
+        }
+    }
+
+    private fun buildPrompt(chat: ImChat, message: ImInbound, pending: List<PendingLine>): String = buildString {
+        if (chat.kind == ImChatKind.Group && pending.isNotEmpty()) {
+            appendLine("[群聊中最近的未提及消息]")
+            pending.forEach { appendLine(it.line) }
+            appendLine()
+            appendLine("[当前消息]")
+        }
+        message.reply?.let { quote ->
+            val sender = quote.senderName.ifBlank { "未知" }
+            appendLine("[引用 $sender: ${quote.text.take(MAX_REPLY_CHARS)}]")
+        }
+        val line = media.messageLine(message)
+        if (chat.kind == ImChatKind.Group) {
+            append("${message.sender.name}: $line")
+        } else {
+            append(line)
+        }
+    }
+
+    private suspend fun sendAttachments(
+        item: Active,
+        chat: ImChat,
+        attachments: List<ChatAttachment>,
+        context: String?,
+    ) {
+        if (attachments.isEmpty()) return
+        val descriptor = registry.descriptor(item.account.channel) ?: return
+        if (!descriptor.capabilities.supportsMedia) {
+            ImLog.d(TAG, "skip media unsupported channel=${item.account.channel}")
+            return
+        }
+        attachments.forEach { attachment ->
+            val file = media.toImAttachment(attachment) ?: return@forEach
+            val result = try {
+                item.channel.send(
+                    target = ImSendTarget(
+                        chat = ImChatRef(chat.externalId, chat.kind, chat.title),
+                        context = context ?: chat.platformContext.ifBlank { null },
+                    ),
+                    message = ImOutbound(text = "", attachments = listOf(file)),
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                ImLog.w(TAG, "send media ${item.account.id} failed", e)
+                ImSendResult(false, error = e.message.orEmpty())
+            }
+            if (!result.ok) {
+                ImLog.w(TAG, "send media ${item.account.id} rejected: ${result.error}")
+            }
         }
     }
 
@@ -334,6 +431,7 @@ class ImGateway(
         chat: ImChat,
         text: String,
         context: String? = null,
+        reply: ImReply? = null,
     ): ImSendResult {
         if (text.isBlank()) return ImSendResult(false, error = "Empty message")
         val descriptor = registry.descriptor(item.account.channel)
@@ -341,13 +439,14 @@ class ImGateway(
         val chunks = ImChunker.split(text, descriptor.capabilities.maxTextLength)
         ImLog.d(TAG, "send ${item.account.id} chat=${chat.title} chars=${text.length} chunks=${chunks.size}")
         chunks.forEachIndexed { index, chunk ->
+            val quoted = reply?.takeIf { index == 0 && descriptor.capabilities.supportsReplyRef }
             val result = try {
                 item.channel.send(
                     target = ImSendTarget(
                         chat = ImChatRef(chat.externalId, chat.kind, chat.title),
                         context = context ?: chat.platformContext.ifBlank { null },
                     ),
-                    message = ImOutbound(chunk),
+                    message = ImOutbound(chunk, reply = quoted),
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -404,11 +503,20 @@ class ImGateway(
         val channel: ImChannel,
         val scope: CoroutineScope,
         val queues: ConcurrentHashMap<String, Channel<ImInbound>>,
+        val pending: ConcurrentHashMap<String, MutableList<PendingLine>>,
         val job: Job,
+    )
+
+    private data class PendingLine(
+        val line: String,
+        val attachments: List<ChatAttachment> = emptyList(),
     )
 
     companion object {
         private const val TAG = "ImGateway"
         private const val SEEN_RETENTION_MS = 7L * 24 * 60 * 60 * 1000
+        private const val PENDING_LIMIT = 30
+        private const val PENDING_ATTACHMENT_LIMIT = 8
+        private const val MAX_REPLY_CHARS = 500
     }
 }

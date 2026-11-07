@@ -3,6 +3,8 @@ package fan.x0.focus.data.im.yuanbao
 import fan.x0.focus.data.assistant.SecretStore
 import fan.x0.focus.data.im.ImAccount
 import fan.x0.focus.data.im.ImAccountStore
+import fan.x0.focus.data.im.ImAttachment
+import fan.x0.focus.data.im.ImAttachmentKind
 import fan.x0.focus.data.im.ImChannel
 import fan.x0.focus.data.im.ImChatKind
 import fan.x0.focus.data.im.ImChatRef
@@ -11,6 +13,7 @@ import fan.x0.focus.data.im.ImEvent
 import fan.x0.focus.data.im.ImInbound
 import fan.x0.focus.data.im.ImLog
 import fan.x0.focus.data.im.ImOutbound
+import fan.x0.focus.data.im.ImReply
 import fan.x0.focus.data.im.ImSecretKeys
 import fan.x0.focus.data.im.ImSendResult
 import fan.x0.focus.data.im.ImSendTarget
@@ -18,6 +21,10 @@ import fan.x0.focus.data.im.ImUserRef
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsBytes
+import io.ktor.http.HttpHeaders
+import io.ktor.http.isSuccess
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
@@ -43,6 +50,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -82,6 +90,7 @@ internal fun parseJsonMessage(content: String): InboundMessagePush? {
     val msgSeq = root["msg_seq"]?.jsonPrimitive?.longOrNull ?: 0L
     val msgTime = root["msg_time"]?.jsonPrimitive?.longOrNull ?: 0L
     val botOwnerId = root["bot_owner_id"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    val cloudCustomData = root["cloud_custom_data"]?.jsonPrimitive?.contentOrNull.orEmpty()
     val traceId = root["log_ext"]
         ?.jsonObject
         ?.get("trace_id")
@@ -100,8 +109,34 @@ internal fun parseJsonMessage(content: String): InboundMessagePush? {
             else -> ""
         }
         val data = contentObject?.get("data")?.jsonPrimitive?.contentOrNull.orEmpty()
+        val uuid = contentObject?.get("uuid")?.jsonPrimitive?.contentOrNull.orEmpty()
+        val fileName = contentObject?.get("file_name")?.jsonPrimitive?.contentOrNull.orEmpty()
+        val fileSize = contentObject?.get("file_size")?.jsonPrimitive?.intOrNull ?: 0
+        val imageInfos = contentObject?.get("image_info_array")?.jsonArray?.mapNotNull { info ->
+            val obj = info as? JsonObject ?: return@mapNotNull null
+            ImImageInfo(
+                type = obj["type"]?.jsonPrimitive?.intOrNull ?: 0,
+                size = obj["size"]?.jsonPrimitive?.intOrNull ?: 0,
+                width = obj["width"]?.jsonPrimitive?.intOrNull ?: 0,
+                height = obj["height"]?.jsonPrimitive?.intOrNull ?: 0,
+                url = obj["url"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+            )
+        }.orEmpty()
         if (type.isNotBlank()) {
-            body.add(MsgBodyElement(type, MsgContent(text = value, data = data)))
+            body.add(
+                MsgBodyElement(
+                    type,
+                    MsgContent(
+                        text = value,
+                        uuid = uuid,
+                        data = data,
+                        imageInfoArray = imageInfos,
+                        url = contentObject?.get("url")?.jsonPrimitive?.contentOrNull.orEmpty(),
+                        fileSize = fileSize,
+                        fileName = fileName,
+                    ),
+                ),
+            )
         }
     }
     if (body.isEmpty() && text.isNotBlank()) {
@@ -126,6 +161,7 @@ internal fun parseJsonMessage(content: String): InboundMessagePush? {
         msgTime = msgTime,
         msgId = msgId.ifBlank { msgKey },
         msgBody = body,
+        cloudCustomData = cloudCustomData,
         botOwnerId = botOwnerId,
         traceId = traceId,
     )
@@ -222,9 +258,17 @@ internal class YuanbaoChannel(
             ImLog.w(TAG, "send skipped: not connected")
             return ImSendResult(false, error = "未连接")
         }
-        val result = session.sendText(target.chat, message.text)
-        if (!result.ok) ImLog.w(TAG, "send failed: ${result.error}")
-        return result
+        var last = ImSendResult(true)
+        if (message.text.isNotBlank()) {
+            last = session.sendText(target.chat, message.text, message.reply)
+        }
+        message.attachments.forEachIndexed { index, attachment ->
+            if (!last.ok) return@forEachIndexed
+            val reply = if (message.text.isBlank() && index == 0) message.reply else null
+            last = session.sendAttachment(target.chat, attachment, reply)
+        }
+        if (!last.ok) ImLog.w(TAG, "send failed: ${last.error}")
+        return last
     }
 
     override suspend fun disconnect() {
@@ -248,7 +292,7 @@ internal class YuanbaoChannel(
         )
     }
 
-    private fun emitInbound(push: InboundMessagePush, botId: String) {
+    private suspend fun emitInbound(push: InboundMessagePush, botId: String) {
         if (push.fromAccount == botId) {
             ImLog.d(TAG, "skip self push ${push.fromAccount}")
             return
@@ -264,6 +308,7 @@ internal class YuanbaoChannel(
             },
         )
         val texts = mutableListOf<String>()
+        val attachments = mutableListOf<ImAttachment>()
         var mentioned = false
         var unsupported = false
         push.msgBody.forEach { element ->
@@ -280,10 +325,55 @@ internal class YuanbaoChannel(
                         unsupported = true
                     }
                 }
+                "TIMImageElem" -> {
+                    val info = element.msgContent.imageInfoArray.getOrNull(1)
+                        ?: element.msgContent.imageInfoArray.firstOrNull()
+                    val url = info?.url.orEmpty()
+                    val name = imageName(element.msgContent.uuid)
+                    if (url.isNotBlank()) {
+                        val bytes = downloadMedia(url, MAX_MEDIA_BYTES)
+                        if (bytes != null) {
+                            attachments.add(
+                                ImAttachment(
+                                    kind = ImAttachmentKind.Image,
+                                    name = name,
+                                    mime = mimeOf(name),
+                                    bytes = bytes,
+                                ),
+                            )
+                        } else {
+                            unsupported = true
+                        }
+                    } else {
+                        unsupported = true
+                    }
+                }
+                "TIMFileElem" -> {
+                    val url = element.msgContent.url
+                    val name = element.msgContent.fileName.ifBlank { "file" }
+                    if (url.isNotBlank()) {
+                        val bytes = downloadMedia(url, MAX_FILE_BYTES)
+                        if (bytes != null) {
+                            attachments.add(
+                                ImAttachment(
+                                    kind = ImAttachmentKind.File,
+                                    name = name,
+                                    mime = mimeOf(name),
+                                    bytes = bytes,
+                                ),
+                            )
+                        } else {
+                            unsupported = true
+                        }
+                    } else {
+                        unsupported = true
+                    }
+                }
                 else -> unsupported = true
             }
         }
-        if (texts.isEmpty() && !unsupported) return
+        if (texts.isEmpty() && attachments.isEmpty() && !unsupported) return
+        val reply = parseReply(push.cloudCustomData, botId)
         val messageId = push.msgId.ifBlank {
             "${push.fromAccount}:${push.msgSeq}:${push.msgTime}"
         }
@@ -291,8 +381,9 @@ internal class YuanbaoChannel(
         ImLog.i(
             TAG,
             "inbound chat=${chat.kind.name}:${chat.externalId} title=${chat.title} " +
-                "sender=${push.senderNickname}(${push.fromAccount}) mentioned=${!group || mentioned} " +
-                "text=${texts.joinToString("\n").take(80)}",
+                "sender=${push.senderNickname}(${push.fromAccount}) " +
+                "mentioned=${!group || mentioned || reply?.fromBot == true} " +
+                "media=${attachments.size} text=${texts.joinToString("\n").take(80)}",
         )
         _events.tryEmit(
             ImEvent.Inbound(
@@ -304,12 +395,79 @@ internal class YuanbaoChannel(
                         name = push.senderNickname.ifBlank { push.fromAccount },
                     ),
                     text = texts.joinToString("\n").trim(),
-                    isBotMentioned = !group || mentioned,
+                    isBotMentioned = !group || mentioned || reply?.fromBot == true,
                     sentAt = sentAt,
+                    platformContext = null,
                     ownerId = push.botOwnerId.ifBlank { null },
+                    reply = reply,
+                    attachments = attachments,
                 ),
             ),
         )
+    }
+
+    private suspend fun downloadMedia(url: String, maxBytes: Int): ByteArray? = try {
+        val response = http.get(url)
+        if (!response.status.isSuccess()) {
+            ImLog.w(TAG, "download media failed status=${response.status.value}")
+            null
+        } else {
+            val length = response.headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: 0L
+            if (length > maxBytes) {
+                ImLog.w(TAG, "download media too large length=$length")
+                null
+            } else {
+                response.bodyAsBytes().takeIf { it.isNotEmpty() && it.size <= maxBytes }
+            }
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        ImLog.w(TAG, "download media failed", e)
+        null
+    }
+
+    private fun parseReply(data: String?, botId: String): ImReply? {
+        if (data.isNullOrBlank()) return null
+        val quote = runCatching {
+            json.parseToJsonElement(data).jsonObject["quote"]?.jsonObject
+        }.getOrNull() ?: return null
+        val type = quote["type"]?.jsonPrimitive?.intOrNull ?: 0
+        val desc = quote["desc"]?.jsonPrimitive?.contentOrNull.orEmpty().trim().ifBlank {
+            when (type) {
+                2 -> "[图片]"
+                3 -> "[文件]"
+                4 -> "[视频]"
+                5 -> "[语音]"
+                else -> ""
+            }
+        }
+        if (desc.isBlank()) return null
+        val senderId = quote["sender_id"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val senderName = quote["sender_nickname"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val id = quote["id"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        return ImReply(
+            messageId = id,
+            senderName = senderName.ifBlank { senderId },
+            text = desc,
+            fromBot = senderId.isNotBlank() && senderId == botId,
+        )
+    }
+
+    private fun imageName(uuid: String): String {
+        val name = uuid.ifBlank { "image" }
+        return if (name.contains('.')) name else "$name.jpg"
+    }
+
+    private fun mimeOf(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "gif" -> "image/gif"
+        "webp" -> "image/webp"
+        "txt" -> "text/plain"
+        "json" -> "application/json"
+        "pdf" -> "application/pdf"
+        else -> "application/octet-stream"
     }
 
     private fun parseCustom(data: String): CustomElement? = runCatching {
@@ -415,14 +573,78 @@ internal class YuanbaoChannel(
             }
         }
 
-        suspend fun sendText(chat: ImChatRef, text: String): ImSendResult {
-            val msgId = newId()
+        suspend fun sendText(chat: ImChatRef, text: String, reply: ImReply? = null): ImSendResult {
             val body = listOf(
                 MsgBodyElement(
                     msgType = "TIMTextElem",
                     msgContent = MsgContent(text = text),
                 ),
             )
+            return sendBody(chat, body, reply, "text=${text.length}")
+        }
+
+        suspend fun sendAttachment(
+            chat: ImChatRef,
+            attachment: ImAttachment,
+            reply: ImReply? = null,
+        ): ImSendResult {
+            val upload = try {
+                api.uploadMedia(
+                    token = token,
+                    botId = botId,
+                    fileName = attachment.name,
+                    mime = attachment.mime,
+                    bytes = attachment.bytes,
+                    baseUrl = account.config.baseUrl,
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                ImLog.w(TAG, "upload media failed", e)
+                return ImSendResult(false, error = e.message.orEmpty().ifBlank { "上传失败" })
+            }
+            val body = if (attachment.kind == ImAttachmentKind.Image) {
+                listOf(
+                    MsgBodyElement(
+                        msgType = "TIMImageElem",
+                        msgContent = MsgContent(
+                            uuid = upload.uuid,
+                            imageFormat = 255,
+                            imageInfoArray = listOf(
+                                ImImageInfo(
+                                    type = 1,
+                                    size = upload.size,
+                                    width = upload.width,
+                                    height = upload.height,
+                                    url = upload.url,
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            } else {
+                listOf(
+                    MsgBodyElement(
+                        msgType = "TIMFileElem",
+                        msgContent = MsgContent(
+                            uuid = upload.uuid,
+                            url = upload.url,
+                            fileSize = upload.size,
+                            fileName = attachment.name,
+                        ),
+                    ),
+                )
+            }
+            return sendBody(chat, body, reply, "media=${attachment.kind.name} size=${upload.size}")
+        }
+
+        private suspend fun sendBody(
+            chat: ImChatRef,
+            body: List<MsgBodyElement>,
+            reply: ImReply?,
+            label: String,
+        ): ImSendResult {
+            val msgId = newId()
             val command: String
             val payload: ByteArray
             if (chat.kind == ImChatKind.Group) {
@@ -433,6 +655,7 @@ internal class YuanbaoChannel(
                     fromAccount = botId,
                     random = Random.nextInt(0, Int.MAX_VALUE).toString(),
                     msgBody = body,
+                    refMsgId = reply?.messageId.orEmpty(),
                 ).encode()
             } else {
                 command = CMD_SEND_C2C
@@ -444,15 +667,15 @@ internal class YuanbaoChannel(
                     msgBody = body,
                 ).encode()
             }
-            ImLog.d(TAG, "sendText cmd=$command chat=${chat.kind.name}:${chat.externalId} chars=${text.length}")
+            ImLog.d(TAG, "send cmd=$command chat=${chat.kind.name}:${chat.externalId} $label")
             val response = request(command, MODULE_BIZ, payload)
                 ?: return ImSendResult(false, msgId, "发送超时")
             if (response.data.isEmpty()) {
-                ImLog.w(TAG, "sendText empty response cmd=$command")
+                ImLog.w(TAG, "send empty response cmd=$command")
                 return ImSendResult(false, msgId, "发送响应为空")
             }
             val result = SendMessageRsp.decode(response.data)
-            ImLog.d(TAG, "sendText response code=${result.code} message=${result.message}")
+            ImLog.d(TAG, "send response code=${result.code} message=${result.message}")
             return if (result.code == 0) {
                 ImSendResult(true, msgId)
             } else {
@@ -702,6 +925,8 @@ internal class YuanbaoChannel(
         private val FATAL_CLOSE_CODES = setOf(4012, 4013, 4014, 4018, 4019, 4021)
         private const val TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000L
         private const val TOKEN_FALLBACK_MS = 10 * 60 * 1000L
+        private const val MAX_MEDIA_BYTES = 10 * 1024 * 1024
+        private const val MAX_FILE_BYTES = 8 * 1024 * 1024
         private val AUTH_FATAL = setOf(
             40100,
             41102,

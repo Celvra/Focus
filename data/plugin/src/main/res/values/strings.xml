@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="plugin_accessibility_label">Focus plugin bridge</string>
+    <string name="plugin_accessibility_description">Allows installed Focus plugins to read the screen and perform gestures.</string>
+    <string name="plugin_accessibility_summary">Used by automation plugins such as phone agents.</string>
+    <string name="plugin_notification_listener_label">Focus plugin notifications</string>
+    <string name="plugin_tile_label">Focus plugin</string>
+    <string name="plugin_widget_default_title">Focus plugin</string>
+</resources>

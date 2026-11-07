@@ -85,13 +85,14 @@ class CrewEngine(
     private val askReplies = ConcurrentHashMap<String, CompletableDeferred<AskReply>>()
     private val trustDecisions = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
 
-    private val specs: List<ToolSpec> = ToolCatalog.chat()
-        .filterNot { it.name in EXCLUDED }
-        .filterNot { it.name in CrewToolCatalog.assistantNames }
-        .filterNot { it.name in CrewToolCatalog.agentNames }
-        .plus(CrewToolCatalog.agentSpecs)
+    private val specs: List<ToolSpec>
+        get() = tools.allSpecs()
+            .filterNot { it.name in EXCLUDED }
+            .filterNot { it.name in CrewToolCatalog.assistantNames }
+            .filterNot { it.name in CrewToolCatalog.agentNames }
+            .plus(CrewToolCatalog.agentSpecs)
 
-    private val specNames: Set<String> = specs.mapTo(mutableSetOf()) { it.name }
+    private val specNames: Set<String> get() = specs.mapTo(mutableSetOf()) { it.name }
 
     fun decide(approvalId: String, approved: Boolean) {
         waivers.computeIfAbsent(approvalId) { CompletableDeferred() }.complete(approved)
@@ -274,7 +275,7 @@ class CrewEngine(
                     emit(
                         CrewSpeechEvent.ToolStarted(
                             id = call.id,
-                            label = ToolLabels.of(call.name),
+                            label = tools.label(call.name),
                             tool = call.name,
                             arguments = call.arguments.take(ARGUMENT_LIMIT),
                         ),
@@ -289,7 +290,7 @@ class CrewEngine(
                     emit(
                         CrewSpeechEvent.ToolFinished(
                             id = call.id,
-                            label = ToolLabels.of(call.name),
+                            label = tools.label(call.name),
                             ok = outcome.result.ok,
                             summary = outcome.result.summary,
                             tool = call.name,
@@ -364,7 +365,7 @@ class CrewEngine(
                 finish = true,
             )
             else -> {
-                val spec = ToolCatalog.find(call.name)
+                val spec = tools.find(call.name)
                 if (spec == null || call.name !in specNames) {
                     return ToolOutcome(
                         result = ToolResult(false, "Error: tool ${call.name} is not allowed", "Tool not allowed"),

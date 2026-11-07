@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="device_accessibility_label">Focus device control</string>
+    <string name="device_accessibility_description">Lets Focus read the screen and perform taps, swipes, and text input.</string>
+    <string name="device_accessibility_summary">Screen reading and touch control for the assistant</string>
+    <string name="device_notification_channel">Device control</string>
+    <string name="device_notification_controlling">Focus is controlling this device</string>
+    <string name="device_notification_controlled">Focus remote control is active</string>
+    <string name="device_notification_stop">Stop</string>
+    <string name="device_notification_background">Background command finished</string>
+    <string name="device_trigger_service_title">Event triggers active</string>
+    <string name="device_trigger_service_body">Focus is watching for trigger events</string>
+</resources>

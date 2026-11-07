@@ -18,6 +18,8 @@ dependencies {
     implementation(projects.data.sources)
     implementation(projects.data.bridge)
     implementation(projects.data.im)
+    implementation(projects.feature.plugin)
+    implementation(projects.feature.overlay)
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)
     implementation(libs.koin.compose)

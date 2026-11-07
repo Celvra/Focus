@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="device_accessibility_label">Focus 设备控制</string>
+    <string name="device_accessibility_description">让 Focus 读取屏幕并执行点击、滑动和文字输入。</string>
+    <string name="device_accessibility_summary">供助手读取屏幕和控制触摸</string>
+    <string name="device_notification_channel">设备控制</string>
+    <string name="device_notification_controlling">Focus 正在控制此设备</string>
+    <string name="device_notification_controlled">Focus 远程控制已开启</string>
+    <string name="device_notification_stop">停止</string>
+    <string name="device_notification_background">后台命令已完成</string>
+    <string name="device_trigger_service_title">事件触发器运行中</string>
+    <string name="device_trigger_service_body">Focus 正在监听触发事件</string>
+</resources>

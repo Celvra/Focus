@@ -12,6 +12,8 @@ import fan.x0.focus.app.ImGatewayService
 import fan.x0.focus.core.designsystem.theme.FocusTheme
 import fan.x0.focus.data.assistant.ChatSwitcher
 import fan.x0.focus.data.assistant.CrewSwitcher
+import fan.x0.focus.data.plugin.PluginIntents
+import fan.x0.focus.data.plugin.PluginNavigation
 import org.koin.mp.KoinPlatform
 
 class MainActivity : ComponentActivity() {
@@ -25,7 +27,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         ImGatewayService.start(this)
         KoinPlatform.getKoin().get<AndroidLocaleController>().bind(this)
+        openAssistantFrom(intent)
         openConversationFrom(intent)
+        openPluginFrom(intent)
         setContent {
             FocusTheme {
                 FocusApp()
@@ -36,7 +40,25 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        openAssistantFrom(intent)
         openConversationFrom(intent)
+        openPluginFrom(intent)
+    }
+
+    private fun openAssistantFrom(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_ASSIST) return
+        intent.action = null
+        KoinPlatform.getKoin().get<ChatSwitcher>().requestAssist()
+    }
+
+    private fun openPluginFrom(intent: Intent?) {
+        val pluginId = intent?.getStringExtra(PluginIntents.EXTRA_PLUGIN_ID) ?: return
+        val pageId = intent.getStringExtra(PluginIntents.EXTRA_PLUGIN_PAGE) ?: return
+        intent.removeExtra(PluginIntents.EXTRA_PLUGIN_ID)
+        intent.removeExtra(PluginIntents.EXTRA_PLUGIN_PAGE)
+        val args = intent.getStringExtra(PluginIntents.EXTRA_PLUGIN_ARGS)
+        intent.removeExtra(PluginIntents.EXTRA_PLUGIN_ARGS)
+        PluginNavigation.open(pluginId, pageId, args)
     }
 
     private fun openConversationFrom(intent: Intent?) {

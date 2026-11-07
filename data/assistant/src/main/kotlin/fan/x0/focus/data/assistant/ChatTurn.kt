@@ -95,6 +95,7 @@ data class ChatTurnResult(
     val error: AppError? = null,
     val compactionFailed: Boolean = false,
     val answer: String = "",
+    val media: List<ChatAttachment> = emptyList(),
 )
 
 sealed interface ChatTurnProgress {

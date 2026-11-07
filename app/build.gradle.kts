@@ -41,6 +41,10 @@ android {
             if (releaseKeystoreFile != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 
@@ -51,23 +55,30 @@ android {
 }
 
 dependencies {
+    compileOnly(libs.libxposed.api)
     implementation(projects.core.mvi)
     implementation(projects.core.error)
     implementation(projects.core.designsystem)
     implementation(projects.core.network)
     implementation(projects.core.notify)
+    implementation(projects.pluginSdk)
+    implementation(projects.data.plugin)
     implementation(projects.data.assistant)
+    implementation(projects.data.device)
     implementation(projects.data.sources)
     implementation(projects.data.bridge)
     implementation(projects.data.im)
     implementation(projects.feature.onboarding)
     implementation(projects.feature.chat)
+    implementation(projects.feature.overlay)
     implementation(projects.feature.crew)
     implementation(projects.feature.today)
     implementation(projects.feature.goals)
     implementation(projects.feature.library)
     implementation(projects.feature.bridge)
     implementation(projects.feature.assistant)
+    implementation(projects.feature.device)
+    implementation(projects.feature.plugin)
     implementation(projects.feature.update)
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)

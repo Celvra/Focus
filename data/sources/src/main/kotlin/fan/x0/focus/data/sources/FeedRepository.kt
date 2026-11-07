@@ -110,6 +110,7 @@ class FeedRepository(
         var failed = 0
         val now = System.currentTimeMillis()
         feeds.forEach { feed ->
+            if (feed.url.startsWith("plugin://")) return@forEach
             try {
                 val parsed = fetch(feed.url)
                 database.write { db ->
@@ -136,6 +137,52 @@ class FeedRepository(
         }
         bump()
         RefreshReport(added = added, feeds = feeds.size, failed = failed)
+    }
+
+    suspend fun ingestExternal(
+        feedId: String,
+        feedUrl: String,
+        title: String,
+        articles: List<ExternalArticle>,
+    ): Int = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        var added = 0
+        database.write { db ->
+            val values = ContentValues().apply {
+                put("id", feedId)
+                put("url", feedUrl)
+                put("title", title.take(300))
+                put("added_at", now)
+                put("last_fetch_at", now)
+                putNull("error")
+            }
+            db.insertWithOnConflict("feeds", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+            articles.take(MAX_ARTICLES_PER_FETCH).forEach { article ->
+                val articleValues = ContentValues().apply {
+                    put("id", UUID.nameUUIDFromBytes(article.url.toByteArray()).toString())
+                    put("feed_id", feedId)
+                    put("url", article.url)
+                    put("title", article.title.take(300))
+                    put("author", article.author.take(200))
+                    put("summary", article.summary.take(1000))
+                    put("content", article.content)
+                    put("published_at", article.publishedAt)
+                    put("fetched_at", now)
+                    put("is_read", 0)
+                }
+                if (db.insertWithOnConflict("articles", null, articleValues, SQLiteDatabase.CONFLICT_IGNORE) != -1L) {
+                    added++
+                }
+            }
+            val update = ContentValues().apply {
+                put("last_fetch_at", now)
+                put("title", title.take(300))
+                putNull("error")
+            }
+            db.update("feeds", update, "id = ?", arrayOf(feedId))
+        }
+        bump()
+        added
     }
 
     suspend fun markRead(id: String) = withContext(Dispatchers.IO) {

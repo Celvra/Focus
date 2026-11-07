@@ -31,7 +31,9 @@ import fan.x0.focus.feature.assistant.settings.SettingsImRoute
 import fan.x0.focus.feature.assistant.settings.SettingsMcpRoute
 import fan.x0.focus.feature.assistant.settings.SettingsModelPickerSheet
 import fan.x0.focus.feature.assistant.settings.SettingsNotificationsPage
+import fan.x0.focus.feature.assistant.settings.SettingsOverlayPage
 import fan.x0.focus.feature.assistant.settings.SettingsSkillsRoute
+import fan.x0.focus.feature.plugin.SettingsPluginsRoute
 import fan.x0.focus.feature.assistant.settings.SettingsToolsPage
 import fan.x0.focus.feature.assistant.settings.ProviderEditorSheet
 import fan.x0.focus.feature.assistant.settings.SettingsWebSearchRoute
@@ -42,6 +44,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun SettingsRoute(
     onExit: () -> Unit,
+    onOpenPluginPage: (String, String) -> Unit,
     viewModel: SettingsViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -67,6 +70,7 @@ fun SettingsRoute(
         onAction = viewModel::onAction,
         snackbar = snackbar,
         onExit = onExit,
+        onOpenPluginPage = onOpenPluginPage,
     )
 }
 
@@ -76,6 +80,7 @@ internal fun SettingsScreen(
     onAction: (SettingsAction) -> Unit,
     snackbar: SnackbarHostState,
     onExit: () -> Unit,
+    onOpenPluginPage: (String, String) -> Unit,
 ) {
     val backStack = rememberSaveable(
         saver = listSaver(
@@ -146,6 +151,11 @@ internal fun SettingsScreen(
                         onOpen = { backStack.add(it) },
                         onBack = { backStack.removeLastOrNull() },
                     )
+                    SettingsDestination.Plugins -> SettingsPluginsRoute(
+                        onBack = { backStack.removeLastOrNull() },
+                        onOpenPluginPage = onOpenPluginPage,
+                        snackbar = snackbar,
+                    )
                     SettingsDestination.WebSearch -> SettingsWebSearchRoute(
                         onBack = { backStack.removeLastOrNull() },
                         snackbar = snackbar,
@@ -166,6 +176,10 @@ internal fun SettingsScreen(
                         onBack = { backStack.removeLastOrNull() },
                     )
                     SettingsDestination.ChatDetail -> SettingsChatDetailRoute(
+                        onBack = { backStack.removeLastOrNull() },
+                        snackbar = snackbar,
+                    )
+                    SettingsDestination.Overlay -> SettingsOverlayPage(
                         onBack = { backStack.removeLastOrNull() },
                         snackbar = snackbar,
                     )

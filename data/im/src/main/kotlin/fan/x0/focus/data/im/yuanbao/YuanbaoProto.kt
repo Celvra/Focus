@@ -89,12 +89,28 @@ internal data class KickoutMsg(
     companion object
 }
 
+internal data class ImImageInfo(
+    val type: Int = 0,
+    val size: Int = 0,
+    val width: Int = 0,
+    val height: Int = 0,
+    val url: String = "",
+) {
+    companion object
+}
+
 internal data class MsgContent(
     val text: String = "",
     val uuid: String = "",
+    val imageFormat: Int = 0,
     val data: String = "",
     val desc: String = "",
+    val ext: String = "",
+    val sound: String = "",
+    val imageInfoArray: List<ImImageInfo> = emptyList(),
+    val index: Int = 0,
     val url: String = "",
+    val fileSize: Int = 0,
     val fileName: String = "",
 ) {
     companion object
@@ -149,6 +165,7 @@ internal data class SendGroupMessageReq(
     val fromAccount: String = "",
     val random: String = "",
     val msgBody: List<MsgBodyElement> = emptyList(),
+    val refMsgId: String = "",
 )
 
 internal data class SendMessageRsp(
@@ -213,6 +230,7 @@ internal fun SendGroupMessageReq.encode(): ByteArray = ProtoWriter().apply {
     msgBody.forEach { element ->
         message(6) { writeRaw(element.encode()) }
     }
+    string(7, refMsgId)
 }.finish()
 
 internal fun MsgBodyElement.encode(): ByteArray = ProtoWriter().apply {
@@ -220,9 +238,23 @@ internal fun MsgBodyElement.encode(): ByteArray = ProtoWriter().apply {
     message(2) {
         string(1, msgContent.text)
         string(2, msgContent.uuid)
+        uint32(3, msgContent.imageFormat)
         string(4, msgContent.data)
         string(5, msgContent.desc)
+        string(6, msgContent.ext)
+        string(7, msgContent.sound)
+        msgContent.imageInfoArray.forEach { info ->
+            message(8) {
+                uint32(1, info.type)
+                uint32(2, info.size)
+                uint32(3, info.width)
+                uint32(4, info.height)
+                string(5, info.url)
+            }
+        }
+        uint32(9, msgContent.index)
         string(10, msgContent.url)
+        uint32(11, msgContent.fileSize)
         string(12, msgContent.fileName)
     }
 }.finish()
@@ -431,9 +463,15 @@ internal fun MsgBodyElement.Companion.decode(data: ByteArray): MsgBodyElement {
 private fun MsgContent.Companion.decode(data: ByteArray): MsgContent {
     var text = ""
     var uuid = ""
+    var imageFormat = 0
     var body = ""
     var desc = ""
+    var ext = ""
+    var sound = ""
+    val imageInfoArray = mutableListOf<ImImageInfo>()
+    var index = 0
     var url = ""
+    var fileSize = 0
     var fileName = ""
     val reader = ProtoReader(data)
     while (reader.hasMore()) {
@@ -441,14 +479,54 @@ private fun MsgContent.Companion.decode(data: ByteArray): MsgContent {
         when (tag.field to tag.wire) {
             1 to 2 -> text = reader.readString()
             2 to 2 -> uuid = reader.readString()
+            3 to 0 -> imageFormat = reader.readUInt32()
             4 to 2 -> body = reader.readString()
             5 to 2 -> desc = reader.readString()
+            6 to 2 -> ext = reader.readString()
+            7 to 2 -> sound = reader.readString()
+            8 to 2 -> imageInfoArray.add(ImImageInfo.decode(reader.readBytes()))
+            9 to 0 -> index = reader.readUInt32()
             10 to 2 -> url = reader.readString()
+            11 to 0 -> fileSize = reader.readUInt32()
             12 to 2 -> fileName = reader.readString()
             else -> reader.skip(tag.wire)
         }
     }
-    return MsgContent(text, uuid, body, desc, url, fileName)
+    return MsgContent(
+        text = text,
+        uuid = uuid,
+        imageFormat = imageFormat,
+        data = body,
+        desc = desc,
+        ext = ext,
+        sound = sound,
+        imageInfoArray = imageInfoArray,
+        index = index,
+        url = url,
+        fileSize = fileSize,
+        fileName = fileName,
+    )
+}
+
+private fun ImImageInfo.Companion.decode(data: ByteArray): ImImageInfo {
+    var type = 0
+    var size = 0
+    var width = 0
+    var height = 0
+    var url = ""
+    val reader = ProtoReader(data)
+    while (reader.hasMore()) {
+        val tag = reader.readTag()
+        when (tag.field to tag.wire) {
+            1 to 0 -> type = reader.readUInt32()
+            2 to 0 -> size = reader.readUInt32()
+            3 to 0 -> width = reader.readUInt32()
+            4 to 0 -> height = reader.readUInt32()
+            5 to 2 -> url = reader.readString()
+            else -> reader.skip(tag.wire)
+        }
+    }
+    return ImImageInfo(type, size, width, height, url)
 }
 
 private data class LogInfoExt(val traceId: String = "") {

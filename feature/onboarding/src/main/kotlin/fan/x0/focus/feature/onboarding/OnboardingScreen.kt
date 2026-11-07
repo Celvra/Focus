@@ -69,6 +69,7 @@ import fan.x0.focus.core.designsystem.components.FocusPickerItem
 import fan.x0.focus.core.designsystem.components.FocusPickerSelection
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusReasoningCard
+import fan.x0.focus.core.designsystem.components.FocusTextButton
 import fan.x0.focus.core.designsystem.components.FocusTraceCard
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
@@ -308,6 +309,11 @@ private fun ProviderGate(onAction: (OnboardingAction) -> Unit) {
                 .padding(top = 28.dp)
                 .height(56.dp),
         )
+        FocusTextButton(
+            text = stringResource(R.string.onboarding_controlled_only),
+            onClick = { onAction(OnboardingAction.UseAsControlled) },
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
 
@@ -460,6 +466,11 @@ private fun ProviderSheet(
                 text = stringResource(R.string.onboarding_privacy),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FocusTextButton(
+                text = stringResource(R.string.onboarding_controlled_only),
+                onClick = { onAction(OnboardingAction.UseAsControlled) },
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }

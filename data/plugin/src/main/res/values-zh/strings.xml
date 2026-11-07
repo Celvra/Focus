@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="plugin_accessibility_label">Focus 插件桥</string>
+    <string name="plugin_accessibility_description">允许已安装的 Focus 插件读取屏幕内容并执行手势。</string>
+    <string name="plugin_accessibility_summary">供手机自动化等插件使用。</string>
+    <string name="plugin_notification_listener_label">Focus 插件通知访问</string>
+    <string name="plugin_tile_label">Focus 插件</string>
+    <string name="plugin_widget_default_title">Focus 插件</string>
+</resources>

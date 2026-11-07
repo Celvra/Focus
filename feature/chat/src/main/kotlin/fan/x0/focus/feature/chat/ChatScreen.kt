@@ -643,7 +643,15 @@ private fun ChatThread(
         }
     }
 
-    LaunchedEffect(entries.size, state.live, bottomPadding, working, retry, stats, todos) {
+    LaunchedEffect(
+        entries.size,
+        state.live,
+        bottomPadding,
+        working,
+        retry,
+        todos,
+        stats != null,
+    ) {
         if (follow && entries.isNotEmpty()) {
             listState.requestScrollToItem(
                 entries.size +
@@ -900,8 +908,4 @@ private fun ChatBubbleEnter(
     content: @Composable () -> Unit,
 ) = FocusBubbleEnter(play, fromUser, onPlayed, content)
 
-private fun LazyListState.atBottom(): Boolean {
-    val layout = layoutInfo
-    val last = layout.visibleItemsInfo.lastOrNull() ?: return true
-    return last.index >= layout.totalItemsCount - 1
-}
+private fun LazyListState.atBottom(): Boolean = !canScrollForward

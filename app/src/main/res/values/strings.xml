@@ -22,12 +22,14 @@
         <item quantity="other">%1$d new articles</item>
     </plurals>
     <string name="settings_title">Settings</string>
+    <string name="device_title">Device</string>
     <string name="drawer_recent">Recent</string>
     <string name="drawer_new_chat">New chat</string>
     <string name="drawer_no_conversations">No conversations yet.</string>
     <string name="drawer_default_name">You</string>
     <string name="drawer_untitled">Untitled</string>
     <string name="drawer_history">All conversations</string>
+    <string name="plugins_drawer_section">Plugins</string>
     <string name="history_title">Conversations</string>
     <string name="history_tab_active">Chats</string>
     <string name="history_tab_archived">Archived</string>

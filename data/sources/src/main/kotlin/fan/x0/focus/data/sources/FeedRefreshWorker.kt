@@ -17,7 +17,11 @@ import java.util.concurrent.TimeUnit
 
 class FeedRefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
-        val report = KoinPlatform.getKoin().get<FeedRepository>().refreshAll()
+        val koin = KoinPlatform.getKoin()
+        val report = koin.get<FeedRepository>().refreshAll()
+        runCatching { koin.getAll<SourceExtension>() }
+            .getOrDefault(emptyList())
+            .forEach { extension -> runCatching { extension.refresh() } }
         if (report.added > 0) {
             runCatching {
                 KoinPlatform.getKoin().get<MessageNotifier>().notifyFeeds(report.added)

@@ -11,22 +11,29 @@ class SkillRepository(
     private val settings: SkillSettings,
     private val scanner: SkillWorkspaceScanner,
     private val trust: WorkspaceTrustService,
+    private val pluginSkills: PluginSkillProvider,
 ) {
     private val mutex = Mutex()
 
     @Volatile
     private var cache: CachedWorkspace? = null
 
+    @Volatile
+    private var pluginCache: CachedPlugins? = null
+
     suspend fun entries(force: Boolean = false): List<SkillEntry> {
         val disabled = settings.disabledOnce()
         val apps = appEntries(disabled)
         val appNames = apps.mapTo(mutableSetOf()) { it.name.lowercase(Locale.ROOT) }
+        val plugins = pluginEntries(disabled)
+        val pluginNames = plugins.mapTo(mutableSetOf()) { it.name.lowercase(Locale.ROOT) }
         val workspace = workspaceSkills(force)
             .filter { isTrusted(it.entry) }
             .map { it.entry.copy(enabled = it.entry.id !in disabled) }
             .filterNot { it.name.lowercase(Locale.ROOT) in appNames }
+            .filterNot { it.name.lowercase(Locale.ROOT) in pluginNames }
             .distinctBy { it.name.lowercase(Locale.ROOT) }
-        return apps + workspace
+        return apps + plugins + workspace
     }
 
     suspend fun appEntries(): List<SkillEntry> = appEntries(settings.disabledOnce())
@@ -47,6 +54,14 @@ class SkillRepository(
             val content = store.readContent(entry.slug) ?: return null
             return content.copy(entry = entry)
         }
+        if (entry.source == SkillSource.Plugin) {
+            val contribution = pluginContributions().firstOrNull { it.name == entry.name } ?: return null
+            return SkillContent(
+                entry = entry,
+                body = contribution.body,
+                files = contribution.files.keys.toList(),
+            )
+        }
         val scanned = workspaceSkill(entry) ?: return null
         if (!isTrusted(scanned.entry)) return null
         return SkillContent(
@@ -58,6 +73,9 @@ class SkillRepository(
 
     suspend fun readFile(entry: SkillEntry, relative: String): String? {
         if (entry.source == SkillSource.App) return store.readFile(entry.slug, relative)
+        if (entry.source == SkillSource.Plugin) {
+            return pluginContributions().firstOrNull { it.name == entry.name }?.files?.get(relative)
+        }
         val scanned = workspaceSkill(entry) ?: return null
         if (!isTrusted(scanned.entry)) return null
         return scanner.readFile(scanned, relative)
@@ -130,6 +148,33 @@ class SkillRepository(
         return if (added == 0) "" else builder.toString().trim()
     }
 
+    private suspend fun pluginEntries(disabled: Set<String>): List<SkillEntry> =
+        pluginContributions().map { skill ->
+            SkillEntry(
+                id = "plugin:${skill.pluginId}:${skill.name}",
+                name = skill.name,
+                description = skill.description,
+                source = SkillSource.Plugin,
+                enabled = "plugin:${skill.pluginId}:${skill.name}" !in disabled,
+                location = skill.pluginName,
+                pluginId = skill.pluginId,
+            )
+        }
+
+    private suspend fun pluginContributions(): List<PluginSkillContribution> {
+        val now = System.currentTimeMillis()
+        pluginCache?.takeIf { now - it.at < CACHE_TTL_MS }?.let { return it.skills }
+        return mutex.withLock {
+            val current = pluginCache
+            if (current != null && System.currentTimeMillis() - current.at < CACHE_TTL_MS) {
+                return@withLock current.skills
+            }
+            val skills = pluginSkills.skills()
+            pluginCache = CachedPlugins(skills, System.currentTimeMillis())
+            skills
+        }
+    }
+
     private suspend fun workspaceSkill(entry: SkillEntry): ScannedSkill? =
         workspaceSkills(false).firstOrNull { it.entry.id == entry.id }
             ?: workspaceSkills(true).firstOrNull { it.entry.id == entry.id }
@@ -149,7 +194,7 @@ class SkillRepository(
     }
 
     private suspend fun isTrusted(entry: SkillEntry): Boolean {
-        if (entry.source == SkillSource.App) return true
+        if (entry.source == SkillSource.App || entry.source == SkillSource.Plugin) return true
         val kind = entry.workspaceKind ?: return false
         val target = WorkspaceTarget(
             key = entry.targetKey,
@@ -162,6 +207,8 @@ class SkillRepository(
     }
 
     private data class CachedWorkspace(val skills: List<ScannedSkill>, val at: Long)
+
+    private data class CachedPlugins(val skills: List<PluginSkillContribution>, val at: Long)
 
     companion object {
         private const val CACHE_TTL_MS = 30_000L

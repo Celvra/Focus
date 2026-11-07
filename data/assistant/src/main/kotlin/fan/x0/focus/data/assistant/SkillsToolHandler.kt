@@ -39,7 +39,7 @@ class SkillsToolHandler(private val repository: SkillRepository) {
         val builder = StringBuilder()
         builder.appendLine("# Skill: ${entry.name}")
         builder.appendLine(entry.description)
-        if (entry.location.isNotBlank() && entry.source == SkillSource.Workspace) {
+        if (entry.location.isNotBlank() && entry.source != SkillSource.App) {
             builder.appendLine("Source: ${entry.location}")
         }
         builder.appendLine()
@@ -63,7 +63,14 @@ class SkillsToolHandler(private val repository: SkillRepository) {
                             put("name", entry.name)
                             put("description", entry.description)
                             put("enabled", entry.enabled)
-                            put("source", if (entry.source == SkillSource.App) "app" else "workspace")
+                            put(
+                                "source",
+                                when (entry.source) {
+                                    SkillSource.App -> "app"
+                                    SkillSource.Plugin -> "plugin"
+                                    SkillSource.Workspace -> "workspace"
+                                },
+                            )
                             put("location", entry.location)
                         },
                     )
@@ -111,7 +118,7 @@ class SkillsToolHandler(private val repository: SkillRepository) {
     private suspend fun delete(args: JsonObject): ToolResult {
         val name = args.text("name") ?: return fail("name is required")
         val entry = repository.find(name) ?: return fail("Skill not found: $name")
-        if (entry.source != SkillSource.App) return fail("Workspace skills are read-only")
+        if (entry.source != SkillSource.App) return fail("Only app skills can be deleted")
         if (!repository.delete(entry)) return fail("Cannot delete ${entry.name}")
         return ok("Deleted ${entry.name}", "Skill ${entry.name} deleted.")
     }

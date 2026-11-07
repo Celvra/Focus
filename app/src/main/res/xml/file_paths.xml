@@ -3,4 +3,7 @@
     <cache-path
         name="camera"
         path="." />
+    <files-path
+        name="plugins"
+        path="plugins/" />
 </paths>

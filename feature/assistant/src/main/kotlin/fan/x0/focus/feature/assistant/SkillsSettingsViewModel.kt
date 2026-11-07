@@ -169,7 +169,7 @@ class SkillsSettingsViewModel(
                             enabled = entry.enabled,
                             source = entry.source,
                             location = entry.location,
-                            readOnly = entry.source == SkillSource.Workspace,
+                            readOnly = entry.source != SkillSource.App,
                             files = content.files,
                         ),
                         draftError = false,

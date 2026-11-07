@@ -156,8 +156,16 @@ internal fun SettingsSkillsPage(
                     )
                 }
             }
-            item(key = "workspace") {
+            item(key = "plugins") {
                 FocusReveal(index = 2) {
+                    PluginSkillsGroup(
+                        skills = state.skills.filter { it.source == SkillSource.Plugin },
+                        onAction = onAction,
+                    )
+                }
+            }
+            item(key = "workspace") {
+                FocusReveal(index = 3) {
                     WorkspaceSkillsGroup(
                         skills = state.skills.filter { it.source == SkillSource.Workspace },
                         onAction = onAction,
@@ -239,6 +247,35 @@ private fun AppSkillsGroup(
             },
             onClick = { onAction(SkillsAction.New) },
         )
+    }
+}
+
+@Composable
+private fun PluginSkillsGroup(
+    skills: List<SkillEntry>,
+    onAction: (SkillsAction) -> Unit,
+) {
+    FocusCardGroup(title = stringResource(R.string.settings_skills_plugins)) {
+        if (skills.isEmpty()) {
+            item(
+                headlineContent = { Text(stringResource(R.string.settings_skills_plugins_empty)) },
+                leadingContent = {
+                    FocusCardGroupIcon(
+                        icon = FocusIcons.Tool,
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                },
+            )
+        }
+        skills.forEach { skill ->
+            SkillRow(
+                skill = skill,
+                icon = FocusIcons.Tool,
+                onOpen = { onAction(SkillsAction.Edit(skill.id)) },
+                onEnabled = { onAction(SkillsAction.SetEnabled(skill.id, it)) },
+            )
+        }
     }
 }
 

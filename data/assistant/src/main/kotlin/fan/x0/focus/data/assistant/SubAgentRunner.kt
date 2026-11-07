@@ -147,14 +147,14 @@ class SubAgentRunner(
                     )
                     val media = mutableListOf<ChatAttachment>()
                     message.toolCalls.forEach { call ->
-                        val spec = ToolCatalog.find(call.name)
-                        val label = ToolLabels.of(call.name)
+                        val spec = tools.find(call.name)
+                        val label = tools.label(call.name)
                         runs.toolStarted(
                             id = request.runId,
                             callId = call.id,
                             label = label,
                             tool = call.name,
-                            arguments = ToolCatalog.redactArguments(call.name, call.arguments).take(500),
+                            arguments = tools.redactArguments(call.name, call.arguments).take(500),
                         )
                         val startedAt = System.currentTimeMillis()
                         val result = if (spec == null || call.name !in allowed.map { it.name }) {
@@ -276,7 +276,7 @@ class SubAgentRunner(
     }
 
     private fun allowedTools(requested: List<String>): List<ToolSpec> {
-        val catalog = ToolCatalog.chat().filter { it.kind == ToolKind.Read && it.name != "spawn_agent" }
+        val catalog = tools.allSpecs().filter { it.kind == ToolKind.Read && it.name != "spawn_agent" }
         if (requested.isEmpty()) return catalog
         val names = requested.map { it.trim() }.filter { it.isNotBlank() }.toSet()
         return catalog.filter { it.name in names }

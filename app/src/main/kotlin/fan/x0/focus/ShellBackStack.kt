@@ -3,20 +3,64 @@ package fan.x0.focus
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
-enum class FocusRoute {
-    Chat,
-    Today,
-    Crew,
-    Goals,
-    Library,
-    Bridge,
-    Assistant,
-    Settings,
-    History,
+@Serializable
+sealed interface FocusRoute {
+    @Serializable
+    data object Chat : FocusRoute
+
+    @Serializable
+    data object Today : FocusRoute
+
+    @Serializable
+    data object Crew : FocusRoute
+
+    @Serializable
+    data object Goals : FocusRoute
+
+    @Serializable
+    data object Library : FocusRoute
+
+    @Serializable
+    data object Bridge : FocusRoute
+
+    @Serializable
+    data object Device : FocusRoute
+
+    @Serializable
+    data object Assistant : FocusRoute
+
+    @Serializable
+    data object Settings : FocusRoute
+
+    @Serializable
+    data object History : FocusRoute
+
+    @Serializable
+    data class PluginPage(
+        val pluginId: String,
+        val pageId: String,
+        val args: String? = null,
+    ) : FocusRoute
 }
 
-// One level under chat: drawer destinations replace each other and back returns to chat.
+val FocusRoute.contentKey: String
+    get() = when (this) {
+        FocusRoute.Chat -> "chat"
+        FocusRoute.Today -> "today"
+        FocusRoute.Crew -> "crew"
+        FocusRoute.Goals -> "goals"
+        FocusRoute.Library -> "library"
+        FocusRoute.Bridge -> "bridge"
+        FocusRoute.Device -> "device"
+        FocusRoute.Assistant -> "assistant"
+        FocusRoute.Settings -> "settings"
+        FocusRoute.History -> "history"
+        is FocusRoute.PluginPage -> "plugin:$pluginId:$pageId:${args.orEmpty()}"
+    }
+
 class ShellBackStack(val entries: SnapshotStateList<FocusRoute>) {
     constructor(start: FocusRoute) : this(mutableStateListOf(start))
 
@@ -29,6 +73,11 @@ class ShellBackStack(val entries: SnapshotStateList<FocusRoute>) {
         if (route != FocusRoute.Chat) entries.add(route)
     }
 
+    fun push(route: FocusRoute) {
+        if (route == current) return
+        entries.add(route)
+    }
+
     fun back(): Boolean {
         if (entries.size <= 1) return false
         entries.removeAt(entries.lastIndex)
@@ -36,13 +85,21 @@ class ShellBackStack(val entries: SnapshotStateList<FocusRoute>) {
     }
 
     companion object {
+        private val json = Json { ignoreUnknownKeys = true }
+
         val Saver: Saver<ShellBackStack, List<String>> = Saver(
-            save = { ArrayList(it.entries.map(FocusRoute::name)) },
-            restore = { names ->
-                val routes = names.mapNotNull { name ->
-                    runCatching { FocusRoute.valueOf(name) }.getOrNull()
+            save = { stack ->
+                ArrayList(
+                    stack.entries.map { route -> json.encodeToString(FocusRoute.serializer(), route) },
+                )
+            },
+            restore = { values ->
+                val routes = values.mapNotNull { value ->
+                    runCatching { json.decodeFromString(FocusRoute.serializer(), value) }.getOrNull()
                 }
-                ShellBackStack(mutableStateListOf(*(routes.ifEmpty { listOf(FocusRoute.Chat) }).toTypedArray()))
+                ShellBackStack(
+                    mutableStateListOf(*(routes.ifEmpty { listOf(FocusRoute.Chat) }).toTypedArray()),
+                )
             },
         )
     }

@@ -21,12 +21,14 @@
         <item quantity="other">%1$d 篇新文章</item>
     </plurals>
     <string name="settings_title">设置</string>
+    <string name="device_title">设备</string>
     <string name="drawer_recent">最近</string>
     <string name="drawer_new_chat">新对话</string>
     <string name="drawer_no_conversations">还没有对话。</string>
     <string name="drawer_default_name">你</string>
     <string name="drawer_untitled">未命名</string>
     <string name="drawer_history">全部对话</string>
+    <string name="plugins_drawer_section">插件</string>
     <string name="history_title">对话</string>
     <string name="history_tab_active">对话</string>
     <string name="history_tab_archived">已归档</string>

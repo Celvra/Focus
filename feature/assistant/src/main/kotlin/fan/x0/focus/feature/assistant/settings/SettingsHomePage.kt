@@ -46,8 +46,12 @@ internal fun SettingsHomePage(onOpen: (SettingsDestination) -> Unit) {
                 val chatBody = stringResource(R.string.settings_page_chat_agent_body)
                 val toolsTitle = stringResource(R.string.settings_page_tools)
                 val toolsBody = stringResource(R.string.settings_page_tools_body)
+                val pluginsTitle = stringResource(R.string.settings_page_plugins)
+                val pluginsBody = stringResource(R.string.settings_page_plugins_body)
                 val detailTitle = stringResource(R.string.settings_page_chat_detail)
                 val detailBody = stringResource(R.string.settings_page_chat_detail_body)
+                val overlayTitle = stringResource(R.string.settings_page_overlay)
+                val overlayBody = stringResource(R.string.settings_page_overlay_body)
                 val imTitle = stringResource(R.string.settings_page_im)
                 val imBody = stringResource(R.string.settings_page_im_body)
                 val appearanceTitle = stringResource(R.string.settings_page_appearance)
@@ -76,10 +80,22 @@ internal fun SettingsHomePage(onOpen: (SettingsDestination) -> Unit) {
                         onClick = { onOpen(SettingsDestination.Tools) },
                     )
                     pageItem(
+                        title = pluginsTitle,
+                        body = pluginsBody,
+                        icon = FocusIcons.Tool,
+                        onClick = { onOpen(SettingsDestination.Plugins) },
+                    )
+                    pageItem(
                         title = detailTitle,
                         body = detailBody,
                         icon = FocusIcons.Chat,
                         onClick = { onOpen(SettingsDestination.ChatDetail) },
+                    )
+                    pageItem(
+                        title = overlayTitle,
+                        body = overlayBody,
+                        icon = FocusIcons.Assistant,
+                        onClick = { onOpen(SettingsDestination.Overlay) },
                     )
                     pageItem(
                         title = imTitle,

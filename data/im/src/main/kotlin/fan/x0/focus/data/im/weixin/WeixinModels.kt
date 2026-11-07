@@ -1,5 +1,18 @@
 package fan.x0.focus.data.im.weixin
 
+import fan.x0.focus.data.im.ImAttachmentKind
+import fan.x0.focus.data.im.ImReply
+
+internal data class WeixinMedia(
+    val kind: ImAttachmentKind,
+    val name: String,
+    val mime: String,
+    val encryptQueryParam: String,
+    val aesKey: String,
+    val url: String = "",
+    val size: Long = 0,
+)
+
 internal data class WeixinQrCode(
     val qrcode: String,
     val content: String,
@@ -31,6 +44,16 @@ internal data class WeixinInbound(
     val contextToken: String,
     val sentAt: Long,
     val messageType: Int,
+    val media: List<WeixinMedia> = emptyList(),
+    val reply: ImReply? = null,
+)
+
+internal data class WeixinUpload(
+    val encryptQueryParam: String,
+    val aesKey: String,
+    val rawSize: Int,
+    val encryptedSize: Int,
+    val md5: String,
 )
 
 internal data class WeixinSendResponse(

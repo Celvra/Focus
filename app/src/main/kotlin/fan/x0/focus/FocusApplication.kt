@@ -13,10 +13,17 @@ import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.NotifyModule
 import fan.x0.focus.data.assistant.ApprovalStatus
 import fan.x0.focus.data.assistant.ApprovalStore
+import fan.x0.focus.data.assistant.AssistantEventSink
 import fan.x0.focus.data.assistant.AssistantModule
 import fan.x0.focus.data.assistant.CrewRunner
 import fan.x0.focus.data.assistant.ReminderWorker
+import fan.x0.focus.data.device.DeviceAutomationState
+import fan.x0.focus.data.device.DeviceModule
+import fan.x0.focus.data.device.DeviceRuntime
+import fan.x0.focus.data.device.DeviceTriggerManager
 import fan.x0.focus.data.im.ImModule
+import fan.x0.focus.data.plugin.PluginManager
+import fan.x0.focus.data.plugin.PluginModule
 import fan.x0.focus.data.sources.FeedRefreshScheduler
 import fan.x0.focus.data.sources.SourcePreferences
 import fan.x0.focus.data.sources.SourcesModule
@@ -25,9 +32,13 @@ import fan.x0.focus.feature.assistant.AssistantFeatureModule
 import fan.x0.focus.feature.bridge.BridgeModule as BridgeFeatureModule
 import fan.x0.focus.feature.chat.ChatModule
 import fan.x0.focus.feature.crew.CrewModule
+import fan.x0.focus.feature.device.DeviceFeatureModule
 import fan.x0.focus.feature.goals.GoalsModule
 import fan.x0.focus.feature.library.LibraryModule
 import fan.x0.focus.feature.onboarding.OnboardingModule
+import fan.x0.focus.feature.overlay.AutomationOverlayService
+import fan.x0.focus.feature.overlay.OverlayModule
+import fan.x0.focus.feature.plugin.PluginFeatureModule
 import fan.x0.focus.feature.today.TodayModule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +57,9 @@ import org.koin.plugin.module.dsl.startKoin
         NotifyModule::class,
         SourcesModule::class,
         AssistantModule::class,
+        DeviceModule::class,
         ImModule::class,
+        PluginModule::class,
         AppModule::class,
         OnboardingModule::class,
         ChatModule::class,
@@ -56,7 +69,10 @@ import org.koin.plugin.module.dsl.startKoin
         LibraryModule::class,
         BridgeDataModule::class,
         BridgeFeatureModule::class,
+        DeviceFeatureModule::class,
         AssistantFeatureModule::class,
+        OverlayModule::class,
+        PluginFeatureModule::class,
     ],
 )
 class FocusApplication : Application() {
@@ -110,10 +126,21 @@ class FocusApplication : Application() {
 
     private suspend fun bootstrap() {
         val koin = KoinPlatform.getKoin()
+        koin.get<DeviceTriggerManager>()
         koin.get<CrewRunner>()
         val approvals = koin.get<ApprovalStore>()
         approvals.pending().forEach { approvals.decide(it.id, ApprovalStatus.Expired, null) }
         val hours = koin.get<SourcePreferences>().settings.first().refreshIntervalHours
         koin.get<FeedRefreshScheduler>().schedule(hours)
+        koin.get<PluginManager>().loadAll()
+        koin.get<AssistantEventSink>().emit("app.start")
+        scope.launch {
+            koin.get<DeviceRuntime>().automation
+                .collect { state ->
+                    if (state is DeviceAutomationState.Running) {
+                        AutomationOverlayService.start(this@FocusApplication)
+                    }
+                }
+        }
     }
 }

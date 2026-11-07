@@ -275,7 +275,7 @@ class ChatEngine(
                     content = message.text,
                     reasoning = message.reasoning,
                     toolCalls = message.toolCalls.map {
-                        ToolCallRecord(it.id, it.name, ToolCatalog.redactArguments(it.name, it.arguments))
+                        ToolCallRecord(it.id, it.name, tools.redactArguments(it.name, it.arguments))
                     },
                     stats = totalStats,
                     elapsedMs = roundResult.reasoningMs,
@@ -289,10 +289,10 @@ class ChatEngine(
                 message.toolCalls.forEach { call ->
                     emit(
                         ChatEvent.ToolStarted(
-                            label = ToolLabels.of(call.name),
+                            label = tools.label(call.name),
                             id = call.id,
                             tool = call.name,
-                            arguments = ToolCatalog.redactArguments(call.name, call.arguments).take(500),
+                            arguments = tools.redactArguments(call.name, call.arguments).take(500),
                         ),
                     )
                 }
@@ -314,7 +314,7 @@ class ChatEngine(
                     stepCount++
                     totalStats = totalStats.copy(step = stepCount, durationMs = System.currentTimeMillis() - startedAt)
                     emit(ChatEvent.StatsUpdated(totalStats))
-                    val label = ToolLabels.of(call.name)
+                    val label = tools.label(call.name)
                     result.workingText?.let { emit(ChatEvent.WorkingTextChanged(it)) }
                     result.todos?.let { emit(ChatEvent.TodoUpdated(it)) }
                     if (mode == ChatMode.Onboarding && result.completesOnboarding) {
@@ -525,7 +525,7 @@ class ChatEngine(
     ): List<ToolResult> = coroutineScope {
         val semaphore = Semaphore(TOOL_CONCURRENCY)
         val readCalls = calls.filter { call ->
-            ToolCatalog.find(call.name)?.kind == ToolKind.Read
+            tools.find(call.name)?.kind == ToolKind.Read
         }
         val deferred = readCalls.associate { call ->
             call.id to async {
@@ -760,7 +760,7 @@ class ChatEngine(
                             id = call.id,
                             function = FunctionCallDto(
                                 name = call.name,
-                                arguments = ToolCatalog.redactArguments(call.name, call.arguments),
+                                arguments = tools.redactArguments(call.name, call.arguments),
                             ),
                         )
                     }.ifEmpty { null },

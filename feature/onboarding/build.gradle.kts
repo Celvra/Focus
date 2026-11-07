@@ -14,6 +14,7 @@ dependencies {
     implementation(projects.core.designsystem)
     implementation(projects.core.network)
     implementation(projects.data.assistant)
+    implementation(projects.data.device)
     implementation(projects.data.sources)
     implementation(libs.koin.core)
     implementation(libs.koin.annotations)

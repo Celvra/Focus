@@ -5,6 +5,7 @@
     <string name="onboarding_ready_subtitle">设置助手</string>
     <string name="onboarding_input_hint">给 %1$s 发消息</string>
     <string name="onboarding_connect_model">连接自己的模型</string>
+    <string name="onboarding_controlled_only">仅作为受控端使用</string>
     <string name="onboarding_gate_title">先连接你的模型</string>
     <string name="onboarding_gate_body">填写你自己的接口和密钥，保存后继续设置。</string>
     <string name="onboarding_model_settings">模型设置</string>

@@ -24,6 +24,8 @@ import fan.x0.focus.data.assistant.ProviderConfig
 import fan.x0.focus.data.assistant.SecretStore
 import fan.x0.focus.data.assistant.ToolPayload
 import fan.x0.focus.data.assistant.WorkspaceStore
+import fan.x0.focus.data.device.DeviceRepository
+import fan.x0.focus.data.device.DeviceRole
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -40,6 +42,7 @@ class OnboardingViewModel(
     private val engine: ChatEngine,
     private val chats: ChatStore,
     private val workspace: WorkspaceStore,
+    private val devices: DeviceRepository,
 ) : BaseViewModel<OnboardingAction, OnboardingUiState, OnboardingEffect>(OnboardingUiState()) {
 
     private var turnJob: Job? = null
@@ -139,6 +142,7 @@ class OnboardingViewModel(
             }
             OnboardingAction.TestProvider -> testProvider()
             OnboardingAction.SaveProvider -> saveProvider()
+            OnboardingAction.UseAsControlled -> useAsControlled()
             OnboardingAction.FetchModels -> {
                 val token = ++fetchToken
                 viewModelScope.launch { fetchModels(token, notify = true) }
@@ -397,6 +401,13 @@ class OnboardingViewModel(
                     copy(testing = false, providerFailure = ProviderFailure.Network(e.toAppError()))
                 }
             }
+        }
+    }
+
+    private fun useAsControlled() {
+        viewModelScope.launch {
+            devices.setRole(DeviceRole.Controlled)
+            settings.completeOnboarding()
         }
     }
 

@@ -28,8 +28,8 @@ class WeixinChannelFactory(
             maxTextLength = 3000,
             textFormat = ImTextFormat.Markdown,
             chatKinds = setOf(ImChatKind.Direct),
-            supportsReplyRef = false,
-            supportsMedia = false,
+            supportsReplyRef = true,
+            supportsMedia = true,
             minSendIntervalMs = 400,
         ),
     )
