@@ -32,6 +32,9 @@ enum class AgentRole(
     val needsTools: Boolean
         get() = this in setOf(Router, WorkerLight, WorkerStandard, WorkerHeavy, Subagent, Watchdog)
 
+    val needsVision: Boolean
+        get() = this in setOf(Router, WorkerLight, WorkerStandard, WorkerHeavy, Subagent)
+
     companion object {
         fun fromKey(value: String?): AgentRole? = entries.firstOrNull { it.key == value }
     }

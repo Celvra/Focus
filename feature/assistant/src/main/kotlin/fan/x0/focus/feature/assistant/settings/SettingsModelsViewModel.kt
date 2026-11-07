@@ -21,6 +21,7 @@ data class RoleModelRowUi(
     val followsMain: Boolean,
     val own: Boolean,
     val toolsMissing: Boolean,
+    val visionMissing: Boolean,
 )
 
 data class RoleModelPickerGroup(
@@ -35,6 +36,7 @@ data class RoleModelOption(
     val name: String,
     val detail: String,
     val vision: Boolean,
+    val visionKnown: Boolean,
     val tools: Boolean,
     val toolsKnown: Boolean,
     val reasoning: Boolean,
@@ -120,7 +122,7 @@ class RoleModelsViewModel(
                 ?: inheritedConfig?.model?.takeIf { it.isNotBlank() }
                 ?: if (own == null && inherited == null) fallbackProvider?.model else null
             val metaProviderId = provider?.id ?: inheritedProvider?.id ?: fallbackProvider?.id
-            val tools = requestedModel?.let { meta[metaProviderId to it] }
+            val capability = requestedModel?.let { meta[metaProviderId to it] }
             RoleModelRowUi(
                 role = role,
                 providerId = provider?.id ?: inheritedProvider?.id ?: fallbackProvider?.id.orEmpty(),
@@ -129,19 +131,33 @@ class RoleModelsViewModel(
                 inherited = inherited,
                 followsMain = own == null && inherited == null,
                 own = own != null,
-                toolsMissing = role.needsTools && tools == false,
+                toolsMissing = role.needsTools && capability?.tools == false,
+                visionMissing = role.needsVision && capability?.vision == false,
             )
         }
         updateState { copy(rows = rows) }
     }
 
-    private fun modelMetaIndex(): Map<Pair<String, String>, Boolean> = buildMap {
+    private fun modelMetaIndex(): Map<Pair<String, String>, ModelCapability> = buildMap {
         currentState.groups.forEach { group ->
             group.models.forEach { model ->
-                if (model.toolsKnown) put(group.id to model.id, model.tools)
+                if (model.toolsKnown || model.visionKnown) {
+                    put(
+                        group.id to model.id,
+                        ModelCapability(
+                            tools = if (model.toolsKnown) model.tools else null,
+                            vision = if (model.visionKnown) model.vision else null,
+                        ),
+                    )
+                }
             }
         }
     }
+
+    private data class ModelCapability(
+        val tools: Boolean?,
+        val vision: Boolean?,
+    )
 
     private fun openPicker(role: AgentRole) {
         updateState { copy(pickerRole = role, query = "") }
@@ -210,6 +226,7 @@ class RoleModelsViewModel(
             name = name.ifBlank { id },
             detail = details,
             vision = meta.supportsImage == true,
+            visionKnown = meta.supportsImage != null,
             tools = meta.supportsTools == true,
             toolsKnown = meta.supportsTools != null,
             reasoning = meta.supportsReasoning == true,

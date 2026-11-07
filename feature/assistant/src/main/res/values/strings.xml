@@ -566,6 +566,7 @@
     <string name="settings_models_saved">Model saved</string>
     <string name="settings_models_cleared">Model cleared</string>
     <string name="settings_models_tools_warning">This model does not support tool calls.</string>
+    <string name="settings_models_vision_warning">This model does not accept images.</string>
     <string name="settings_models_picker_title">%1$s model</string>
     <string name="settings_models_search">Search models</string>
     <string name="settings_models_vision">Images</string>

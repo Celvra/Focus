@@ -138,6 +138,13 @@ private fun RoleModelSection(
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }
+                            if (row.visionMissing) {
+                                Text(
+                                    text = stringResource(R.string.settings_models_vision_warning),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
                         }
                     },
                     leadingContent = { FocusCardGroupIcon(icon = roleIcon(row.role)) },

@@ -566,6 +566,7 @@
     <string name="settings_models_saved">模型已保存</string>
     <string name="settings_models_cleared">模型已清除</string>
     <string name="settings_models_tools_warning">该模型不支持工具调用。</string>
+    <string name="settings_models_vision_warning">该模型不支持图片输入。</string>
     <string name="settings_models_picker_title">%1$s模型</string>
     <string name="settings_models_search">搜索模型</string>
     <string name="settings_models_vision">图片</string>
