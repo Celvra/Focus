@@ -11,6 +11,12 @@ val releaseKeyAlias = System.getenv("FOCUS_KEY_ALIAS")
 val releaseKeyPassword = System.getenv("FOCUS_KEY_PASSWORD")
 val releaseVersionName = System.getenv("FOCUS_VERSION_NAME")
 val releaseVersionCode = System.getenv("FOCUS_VERSION_CODE")?.toIntOrNull()
+val requestedAbis = providers.gradleProperty("focus.abis").orNull
+val targetAbis = when (requestedAbis) {
+    null -> listOf("arm64-v8a")
+    "all" -> emptyList()
+    else -> requestedAbis.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+}
 
 android {
     namespace = "fan.x0.focus"
@@ -22,8 +28,10 @@ android {
         targetSdk = 37
         versionCode = releaseVersionCode ?: 2
         versionName = releaseVersionName ?: "1.0.1"
-        ndk {
-            abiFilters += listOf("arm64-v8a")
+        if (targetAbis.isNotEmpty()) {
+            ndk {
+                abiFilters += targetAbis
+            }
         }
     }
 
