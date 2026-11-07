@@ -14,9 +14,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -46,7 +46,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.FocusIcons
@@ -61,7 +60,7 @@ internal enum class DisplayWindowMode { Normal, Hover, Minimized }
 
 internal const val DISPLAY_WINDOW_WIDTH_DP = 200
 internal const val DISPLAY_WINDOW_PADDING_DP = 8
-internal const val DISPLAY_WINDOW_CHROME_DP = 112
+internal const val DISPLAY_WINDOW_CHROME_DP = 64
 internal const val DISPLAY_WINDOW_HOVER_DP = 96
 internal const val DISPLAY_WINDOW_BUBBLE_DP = 48
 private const val LONG_PRESS_MS = 450L
@@ -137,7 +136,6 @@ private fun DisplayWindowNormal(
         ) {
             Column(modifier = Modifier.fillMaxSize().padding(DISPLAY_WINDOW_PADDING_DP.dp)) {
                 DisplayWindowHeader(
-                    state = state,
                     onDrag = onDrag,
                     onDragEnd = onDragEnd,
                     onMenuClick = { menuOpen = !menuOpen },
@@ -154,9 +152,9 @@ private fun DisplayWindowNormal(
                         .clip(MaterialTheme.shapes.large)
                         .background(scheme.surfaceContainerLowest),
                 )
-                DisplayWindowFooter(onResize = onResize)
             }
         }
+        DisplayResizeHandle(onResize = onResize, modifier = Modifier.align(Alignment.BottomEnd))
         if (menuOpen) {
             Box(
                 modifier = Modifier
@@ -190,16 +188,19 @@ private fun DisplayWindowNormal(
 
 @Composable
 private fun DisplayWindowHeader(
-    state: VirtualDisplayState,
     onDrag: (Offset) -> Unit,
     onDragEnd: () -> Unit,
     onMenuClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(48.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .weight(1f)
+                .height(48.dp)
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDrag = { change, dragAmount ->
@@ -219,32 +220,11 @@ private fun DisplayWindowHeader(
                     .background(scheme.onSurfaceVariant.copy(alpha = 0.45f)),
             )
         }
-        Icon(
-            imageVector = FocusIcons.Device,
-            contentDescription = null,
-            tint = scheme.primary,
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.overlay_display_window_title),
-                style = MaterialTheme.typography.titleSmall,
-                color = scheme.onSurface,
-                maxLines = 1,
-            )
-            Text(
-                text = stringResource(R.string.overlay_display_window_id, state.displayId),
-                style = MaterialTheme.typography.labelSmall,
-                color = scheme.onSurfaceVariant,
-                maxLines = 1,
-            )
-        }
         IconButton(onClick = onMenuClick) {
             Icon(
                 imageVector = FocusIcons.MoreHoriz,
                 contentDescription = stringResource(R.string.overlay_display_window_more),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = scheme.onSurfaceVariant,
             )
         }
     }
@@ -330,26 +310,14 @@ private fun DisplayWindowScreen(
 }
 
 @Composable
-private fun DisplayWindowFooter(onResize: (Offset) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(R.string.overlay_display_window_hint),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(start = 4.dp),
-        )
-        DisplayResizeHandle(onResize = onResize)
-    }
-}
-
-@Composable
-private fun DisplayResizeHandle(onResize: (Offset) -> Unit) {
+private fun DisplayResizeHandle(
+    onResize: (Offset) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val description = stringResource(R.string.overlay_display_window_resize)
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(48.dp)
             .semantics { contentDescription = description }
             .pointerInput(Unit) {
