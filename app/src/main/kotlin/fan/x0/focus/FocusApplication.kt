@@ -7,6 +7,7 @@ import fan.x0.focus.app.AndroidMessageNotifier
 import fan.x0.focus.app.AppModule
 import fan.x0.focus.app.AppPresenceCallbacks
 import fan.x0.focus.app.ChatTurnService
+import fan.x0.focus.app.FocusWidgetProvider
 import fan.x0.focus.app.ImGatewayService
 import fan.x0.focus.core.network.NetworkModule
 import fan.x0.focus.core.notify.AppPresence
@@ -16,6 +17,7 @@ import fan.x0.focus.data.assistant.ApprovalStatus
 import fan.x0.focus.data.assistant.ApprovalStore
 import fan.x0.focus.data.assistant.AssistantEventSink
 import fan.x0.focus.data.assistant.AssistantModule
+import fan.x0.focus.data.assistant.ChatStore
 import fan.x0.focus.data.assistant.CrewRunner
 import fan.x0.focus.data.assistant.ReminderWorker
 import fan.x0.focus.data.device.DeviceAutomationState
@@ -46,6 +48,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -138,6 +141,11 @@ class FocusApplication : Application() {
         koin.get<FeedRefreshScheduler>().schedule(hours)
         koin.get<PluginManager>().loadAll()
         koin.get<AssistantEventSink>().emit("app.start")
+        scope.launch {
+            koin.get<ChatStore>().changes.collect {
+                FocusWidgetProvider.updateAll(this@FocusApplication)
+            }
+        }
         scope.launch {
             koin.get<DeviceRuntime>().automation
                 .collect { state ->

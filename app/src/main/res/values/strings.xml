@@ -2,6 +2,16 @@
 <resources>
     <string name="app_name">Focus</string>
     <string name="tile_focus_label">Focus assistant</string>
+    <string name="widget_title">Focus</string>
+    <string name="widget_idle">Ask anything</string>
+    <string name="widget_ask">Ask Focus</string>
+    <string name="widget_main">Main session</string>
+    <string name="widget_working">Router is working</string>
+    <string name="widget_description">Ask Focus from the home screen</string>
+    <plurals name="widget_side_running">
+        <item quantity="one">%1$d side chat running</item>
+        <item quantity="other">%1$d side chats running</item>
+    </plurals>
     <string name="notification_channel_reminders">Reminders</string>
     <string name="notification_channel_chat_turns">Chat replies</string>
     <string name="notification_channel_messages">Messages</string>

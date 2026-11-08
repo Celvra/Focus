@@ -2,6 +2,16 @@
 <resources>
     <string name="app_name">Focus</string>
     <string name="tile_focus_label">Focus 助手</string>
+    <string name="widget_title">Focus</string>
+    <string name="widget_idle">问点什么</string>
+    <string name="widget_ask">问 Focus</string>
+    <string name="widget_main">主会话</string>
+    <string name="widget_working">Router 正在处理</string>
+    <string name="widget_description">在桌面直接问 Focus</string>
+    <plurals name="widget_side_running">
+        <item quantity="one">%1$d 个旁聊运行中</item>
+        <item quantity="other">%1$d 个旁聊运行中</item>
+    </plurals>
     <string name="notification_channel_reminders">提醒</string>
     <string name="notification_channel_chat_turns">回复</string>
     <string name="notification_channel_messages">消息</string>
