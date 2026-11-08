@@ -44,7 +44,23 @@ class OverlayViewModel(
         viewModelScope.launch {
             turns.states.collect { states ->
                 if (mainId.isBlank()) return@collect
-                val turn = states[mainId] ?: return@collect
+                val turn = states[mainId]
+                if (turn == null) {
+                    if (currentState.sending) {
+                        wasWorking = false
+                        pendingSubmit = false
+                        updateState {
+                            copy(
+                                sending = false,
+                                approval = null,
+                                trust = null,
+                                ask = null,
+                            )
+                        }
+                        load()
+                    }
+                    return@collect
+                }
                 applyTurn(turn)
             }
         }

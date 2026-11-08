@@ -417,18 +417,6 @@ private fun AnswerBlock(
                 color = scheme.onSurfaceVariant,
             )
         }
-        if (state.sending && answer != null && answer.text.isNotBlank() && !answer.streaming) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                FocusLoadingBlob(size = 18.dp, color = scheme.primary)
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = stringResource(R.string.overlay_router_working),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                )
-            }
-        }
     }
 }
 

@@ -25,7 +25,6 @@
     <string name="overlay_send_failed">发送失败。</string>
     <string name="overlay_thinking">正在思考</string>
     <string name="overlay_no_reply">还没有回复。</string>
-    <string name="overlay_router_working">正在整理回复</string>
     <string name="overlay_approval">需要确认</string>
     <string name="overlay_plan">计划</string>
     <string name="overlay_allow">允许</string>
