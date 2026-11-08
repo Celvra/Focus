@@ -1,17 +1,20 @@
 package fan.x0.focus.data.assistant
 
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.cio.CIO
-import io.ktor.server.engine.EmbeddedServer
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.request.receiveText
-import io.ktor.server.response.respondText
-import io.ktor.server.routing.post
-import io.ktor.server.routing.routing
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.koin.core.annotation.Single
+import java.io.BufferedInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.net.Inet4Address
+import java.net.InetSocketAddress
 import java.net.NetworkInterface
+import java.net.ServerSocket
+import java.net.Socket
 import java.security.MessageDigest
 
 @Single
@@ -19,62 +22,31 @@ class AgentWebhookServer(
     private val store: AgentTriggerStore,
     private val bus: AgentEventBus,
 ) {
-    private var engine: EmbeddedServer<*, *>? = null
+    private var server: ServerSocket? = null
+    private var scope: CoroutineScope? = null
+
+    @Volatile
+    private var actualPort = PORT
 
     fun start() {
-        if (engine != null) return
-        engine = runCatching {
-            embeddedServer(CIO, host = "0.0.0.0", port = PORT) {
-                routing {
-                    post("/agent/hook/{token}") {
-                        val token = call.parameters["token"].orEmpty()
-                        val trigger = store.byToken(token)
-                        if (trigger == null || !trigger.enabled) {
-                            call.respondText(
-                                """{"error":"unknown trigger"}""",
-                                status = HttpStatusCode.NotFound,
-                            )
-                            return@post
-                        }
-                        val length = call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull() ?: 0
-                        if (length > MAX_BODY_BYTES) {
-                            call.respondText(
-                                """{"error":"payload too large"}""",
-                                status = HttpStatusCode.PayloadTooLarge,
-                            )
-                            return@post
-                        }
-                        val body = call.receiveText().take(MAX_BODY_CHARS)
-                        val eventId = call.request.headers["X-Focus-Event-Id"].orEmpty()
-                        val dedupe = if (eventId.isNotBlank()) {
-                            "webhook:${trigger.id}:$eventId"
-                        } else {
-                            "webhook:${trigger.id}:${hash(body)}:${System.currentTimeMillis() / 60_000}"
-                        }
-                        val event = bus.publish(
-                            AgentEvent.webhook(
-                                triggerId = trigger.id,
-                                name = trigger.name,
-                                prompt = trigger.prompt,
-                                body = body,
-                                profile = trigger.profile,
-                                dedupeKey = dedupe,
-                            ),
-                        )
-                        store.touch(trigger.id, if (event != null) "accepted" else "duplicate")
-                        call.respondText(
-                            if (event == null) """{"status":"duplicate"}""" else """{"status":"accepted"}""",
-                            status = if (event == null) HttpStatusCode.OK else HttpStatusCode.Accepted,
-                        )
-                    }
+        if (server != null) return
+        val socket = bind() ?: return
+        server = socket
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO).also { scope ->
+            scope.launch {
+                while (isActive) {
+                    val client = runCatching { socket.accept() }.getOrNull() ?: break
+                    scope.launch { handle(client) }
                 }
-            }.start(wait = false)
-        }.getOrNull()
+            }
+        }
     }
 
     fun stop() {
-        engine?.stop(500, 1_000)
-        engine = null
+        scope?.cancel()
+        scope = null
+        runCatching { server?.close() }
+        server = null
     }
 
     fun baseUrl(): String {
@@ -86,7 +58,129 @@ class AgentWebhookServer(
                 .firstOrNull { !it.isLoopbackAddress && it.isSiteLocalAddress }
                 ?.hostAddress
         }.getOrNull() ?: "127.0.0.1"
-        return "http://$host:$PORT"
+        return "http://$host:$actualPort"
+    }
+
+    private fun bind(): ServerSocket? {
+        for (port in PORT..PORT + PORT_TRIES) {
+            try {
+                val socket = ServerSocket()
+                socket.reuseAddress = true
+                socket.bind(InetSocketAddress("0.0.0.0", port), 50)
+                actualPort = port
+                return socket
+            } catch (_: Throwable) {
+            }
+        }
+        return null
+    }
+
+    private suspend fun handle(client: Socket) {
+        client.use { socket ->
+            runCatching {
+                socket.soTimeout = READ_TIMEOUT_MS
+                val input = BufferedInputStream(socket.getInputStream())
+                val requestLine = readLine(input) ?: return
+                val parts = requestLine.split(' ')
+                if (parts.size < 2 || parts[0] != "POST") {
+                    respond(socket, 405, """{"error":"method not allowed"}""")
+                    return
+                }
+                val path = parts[1].substringBefore('?')
+                val token = path.substringAfterLast('/')
+                val headers = mutableMapOf<String, String>()
+                while (true) {
+                    val line = readLine(input) ?: break
+                    if (line.isEmpty()) break
+                    val index = line.indexOf(':')
+                    if (index > 0) {
+                        headers[line.substring(0, index).trim().lowercase()] = line.substring(index + 1).trim()
+                    }
+                }
+                val length = headers["content-length"]?.toLongOrNull() ?: 0
+                if (length > MAX_BODY_BYTES) {
+                    respond(socket, 413, """{"error":"payload too large"}""")
+                    return
+                }
+                val body = readBody(input, length.toInt()).take(MAX_BODY_CHARS)
+                val trigger = store.byToken(token)
+                if (trigger == null || !trigger.enabled) {
+                    respond(socket, 404, """{"error":"unknown trigger"}""")
+                    return
+                }
+                val eventId = headers["x-focus-event-id"].orEmpty()
+                val dedupe = if (eventId.isNotBlank()) {
+                    "webhook:${trigger.id}:$eventId"
+                } else {
+                    "webhook:${trigger.id}:${hash(body)}:${System.currentTimeMillis() / 60_000}"
+                }
+                val event = bus.publish(
+                    AgentEvent.webhook(
+                        triggerId = trigger.id,
+                        name = trigger.name,
+                        prompt = trigger.prompt,
+                        body = body,
+                        profile = trigger.profile,
+                        dedupeKey = dedupe,
+                    ),
+                )
+                store.touch(trigger.id, if (event != null) "accepted" else "duplicate")
+                if (event == null) {
+                    respond(socket, 200, """{"status":"duplicate"}""")
+                } else {
+                    respond(socket, 202, """{"status":"accepted"}""")
+                }
+            }
+        }
+    }
+
+    private fun readLine(input: InputStream): String? {
+        val out = ByteArrayOutputStream()
+        var count = 0
+        while (true) {
+            val value = input.read()
+            if (value < 0) return if (out.size() == 0) null else out.toString(Charsets.ISO_8859_1.name())
+            if (value == '\n'.code) break
+            if (value != '\r'.code) out.write(value)
+            if (++count > MAX_HEADER_LINE) return null
+        }
+        return out.toString(Charsets.ISO_8859_1.name())
+    }
+
+    private fun readBody(input: InputStream, length: Int): String {
+        if (length <= 0) return ""
+        val data = ByteArray(length)
+        var read = 0
+        while (read < length) {
+            val count = input.read(data, read, length - read)
+            if (count <= 0) break
+            read += count
+        }
+        return String(data, 0, read, Charsets.UTF_8)
+    }
+
+    private fun respond(socket: Socket, status: Int, body: String) {
+        val bytes = body.toByteArray()
+        val reason = when (status) {
+            200 -> "OK"
+            202 -> "Accepted"
+            404 -> "Not Found"
+            405 -> "Method Not Allowed"
+            413 -> "Payload Too Large"
+            else -> "OK"
+        }
+        val header = buildString {
+            append("HTTP/1.1 $status $reason\r\n")
+            append("Content-Type: application/json\r\n")
+            append("Content-Length: ${bytes.size}\r\n")
+            append("Connection: close\r\n")
+            append("\r\n")
+        }.toByteArray()
+        socket.getOutputStream().use { output ->
+            output.write(header)
+            output.write(bytes)
+            output.flush()
+        }
     }
 
     private fun hash(value: String): String {
@@ -96,6 +190,9 @@ class AgentWebhookServer(
 
     companion object {
         const val PORT = 8765
+        private const val PORT_TRIES = 10
+        private const val READ_TIMEOUT_MS = 5_000
+        private const val MAX_HEADER_LINE = 8_192
         private const val MAX_BODY_BYTES = 512 * 1024L
         private const val MAX_BODY_CHARS = 32_000
     }
