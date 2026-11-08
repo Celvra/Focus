@@ -107,8 +107,8 @@ class ShellViewModel(
         val main = chats.ensureMainConversation()
         val conversations = chats.conversations()
             .filter { it.id != ChatStore.ONBOARDING_CONVERSATION_ID && !it.archived }
-        val sides = conversations
-            .filter { it.title.isNotBlank() }
+        val sides = chats.listedConversations()
+            .filter { it.id != ChatStore.ONBOARDING_CONVERSATION_ID && it.title.isNotBlank() }
             .sortedWith(compareBy({ it.taskStatus.sideChatRank() }, { -it.updatedAt }))
         val archived = chats.conversations(archived = true)
             .filter { it.id != ChatStore.ONBOARDING_CONVERSATION_ID && it.archived }

@@ -44,6 +44,21 @@ class ChatStore(
         }
     }
 
+    suspend fun listedConversations(): List<Conversation> = withContext(Dispatchers.IO) {
+        database.readableDatabase.rawQuery(
+            "SELECT $CONVERSATION_COLUMNS FROM conversations c " +
+                "WHERE c.archived = 0 AND c.kind = 'side' " +
+                "AND (EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id) " +
+                "OR (c.parent_id <> '' AND c.task_status <> 'none')) " +
+                "ORDER BY c.updated_at DESC",
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(cursor.toConversation())
+            }
+        }
+    }
+
     suspend fun sideChats(): List<Conversation> = withContext(Dispatchers.IO) {
         database.readableDatabase.rawQuery(
             "SELECT $CONVERSATION_COLUMNS FROM conversations " +

@@ -190,7 +190,7 @@ class SideChatManager(
     }
 
     suspend fun list(limit: Int = 40): List<SideChatSummary> {
-        val items = chats.conversations()
+        val items = chats.listedConversations()
             .filter { it.id != ChatStore.ONBOARDING_CONVERSATION_ID }
             .take(limit)
         return items.map { conversation ->
