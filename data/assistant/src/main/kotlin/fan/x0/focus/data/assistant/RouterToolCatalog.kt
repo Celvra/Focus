@@ -193,7 +193,7 @@ object RouterToolCatalog {
             parameters = schema(required = listOf("name", "prompt", "schedule")) {
                 put("name", string("Short trigger name"))
                 put("prompt", string("Work instruction for each run"))
-                put("schedule", string("Five-field cron: minute hour day month weekday. Six fields add seconds."))
+                put("schedule", string("Cron: minute hour day month weekday. Six fields add seconds. Supports L, W, and #."))
                 put("profile", string("light, standard, or heavy. Default standard"))
             },
         ),

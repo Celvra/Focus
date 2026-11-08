@@ -638,7 +638,7 @@
     <string name="settings_super_trigger_prompt_hint">What should the agent do when this fires?</string>
     <string name="settings_super_trigger_schedule">Cron expression</string>
     <string name="settings_super_trigger_schedule_hint">0 9 * * *</string>
-    <string name="settings_super_trigger_schedule_help">Five fields: minute hour day month weekday. Six fields add seconds.</string>
+    <string name="settings_super_trigger_schedule_help">Five fields: minute hour day month weekday. Six fields add seconds. Supports L, W, and #.</string>
     <string name="settings_super_trigger_next">Next %1$s</string>
     <string name="settings_super_trigger_kind_cron">Cron</string>
     <string name="settings_super_trigger_kind_webhook">Webhook</string>

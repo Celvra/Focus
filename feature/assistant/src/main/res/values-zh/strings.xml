@@ -638,7 +638,7 @@
     <string name="settings_super_trigger_prompt_hint">触发时应该做什么？</string>
     <string name="settings_super_trigger_schedule">Cron 表达式</string>
     <string name="settings_super_trigger_schedule_hint">0 9 * * *</string>
-    <string name="settings_super_trigger_schedule_help">五段：分 时 日 月 周。六段会在最前面加秒。</string>
+    <string name="settings_super_trigger_schedule_help">五段：分 时 日 月 周。六段会在最前面加秒。支持 L、W、#。</string>
     <string name="settings_super_trigger_next">下次 %1$s</string>
     <string name="settings_super_trigger_kind_cron">Cron</string>
     <string name="settings_super_trigger_kind_webhook">Webhook</string>

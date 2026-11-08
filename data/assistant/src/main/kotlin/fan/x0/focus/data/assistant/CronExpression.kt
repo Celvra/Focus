@@ -9,8 +9,14 @@ class CronExpression private constructor(
     private val minutes: Set<Int>,
     private val hours: Set<Int>,
     private val daysOfMonth: Set<Int>,
+    private val lastDayOfMonth: Boolean,
+    private val lastDayOffset: Int,
+    private val lastWeekdayOfMonth: Boolean,
+    private val nearestWeekdays: Set<Int>,
     private val months: Set<Int>,
     private val daysOfWeek: Set<Int>,
+    private val lastWeekdays: Set<Int>,
+    private val nthWeekdays: List<Pair<Int, Int>>,
     private val domRestricted: Boolean,
     private val dowRestricted: Boolean,
 ) {
@@ -61,14 +67,56 @@ class CronExpression private constructor(
     }
 
     private fun dayMatches(time: ZonedDateTime): Boolean {
-        val dom = time.dayOfMonth in daysOfMonth
-        val dow = (time.dayOfWeek.value % 7) in daysOfWeek
+        val dom = dayOfMonthMatches(time)
+        val dow = dayOfWeekMatches(time)
         return when {
             domRestricted && dowRestricted -> dom || dow
             domRestricted -> dom
             dowRestricted -> dow
             else -> true
         }
+    }
+
+    private fun dayOfMonthMatches(time: ZonedDateTime): Boolean {
+        val day = time.dayOfMonth
+        val length = time.toLocalDate().lengthOfMonth()
+        if (day in daysOfMonth) return true
+        if (lastDayOfMonth && day == length) return true
+        if (lastDayOffset > 0 && day == length - lastDayOffset) return true
+        if (lastWeekdayOfMonth && day == lastWeekday(time)) return true
+        if (day in nearestWeekdays && day == nearestWeekday(time, day)) return true
+        return false
+    }
+
+    private fun dayOfWeekMatches(time: ZonedDateTime): Boolean {
+        val dow = time.dayOfWeek.value % 7
+        val day = time.dayOfMonth
+        val length = time.toLocalDate().lengthOfMonth()
+        if (dow in daysOfWeek) return true
+        if (dow in lastWeekdays && day + 7 > length) return true
+        return nthWeekdays.any { (target, nth) ->
+            dow == target && ((day - 1) / 7 + 1) == nth
+        }
+    }
+
+    private fun nearestWeekday(time: ZonedDateTime, target: Int): Int {
+        val length = time.toLocalDate().lengthOfMonth()
+        val value = time.withDayOfMonth(target.coerceIn(1, length)).dayOfWeek.value % 7
+        return when (value) {
+            6 -> if (target == 1) 3 else target - 1
+            0 -> if (target == length) target - 2 else target + 1
+            else -> target
+        }
+    }
+
+    private fun lastWeekday(time: ZonedDateTime): Int {
+        var day = time.toLocalDate().lengthOfMonth()
+        while (day > 0) {
+            val dow = time.withDayOfMonth(day).dayOfWeek.value % 7
+            if (dow != 0 && dow != 6) return day
+            day--
+        }
+        return day
     }
 
     companion object {
@@ -117,19 +165,26 @@ class CronExpression private constructor(
             val seconds = if (six) parseField(parts[0], 0, 59, emptyMap()) else setOf(0)
             val minutes = parseField(parts[offset], 0, 59, emptyMap())
             val hours = parseField(parts[offset + 1], 0, 23, emptyMap())
-            val dom = parseField(parts[offset + 2], 1, 31, emptyMap())
+            val domText = parts[offset + 2]
             val month = parseField(parts[offset + 3], 1, 12, MONTHS)
-            val dowRaw = parseField(parts[offset + 4], 0, 7, DAYS)
-            val dow = dowRaw.map { if (it == 7) 0 else it }.toSet()
+            val dowText = parts[offset + 4]
+            val dom = parseDayOfMonth(domText)
+            val dow = parseDayOfWeek(dowText)
             return CronExpression(
                 seconds = seconds,
                 minutes = minutes,
                 hours = hours,
-                daysOfMonth = dom,
+                daysOfMonth = dom.values,
+                lastDayOfMonth = dom.lastDay,
+                lastDayOffset = dom.lastOffset,
+                lastWeekdayOfMonth = dom.lastWeekday,
+                nearestWeekdays = dom.nearestWeekdays,
                 months = month,
-                daysOfWeek = dow,
-                domRestricted = parts[offset + 2] != "*" && parts[offset + 2] != "?",
-                dowRestricted = parts[offset + 4] != "*" && parts[offset + 4] != "?",
+                daysOfWeek = dow.values,
+                lastWeekdays = dow.lastWeekdays,
+                nthWeekdays = dow.nthWeekdays,
+                domRestricted = !unrestricted(domText),
+                dowRestricted = !unrestricted(dowText),
             )
         }
 
@@ -140,6 +195,79 @@ class CronExpression private constructor(
             "@daily", "@midnight" -> "0 0 * * *"
             "@hourly" -> "0 * * * *"
             else -> value
+        }
+
+        private fun unrestricted(text: String): Boolean = text == "*" || text == "?"
+
+        private data class DomRule(
+            val values: Set<Int> = emptySet(),
+            val lastDay: Boolean = false,
+            val lastOffset: Int = 0,
+            val lastWeekday: Boolean = false,
+            val nearestWeekdays: Set<Int> = emptySet(),
+        )
+
+        private data class DowRule(
+            val values: Set<Int> = emptySet(),
+            val lastWeekdays: Set<Int> = emptySet(),
+            val nthWeekdays: List<Pair<Int, Int>> = emptyList(),
+        )
+
+        private fun parseDayOfMonth(text: String): DomRule {
+            if (text == "*" || text == "?") return DomRule(values = (1..31).toSet())
+            var values = emptySet<Int>()
+            var lastDay = false
+            var lastOffset = 0
+            var lastWeekday = false
+            var nearest = emptySet<Int>()
+            text.split(',').forEach { raw ->
+                val part = raw.trim().uppercase()
+                when {
+                    part == "L" -> lastDay = true
+                    part.startsWith("L-") -> {
+                        lastOffset = part.removePrefix("L-").toIntOrNull()
+                            ?: throw IllegalArgumentException("Invalid L offset: $part")
+                        if (lastOffset !in 1..30) throw IllegalArgumentException("Invalid L offset: $part")
+                    }
+                    part == "LW" -> lastWeekday = true
+                    part.endsWith("W") -> {
+                        val day = part.removeSuffix("W").toIntOrNull()
+                            ?: throw IllegalArgumentException("Invalid W day: $part")
+                        if (day !in 1..31) throw IllegalArgumentException("Invalid W day: $part")
+                        nearest = nearest + day
+                    }
+                    else -> values = values + parseField(part, 1, 31, emptyMap())
+                }
+            }
+            return DomRule(values, lastDay, lastOffset, lastWeekday, nearest)
+        }
+
+        private fun parseDayOfWeek(text: String): DowRule {
+            if (text == "*" || text == "?") return DowRule(values = (0..6).toSet())
+            var values = emptySet<Int>()
+            var last = emptySet<Int>()
+            val nth = mutableListOf<Pair<Int, Int>>()
+            text.split(',').forEach { raw ->
+                val part = raw.trim().uppercase()
+                when {
+                    part == "L" -> values = values + 6
+                    part.endsWith("L") -> {
+                        val day = value(part.removeSuffix("L"), DAYS)
+                        last = last + (if (day == 7) 0 else day)
+                    }
+                    part.contains('#') -> {
+                        val sections = part.split('#')
+                        if (sections.size != 2) throw IllegalArgumentException("Invalid # value: $part")
+                        val day = value(sections[0], DAYS).let { if (it == 7) 0 else it }
+                        val nthValue = sections[1].toIntOrNull()
+                            ?: throw IllegalArgumentException("Invalid # value: $part")
+                        if (nthValue !in 1..5) throw IllegalArgumentException("Invalid # value: $part")
+                        nth += day to nthValue
+                    }
+                    else -> values = values + parseField(part, 0, 7, DAYS).map { if (it == 7) 0 else it }
+                }
+            }
+            return DowRule(values, last, nth)
         }
 
         private fun parseField(

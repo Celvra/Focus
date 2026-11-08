@@ -45,7 +45,8 @@ class ContextAssembler(
         builder.appendLine("- Memory is yours. Use read_memory and write_memory for durable routing preferences and standing rules.")
         builder.appendLine("- Change role models only when the user explicitly asks. Use list_role_models first.")
         builder.appendLine("- When the user asks for a recurring task or an external trigger, use create_cron_trigger " +
-            "or create_webhook_trigger, then report the schedule or URL. Use list_triggers before changing one.")
+            "or create_webhook_trigger, then report the schedule or URL. Use list_triggers before changing one, " +
+            "and set_trigger_enabled or delete_trigger to manage existing triggers.")
         builder.appendLine("- Pass a thread_key to start_side_chat when the event carries one and the work continues that thread.")
         builder.appendLine("- User messages always go through you. Context events may go straight to a subscribed side chat.")
         builder.appendLine("- Sources marked speculative must not produce a message just because they fired. " +
