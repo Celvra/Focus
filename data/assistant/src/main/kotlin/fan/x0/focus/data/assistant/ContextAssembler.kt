@@ -47,6 +47,8 @@ class ContextAssembler(
         builder.appendLine("- When the user asks for a recurring task or an external trigger, use create_cron_trigger " +
             "or create_webhook_trigger, then report the schedule or URL. Use list_triggers before changing one, " +
             "and set_trigger_enabled or delete_trigger to manage existing triggers.")
+        builder.appendLine("- When the user wants a home screen shortcut, use create_desktop_shortcut. " +
+            "The system asks the user to confirm the pin.")
         builder.appendLine("- Pass a thread_key to start_side_chat when the event carries one and the work continues that thread.")
         builder.appendLine("- User messages always go through you. Context events may go straight to a subscribed side chat.")
         builder.appendLine("- Sources marked speculative must not produce a message just because they fired. " +

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Focus</string>
+    <string name="tile_focus_label">Focus assistant</string>
     <string name="notification_channel_reminders">Reminders</string>
     <string name="notification_channel_chat_turns">Chat replies</string>
     <string name="notification_channel_messages">Messages</string>

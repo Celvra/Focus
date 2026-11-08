@@ -24,6 +24,7 @@ class RouterToolHandler(
     private val triggers: AgentTriggerStore,
     private val triggerScheduler: AgentTriggerScheduler,
     private val webhook: AgentWebhookServer,
+    private val shortcuts: AgentShortcutManager,
 ) {
     suspend fun handle(call: fan.x0.focus.core.network.openai.CompletedToolCall, flags: RouterTurnFlags): ToolResult? {
         val args = runCatching {
@@ -59,6 +60,7 @@ class RouterToolHandler(
             RouterToolCatalog.CREATE_WEBHOOK_TRIGGER -> createWebhook(args)
             RouterToolCatalog.SET_TRIGGER_ENABLED -> setTriggerEnabled(args)
             RouterToolCatalog.DELETE_TRIGGER -> deleteTrigger(args)
+            RouterToolCatalog.CREATE_DESKTOP_SHORTCUT -> createShortcut(args)
             else -> null
         }
     }
@@ -272,6 +274,17 @@ class RouterToolHandler(
         triggers.delete(id)
         triggerScheduler.cancel(id)
         return ok("Trigger deleted: $id.")
+    }
+
+    private fun createShortcut(args: JsonObject): ToolResult {
+        val target = args.string("target").ifBlank { "overlay" }
+        val label = args.string("label").ifBlank { "Focus" }
+        val requested = shortcuts.pin(target, label)
+        return if (requested) {
+            ok("Shortcut requested. Confirm the pin in the system dialog.")
+        } else {
+            fail("This launcher does not allow pinning shortcuts.")
+        }
     }
 
     private fun ok(content: String): ToolResult =

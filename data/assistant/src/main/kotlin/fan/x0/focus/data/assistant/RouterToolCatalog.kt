@@ -31,6 +31,7 @@ object RouterToolCatalog {
     const val CREATE_WEBHOOK_TRIGGER = "create_webhook_trigger"
     const val SET_TRIGGER_ENABLED = "set_trigger_enabled"
     const val DELETE_TRIGGER = "delete_trigger"
+    const val CREATE_DESKTOP_SHORTCUT = "create_desktop_shortcut"
 
     val names: Set<String> = setOf(
         START_SIDE_CHAT,
@@ -52,6 +53,7 @@ object RouterToolCatalog {
         CREATE_WEBHOOK_TRIGGER,
         SET_TRIGGER_ENABLED,
         DELETE_TRIGGER,
+        CREATE_DESKTOP_SHORTCUT,
     )
 
     val specs: List<ToolSpec> = listOf(
@@ -222,6 +224,16 @@ object RouterToolCatalog {
             kind = ToolKind.Read,
             parameters = schema(required = listOf("trigger_id")) {
                 put("trigger_id", string("Trigger id from list_triggers"))
+            },
+        ),
+        ToolSpec(
+            name = CREATE_DESKTOP_SHORTCUT,
+            description = "Ask the launcher to pin a home screen shortcut to the floating assistant or the main session. " +
+                "The user confirms the pin in the system dialog.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("target", string("overlay for the floating assistant, main for the main session. Default overlay"))
+                put("label", string("Shortcut label, at most 30 characters"))
             },
         ),
     )

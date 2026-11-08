@@ -48,7 +48,7 @@ object FocusOverlay {
         val shortcut = ShortcutInfo.Builder(context, SHORTCUT_ID)
             .setShortLabel(context.getString(R.string.overlay_shortcut_short))
             .setLongLabel(context.getString(R.string.overlay_shortcut_long))
-            .setIcon(Icon.createWithResource(context, R.drawable.ic_overlay_shortcut))
+            .setIcon(Icon.createWithResource(context, R.mipmap.ic_shortcut))
             .setIntent(intent)
             .build()
         return runCatching { manager.requestPinShortcut(shortcut, null) }.getOrDefault(false)
