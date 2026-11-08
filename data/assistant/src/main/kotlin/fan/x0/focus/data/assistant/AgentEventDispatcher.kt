@@ -149,7 +149,7 @@ class AgentEventDispatcher(
             events.complete(event.id)
             return
         }
-        if (conversation.kind == ConversationKind.Side && conversation.origin != ConversationOrigin.Im) {
+        if (conversation.isSideChat) {
             if (!events.claim(event.id)) return
             sideChats.deliver(conversation.id, event.instruction())
             events.complete(event.id)

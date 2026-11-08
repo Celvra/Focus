@@ -59,8 +59,7 @@ class SideChatManager(
             turns.states.collect { states ->
                 states.forEach { (conversationId, turn) ->
                     val conversation = chats.conversation(conversationId) ?: return@forEach
-                    if (conversation.kind != ConversationKind.Side) return@forEach
-                    if (conversation.origin == ConversationOrigin.Im) return@forEach
+                    if (!conversation.isSideChat) return@forEach
                     if (turn.running) activeTurns[conversationId] = turn.turnId
                     val waiting = waitingKey(turn)
                     if (waiting != null) {
@@ -81,7 +80,7 @@ class SideChatManager(
                 results.forEach { (conversationId, result) ->
                     if (activeTurns[conversationId] != result.turnId) return@forEach
                     val conversation = chats.conversation(conversationId) ?: return@forEach
-                    if (conversation.origin == ConversationOrigin.Im) return@forEach
+                    if (!conversation.isSideChat) return@forEach
                     finish(conversation, result)
                 }
             }
@@ -147,7 +146,7 @@ class SideChatManager(
 
     suspend fun resume(id: String): Boolean {
         val conversation = chats.conversation(id) ?: return false
-        if (conversation.kind != ConversationKind.Side) return false
+        if (!conversation.isSideChat) return false
         if (conversation.taskStatus.active || turns.isRunning(id)) return false
         chats.append(
             conversationId = id,
@@ -235,8 +234,7 @@ class SideChatManager(
 
     suspend fun deliver(conversationId: String, text: String) {
         val conversation = chats.conversation(conversationId) ?: return
-        if (conversation.kind != ConversationKind.Side) return
-        if (conversation.origin == ConversationOrigin.Im) return
+        if (!conversation.isSideChat) return
         if (conversation.archived) return
         if (turns.isRunning(conversationId)) {
             chats.append(

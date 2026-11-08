@@ -146,6 +146,9 @@ enum class TaskStatus {
     }
 }
 
+val Conversation.isSideChat: Boolean
+    get() = kind == ConversationKind.Side && (parentId.isNotBlank() || id == "main")
+
 fun TaskStatus.sideChatRank(): Int = when (this) {
     TaskStatus.Waiting -> 0
     TaskStatus.Running -> 1
