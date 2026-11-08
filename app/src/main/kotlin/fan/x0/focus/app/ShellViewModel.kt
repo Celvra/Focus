@@ -63,7 +63,7 @@ class ShellViewModel(
     fun archiveConversation(id: String) {
         viewModelScope.launch {
             chats.archive(id)
-            if (switcher.current.value == id) switcher.newChat()
+            if (switcher.current.value == id) switcher.open(ChatStore.MAIN_CONVERSATION_ID)
             load()
         }
     }
@@ -94,11 +94,13 @@ class ShellViewModel(
     private suspend fun load() {
         val name = workspace.userName()
         val main = chats.ensureMainConversation()
-        val conversations = chats.conversations().filter { it.id != ONBOARDING_CHAT }
+        val conversations = chats.conversations()
+            .filter { it.id != ONBOARDING_CHAT && !it.archived }
         val sides = chats.sideChats()
-            .filter { it.id != ONBOARDING_CHAT }
+            .filter { it.id != ONBOARDING_CHAT && !it.archived && it.title.isNotBlank() }
             .sortedWith(compareBy({ it.taskStatus.sideChatRank() }, { -it.updatedAt }))
-        val archived = chats.conversations(archived = true).filter { it.id != ONBOARDING_CHAT }
+        val archived = chats.conversations(archived = true)
+            .filter { it.id != ONBOARDING_CHAT && it.archived }
         _state.value = ShellState(
             loading = false,
             name = name,
