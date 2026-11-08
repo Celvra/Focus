@@ -90,7 +90,7 @@ class AgentEventStore(private val database: AssistantDatabase) {
         val updated = database.writableDatabase.update(
             "agent_events",
             values,
-            "id = ? AND status IN ('pending', 'running')",
+            "id = ? AND status = 'pending'",
             arrayOf(id.toString()),
         )
         if (updated > 0) _changes.tryEmit(id)

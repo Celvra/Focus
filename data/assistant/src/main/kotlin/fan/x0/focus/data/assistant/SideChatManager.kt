@@ -60,6 +60,7 @@ class SideChatManager(
                 states.forEach { (conversationId, turn) ->
                     val conversation = chats.conversation(conversationId) ?: return@forEach
                     if (conversation.kind != ConversationKind.Side) return@forEach
+                    if (conversation.origin == ConversationOrigin.Im) return@forEach
                     if (turn.running) activeTurns[conversationId] = turn.turnId
                     val waiting = waitingKey(turn)
                     if (waiting != null) {
@@ -80,6 +81,7 @@ class SideChatManager(
                 results.forEach { (conversationId, result) ->
                     if (activeTurns[conversationId] != result.turnId) return@forEach
                     val conversation = chats.conversation(conversationId) ?: return@forEach
+                    if (conversation.origin == ConversationOrigin.Im) return@forEach
                     finish(conversation, result)
                 }
             }
@@ -186,7 +188,7 @@ class SideChatManager(
     }
 
     suspend fun list(limit: Int = 40): List<SideChatSummary> {
-        val items = chats.sideChats().take(limit)
+        val items = chats.sideChats().filter { it.origin != ConversationOrigin.Im }.take(limit)
         return items.map { conversation ->
             SideChatSummary(
                 id = conversation.id,
@@ -231,6 +233,7 @@ class SideChatManager(
     suspend fun deliver(conversationId: String, text: String) {
         val conversation = chats.conversation(conversationId) ?: return
         if (conversation.kind != ConversationKind.Side) return
+        if (conversation.origin == ConversationOrigin.Im) return
         if (conversation.archived) return
         if (turns.isRunning(conversationId)) {
             chats.append(
@@ -297,6 +300,7 @@ class SideChatManager(
             chats.setTaskStatus(id, TaskStatus.Queued)
             return false
         }
+        activeTurns[id] = handle.turnId
         return true
     }
 
@@ -383,7 +387,7 @@ class SideChatManager(
     }
 
     private suspend fun updateCounts() {
-        val sides = chats.sideChats()
+        val sides = chats.sideChats().filter { it.origin != ConversationOrigin.Im }
         val active = sides.count { it.taskStatus.active }
         val unseen = sides.count { !it.resultSeen && it.taskStatus.settledSide }
         _counts.update { SideChatCounts(active = active, unread = unseen) }

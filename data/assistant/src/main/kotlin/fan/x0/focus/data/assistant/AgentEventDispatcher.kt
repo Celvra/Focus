@@ -49,6 +49,8 @@ class AgentEventDispatcher(
                 AgentEventKind.FeedUpdate,
                 -> appendMainNotice(event)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Throwable) {
             val retry = event.attempts + 1 < MAX_ATTEMPTS
             events.fail(
