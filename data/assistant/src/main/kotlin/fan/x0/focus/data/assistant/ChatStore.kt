@@ -47,7 +47,7 @@ class ChatStore(
     suspend fun sideChats(): List<Conversation> = withContext(Dispatchers.IO) {
         database.readableDatabase.rawQuery(
             "SELECT $CONVERSATION_COLUMNS FROM conversations " +
-                "WHERE kind = 'side' AND archived = 0 AND parent_id <> '' ORDER BY updated_at DESC",
+                "WHERE kind = 'side' AND archived = 0 AND (parent_id <> '' OR id = 'main') ORDER BY updated_at DESC",
             null,
         ).use { cursor ->
             buildList {
@@ -59,7 +59,7 @@ class ChatStore(
     suspend fun activeSideChats(): List<Conversation> = withContext(Dispatchers.IO) {
         database.readableDatabase.rawQuery(
             "SELECT $CONVERSATION_COLUMNS FROM conversations " +
-                "WHERE kind = 'side' AND archived = 0 AND parent_id <> '' " +
+                "WHERE kind = 'side' AND archived = 0 AND (parent_id <> '' OR id = 'main') " +
                 "AND task_status IN ('queued', 'running', 'waiting') ORDER BY updated_at DESC",
             null,
         ).use { cursor ->
