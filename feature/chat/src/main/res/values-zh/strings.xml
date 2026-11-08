@@ -101,11 +101,6 @@
     <string name="chat_picker_model_search">搜索模型</string>
     <string name="chat_picker_model_empty">没有模型</string>
     <string name="chat_picker_model_loading">正在加载模型</string>
-    <string name="chat_model_context">%1$s 上下文</string>
-    <string name="chat_model_knowledge">截止 %1$s</string>
-    <string name="chat_model_vision">图像输入</string>
-    <string name="chat_model_tools">工具调用</string>
-    <string name="chat_model_reasoning">推理</string>
     <string name="chat_picker_reasoning_title">思考深度</string>
     <string name="chat_reasoning_off">关闭</string>
     <string name="chat_reasoning_off_desc">不做思考，直接回答。</string>

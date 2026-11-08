@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="model_picker_context">%1$s context</string>
+    <string name="model_picker_cutoff">cutoff %1$s</string>
+    <string name="model_picker_vision">Image input</string>
+    <string name="model_picker_tools">Tool calling</string>
+    <string name="model_picker_reasoning">Reasoning</string>
+</resources>

@@ -17,14 +17,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fan.x0.focus.core.designsystem.components.FocusCardGroup
 import fan.x0.focus.core.designsystem.components.FocusCardGroupIcon
-import fan.x0.focus.core.designsystem.components.FocusGroupedPickerSheet
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusPickerCapability
 import fan.x0.focus.core.designsystem.components.FocusPickerDetail
-import fan.x0.focus.core.designsystem.components.FocusPickerGroup
-import fan.x0.focus.core.designsystem.components.FocusPickerItem
-import fan.x0.focus.core.designsystem.components.FocusPickerSelection
 import fan.x0.focus.core.designsystem.components.FocusReveal
+import fan.x0.focus.core.modelpicker.ModelPickerGroup
+import fan.x0.focus.core.modelpicker.ModelPickerModel
+import fan.x0.focus.core.modelpicker.ModelPickerSheet
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.mvi.CollectEffect
 import fan.x0.focus.data.assistant.AgentRole
@@ -155,12 +154,12 @@ private fun RoleModelPicker(
     onAction: (RoleModelsAction) -> Unit,
 ) {
     val groups = state.groups.map { group ->
-        FocusPickerGroup(
+        ModelPickerGroup(
             id = group.id,
             title = group.title,
             icon = group.icon,
-            items = group.models.map { model ->
-                FocusPickerItem(
+            models = group.models.map { model ->
+                ModelPickerModel(
                     id = model.id,
                     label = model.name,
                     detail = model.toDetail(),
@@ -174,9 +173,9 @@ private fun RoleModelPicker(
             val group = state.groups.firstOrNull { it.id == row.providerId }
                 ?: state.groups.firstOrNull { group -> group.models.any { it.id == row.model } }
                 ?: return@let null
-            FocusPickerSelection(group.id, row.model)
+            group.id to row.model
         }
-    FocusGroupedPickerSheet(
+    ModelPickerSheet(
         title = stringResource(R.string.settings_models_picker_title, roleLabel(role)),
         searchHint = stringResource(R.string.settings_models_search),
         emptyText = stringResource(
@@ -185,9 +184,10 @@ private fun RoleModelPicker(
         groups = groups,
         query = state.query,
         onQueryChange = { onAction(RoleModelsAction.QueryChanged(it)) },
-        onSelect = { onAction(RoleModelsAction.Select(it.groupId, it.itemId)) },
+        onSelect = { providerId, modelId -> onAction(RoleModelsAction.Select(providerId, modelId)) },
         onDismiss = { onAction(RoleModelsAction.ClosePicker) },
-        selected = selected,
+        selectedProviderId = selected?.first,
+        selectedModelId = selected?.second,
         loading = state.modelsLoading,
         onRefresh = { onAction(RoleModelsAction.RefreshModels) },
     )

@@ -12,6 +12,7 @@ dependencies {
     implementation(projects.core.mvi)
     implementation(projects.core.error)
     implementation(projects.core.designsystem)
+    implementation(projects.core.modelpicker)
     implementation(projects.core.network)
     implementation(projects.core.notify)
     implementation(projects.data.assistant)

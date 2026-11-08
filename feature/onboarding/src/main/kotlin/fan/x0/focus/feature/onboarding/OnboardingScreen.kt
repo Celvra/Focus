@@ -62,14 +62,12 @@ import fan.x0.focus.core.designsystem.components.FocusChoiceButtons
 import fan.x0.focus.core.designsystem.components.FocusCompactTopBar
 import fan.x0.focus.core.designsystem.components.FocusComposer
 import fan.x0.focus.core.designsystem.components.FocusComposerPill
-import fan.x0.focus.core.designsystem.components.FocusGroupedPickerSheet
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlock
 import fan.x0.focus.core.designsystem.components.FocusOutlinedButton
-import fan.x0.focus.core.designsystem.components.FocusPickerGroup
-import fan.x0.focus.core.designsystem.components.FocusPickerItem
-import fan.x0.focus.core.designsystem.components.FocusPickerSelection
+import fan.x0.focus.core.modelpicker.ModelPickerSheet
+import fan.x0.focus.core.modelpicker.rememberModelPickerGroup
 import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusReasoningCard
 import fan.x0.focus.core.designsystem.components.FocusTextButton
@@ -81,6 +79,7 @@ import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.core.mvi.CollectEffect
 import fan.x0.focus.core.network.openai.ChatProtocol
 import fan.x0.focus.data.assistant.ProviderCatalog
+import fan.x0.focus.data.assistant.ProviderModel
 import fan.x0.focus.data.voice.rememberVoiceInput
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -164,17 +163,17 @@ fun OnboardingScreen(
             ProviderSheet(state = state, onAction = onAction)
         }
         if (state.modelPickerOpen) {
-            val groupId = "onboarding"
-            val group = FocusPickerGroup(
-                id = groupId,
-                title = state.providerName.ifBlank {
+            val models = (listOfNotNull(state.model.takeIf { it.isNotBlank() }) + state.models)
+                .distinct()
+                .map { ProviderModel(it) }
+            val group = rememberModelPickerGroup(
+                providerId = "onboarding",
+                providerName = state.providerName.ifBlank {
                     stringResource(R.string.onboarding_provider_title)
                 },
-                items = (listOfNotNull(state.model.takeIf { it.isNotBlank() }) + state.models)
-                    .distinct()
-                    .map { FocusPickerItem(id = it) },
+                models = models,
             )
-            FocusGroupedPickerSheet(
+            ModelPickerSheet(
                 title = stringResource(R.string.onboarding_model_picker_title),
                 searchHint = stringResource(R.string.onboarding_model_search_hint),
                 emptyText = stringResource(
@@ -187,9 +186,10 @@ fun OnboardingScreen(
                 groups = listOf(group),
                 query = state.modelQuery,
                 onQueryChange = { onAction(OnboardingAction.ModelQueryChanged(it)) },
-                onSelect = { onAction(OnboardingAction.SelectModel(it.itemId)) },
+                onSelect = { _, modelId -> onAction(OnboardingAction.SelectModel(modelId)) },
                 onDismiss = { onAction(OnboardingAction.CloseModelPicker) },
-                selected = FocusPickerSelection(groupId, state.model),
+                selectedProviderId = "onboarding",
+                selectedModelId = state.model,
                 loading = state.fetchingModels,
                 onRefresh = { onAction(OnboardingAction.FetchModels) },
             )

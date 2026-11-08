@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="model_picker_context">%1$s 上下文</string>
+    <string name="model_picker_cutoff">截止 %1$s</string>
+    <string name="model_picker_vision">图像输入</string>
+    <string name="model_picker_tools">工具调用</string>
+    <string name="model_picker_reasoning">推理</string>
+</resources>

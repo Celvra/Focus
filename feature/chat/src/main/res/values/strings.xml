@@ -102,11 +102,6 @@
     <string name="chat_picker_model_search">Search models</string>
     <string name="chat_picker_model_empty">No models</string>
     <string name="chat_picker_model_loading">Loading models</string>
-    <string name="chat_model_context">%1$s context</string>
-    <string name="chat_model_knowledge">cutoff %1$s</string>
-    <string name="chat_model_vision">Image input</string>
-    <string name="chat_model_tools">Tool calling</string>
-    <string name="chat_model_reasoning">Reasoning</string>
     <string name="chat_picker_reasoning_title">Thinking depth</string>
     <string name="chat_reasoning_off">Off</string>
     <string name="chat_reasoning_off_desc">Skip reasoning and answer right away.</string>

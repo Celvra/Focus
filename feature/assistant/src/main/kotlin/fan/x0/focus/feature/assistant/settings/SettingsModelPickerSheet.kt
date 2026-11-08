@@ -1,12 +1,10 @@
 package fan.x0.focus.feature.assistant.settings
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.res.stringResource
-import fan.x0.focus.core.designsystem.components.FocusGroupedPickerSheet
-import fan.x0.focus.core.designsystem.components.FocusPickerGroup
-import fan.x0.focus.core.designsystem.components.FocusPickerItem
-import fan.x0.focus.core.designsystem.components.FocusPickerSelection
+import fan.x0.focus.core.modelpicker.ModelPickerGroup
+import fan.x0.focus.core.modelpicker.ModelPickerSheet
+import fan.x0.focus.core.modelpicker.rememberModelPickerGroups
 import fan.x0.focus.feature.assistant.ModelPickerTarget
 import fan.x0.focus.feature.assistant.R
 import fan.x0.focus.feature.assistant.SettingsAction
@@ -18,28 +16,17 @@ internal fun SettingsModelPickerSheet(
     onAction: (SettingsAction) -> Unit,
 ) {
     if (!state.modelPickerOpen) return
-    val groups = remember(state.providerModelGroups) {
-        state.providerModelGroups.map { group ->
-            FocusPickerGroup(
-                id = group.providerId,
-                title = group.providerName,
-                icon = group.icon,
-                items = group.models.map { model ->
-                    FocusPickerItem(
-                        id = model.id,
-                        label = model.name.ifBlank { model.id },
-                    )
-                },
-            )
-        }
-    }
+    val groups = rememberModelPickerGroups(state.providerModelGroups)
     when (state.modelPickerTarget) {
         ModelPickerTarget.Active -> ModelPicker(
             title = stringResource(R.string.settings_model_picker_title),
             groups = groups,
             state = state,
-            selected = FocusPickerSelection(state.activeProviderId, state.activeModel),
-            onSelect = { onAction(SettingsAction.SelectActiveModel(it.groupId, it.itemId)) },
+            selectedProviderId = state.activeProviderId,
+            selectedModelId = state.activeModel,
+            onSelect = { providerId, modelId ->
+                onAction(SettingsAction.SelectActiveModel(providerId, modelId))
+            },
             onRefresh = { onAction(SettingsAction.RefreshActiveModels) },
             onAction = onAction,
         )
@@ -47,8 +34,11 @@ internal fun SettingsModelPickerSheet(
             title = stringResource(R.string.settings_judge_model_item),
             groups = groups,
             state = state,
-            selected = FocusPickerSelection(state.judgeProviderId, state.judgeModel),
-            onSelect = { onAction(SettingsAction.SelectModel(it.groupId, it.itemId)) },
+            selectedProviderId = state.judgeProviderId,
+            selectedModelId = state.judgeModel,
+            onSelect = { providerId, modelId ->
+                onAction(SettingsAction.SelectModel(providerId, modelId))
+            },
             onRefresh = { onAction(SettingsAction.RefreshJudgeModels) },
             onAction = onAction,
         )
@@ -58,14 +48,15 @@ internal fun SettingsModelPickerSheet(
 @Composable
 private fun ModelPicker(
     title: String,
-    groups: List<FocusPickerGroup>,
+    groups: List<ModelPickerGroup>,
     state: SettingsUiState,
-    selected: FocusPickerSelection,
-    onSelect: (FocusPickerSelection) -> Unit,
+    selectedProviderId: String,
+    selectedModelId: String,
+    onSelect: (String, String) -> Unit,
     onRefresh: () -> Unit,
     onAction: (SettingsAction) -> Unit,
 ) {
-    FocusGroupedPickerSheet(
+    ModelPickerSheet(
         title = title,
         searchHint = stringResource(R.string.settings_model_search_hint),
         emptyText = stringResource(
@@ -80,7 +71,8 @@ private fun ModelPicker(
         onQueryChange = { onAction(SettingsAction.ModelQueryChanged(it)) },
         onSelect = onSelect,
         onDismiss = { onAction(SettingsAction.CloseModelPicker) },
-        selected = selected,
+        selectedProviderId = selectedProviderId,
+        selectedModelId = selectedModelId,
         loading = state.providerModelsLoading,
         onRefresh = onRefresh,
     )

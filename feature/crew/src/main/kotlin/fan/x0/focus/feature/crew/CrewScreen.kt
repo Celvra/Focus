@@ -32,10 +32,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import fan.x0.focus.core.designsystem.components.FocusAmbientSurface
-import fan.x0.focus.core.designsystem.components.FocusGroupedPickerSheet
-import fan.x0.focus.core.designsystem.components.FocusPickerGroup
-import fan.x0.focus.core.designsystem.components.FocusPickerItem
-import fan.x0.focus.core.designsystem.components.FocusPickerSelection
+import fan.x0.focus.core.modelpicker.ModelPickerSheet
+import fan.x0.focus.core.modelpicker.rememberModelPickerGroups
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.designsystem.theme.FocusMotionDefaults
 import fan.x0.focus.core.mvi.CollectEffect
@@ -227,22 +225,8 @@ fun CrewScreen(
         )
     }
     if (state.modelPickerOpen && state.memberDraft != null) {
-        val groups = remember(state.memberModels) {
-            state.memberModels.map { group ->
-                FocusPickerGroup(
-                    id = group.providerId,
-                    title = group.providerName,
-                    icon = group.icon,
-                    items = group.models.map { model ->
-                        FocusPickerItem(
-                            id = model.id,
-                            label = model.name.ifBlank { model.id },
-                        )
-                    },
-                )
-            }
-        }
-        FocusGroupedPickerSheet(
+        val groups = rememberModelPickerGroups(state.memberModels)
+        ModelPickerSheet(
             title = stringResource(R.string.crew_model_picker_title),
             searchHint = stringResource(R.string.crew_model_picker_search),
             emptyText = stringResource(
@@ -255,12 +239,10 @@ fun CrewScreen(
             groups = groups,
             query = state.memberModelQuery,
             onQueryChange = { onAction(CrewAction.MemberModelQueryChanged(it)) },
-            onSelect = { onAction(CrewAction.MemberModelChanged(it.groupId, it.itemId)) },
+            onSelect = { providerId, modelId -> onAction(CrewAction.MemberModelChanged(providerId, modelId)) },
             onDismiss = { onAction(CrewAction.CloseMemberModelPicker) },
-            selected = FocusPickerSelection(
-                state.memberDraft.providerId,
-                state.memberDraft.model,
-            ),
+            selectedProviderId = state.memberDraft.providerId,
+            selectedModelId = state.memberDraft.model,
             loading = state.memberModelsLoading,
             onRefresh = { onAction(CrewAction.RefreshMemberModels) },
         )

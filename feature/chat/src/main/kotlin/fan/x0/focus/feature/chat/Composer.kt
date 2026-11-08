@@ -52,11 +52,12 @@ import fan.x0.focus.core.designsystem.components.FocusComposer
 import fan.x0.focus.core.designsystem.components.FocusComposerPill
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusImageLightbox
-import fan.x0.focus.core.designsystem.components.FocusGroupedPickerSheet
-import fan.x0.focus.core.designsystem.components.FocusPickerGroup
-import fan.x0.focus.core.designsystem.components.FocusPickerItem
-import fan.x0.focus.core.designsystem.components.FocusPickerSelection
 import fan.x0.focus.core.designsystem.components.FocusVoiceUi
+import fan.x0.focus.core.modelpicker.ModelPickerGroup
+import fan.x0.focus.core.modelpicker.ModelPickerModel
+import fan.x0.focus.core.modelpicker.ModelPickerSheet
+import fan.x0.focus.core.modelpicker.rememberModelPickerLabels
+import fan.x0.focus.core.modelpicker.toModelPickerDetail
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.message
 import fan.x0.focus.data.assistant.AttachmentKind
@@ -211,26 +212,26 @@ internal fun Composer(
 
     when (state.picker) {
         ComposerPicker.Model -> {
-            val labels = modelMetaLabels()
+            val labels = rememberModelPickerLabels()
             val groups = remember(state.providers, state.models, labels) {
                 state.providers.mapNotNull { provider ->
                     val models = state.models[provider.id].orEmpty()
                     if (models.isEmpty()) return@mapNotNull null
-                    FocusPickerGroup(
+                    ModelPickerGroup(
                         id = provider.id,
                         title = provider.name,
                         icon = provider.icon,
-                        items = models.map { option ->
-                            FocusPickerItem(
+                        models = models.map { option ->
+                            ModelPickerModel(
                                 id = option.id,
                                 label = option.name.ifBlank { option.id },
-                                detail = option.meta.toPickerDetail(labels),
+                                detail = option.meta.toModelPickerDetail(labels),
                             )
                         },
                     )
                 }
             }
-            FocusGroupedPickerSheet(
+            ModelPickerSheet(
                 title = stringResource(R.string.chat_picker_model_title),
                 searchHint = stringResource(R.string.chat_picker_model_search),
                 emptyText = stringResource(
@@ -243,9 +244,10 @@ internal fun Composer(
                 groups = groups,
                 query = state.modelQuery,
                 onQueryChange = { onAction(ChatAction.ModelQueryChanged(it)) },
-                onSelect = { onAction(ChatAction.SelectModel(it.groupId, it.itemId)) },
+                onSelect = { providerId, modelId -> onAction(ChatAction.SelectModel(providerId, modelId)) },
                 onDismiss = { onAction(ChatAction.OpenPicker(null)) },
-                selected = FocusPickerSelection(state.providerId, state.model),
+                selectedProviderId = state.providerId,
+                selectedModelId = state.model,
                 loading = state.modelsLoading,
                 onRefresh = { onAction(ChatAction.RefreshModels) },
             )
