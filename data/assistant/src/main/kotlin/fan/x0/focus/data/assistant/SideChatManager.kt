@@ -190,7 +190,9 @@ class SideChatManager(
     }
 
     suspend fun list(limit: Int = 40): List<SideChatSummary> {
-        val items = chats.sideChats().filter { it.origin != ConversationOrigin.Im }.take(limit)
+        val items = chats.conversations()
+            .filter { it.id != ChatStore.ONBOARDING_CONVERSATION_ID }
+            .take(limit)
         return items.map { conversation ->
             SideChatSummary(
                 id = conversation.id,
@@ -205,7 +207,9 @@ class SideChatManager(
     }
 
     suspend fun recover() {
-        val active = chats.sideChats().filter { it.taskStatus.active || turns.isRunning(it.id) }
+        val active = chats.sideChats().filter {
+            it.isSideChat && (it.taskStatus.active || turns.isRunning(it.id))
+        }
         active.forEach { conversation ->
             if (conversation.taskStatus == TaskStatus.Queued) {
                 enqueue(
@@ -388,7 +392,7 @@ class SideChatManager(
     }
 
     private suspend fun updateCounts() {
-        val sides = chats.sideChats().filter { it.origin != ConversationOrigin.Im }
+        val sides = chats.sideChats().filter { it.isSideChat }
         val active = sides.count { it.taskStatus.active }
         val unseen = sides.count { !it.resultSeen && it.taskStatus.settledSide }
         _counts.update { SideChatCounts(active = active, unread = unseen) }

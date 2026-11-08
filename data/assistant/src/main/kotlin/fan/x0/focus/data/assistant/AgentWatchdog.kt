@@ -94,7 +94,7 @@ class AgentWatchdog(
     }
 
     private suspend fun scanSideChats(now: Long) {
-        val sides = chats.sideChats()
+        val sides = chats.sideChats().filter { it.isSideChat }
         sides.forEach { conversation ->
             when {
                 conversation.taskStatus == TaskStatus.Queued &&
