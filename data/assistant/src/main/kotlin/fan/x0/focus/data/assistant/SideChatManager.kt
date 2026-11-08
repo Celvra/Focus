@@ -285,7 +285,9 @@ class SideChatManager(
 
     suspend fun deliver(event: AgentEvent): Boolean {
         val id = (event.route as? AgentEventRoute.Side)?.conversationId ?: return false
-        if (chats.conversation(id)?.kind != ConversationKind.Side) return false
+        val conversation = chats.conversation(id) ?: return false
+        if (conversation.kind != ConversationKind.Side) return false
+        if (conversation.archived) return true
         val text = eventPrompt(event)
         if (turns.isRunning(id)) {
             chats.append(
@@ -344,6 +346,7 @@ class SideChatManager(
 
     private suspend fun startNow(id: String): Boolean {
         val conversation = chats.conversation(id) ?: return false
+        if (conversation.archived) return false
         val task = pendingTasks.remove(id)
             ?: conversation.taskNote.ifBlank { "继续上次的任务。" }
         val attachments = pendingAttachments.remove(id).orEmpty()

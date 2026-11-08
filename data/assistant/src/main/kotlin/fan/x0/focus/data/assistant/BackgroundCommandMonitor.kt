@@ -62,7 +62,12 @@ class BackgroundCommandMonitor(
             }
             val tail = snapshot.logs.takeLast(LOG_TAIL_CHARS)
             val content = if (tail.isBlank()) snapshot.summary else "${snapshot.summary}\n\nLogs:\n$tail"
-            if (chats.conversation(conversationId)?.kind == ConversationKind.Chat) {
+            val conversation = chats.conversation(conversationId)
+            if (conversation?.archived == true) {
+                jobs.remove(jobId)
+                return@launch
+            }
+            if (conversation?.kind == ConversationKind.Chat) {
                 chats.append(
                     conversationId = conversationId,
                     role = ChatRole.System,
@@ -124,7 +129,12 @@ class BackgroundCommandMonitor(
             }
             val tail = logs.toString().takeLast(LOG_TAIL_CHARS)
             val content = if (tail.isBlank()) summary else "$summary\n\nLogs:\n$tail"
-            if (chats.conversation(conversationId)?.kind == ConversationKind.Chat) {
+            val conversation = chats.conversation(conversationId)
+            if (conversation?.archived == true) {
+                jobs.remove(jobId)
+                return@launch
+            }
+            if (conversation?.kind == ConversationKind.Chat) {
                 chats.append(
                     conversationId = conversationId,
                     role = ChatRole.System,

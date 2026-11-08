@@ -30,7 +30,7 @@ class AgentEventDispatcher(
         }
         val route = event.route
         if (route is AgentEventRoute.Side) {
-            if (!sideChats.deliver(event)) router.submit(event)
+            if (sideChats.deliver(event)) complete(event) else router.submit(event)
             return
         }
         if (route == AgentEventRoute.Router) {
@@ -52,7 +52,11 @@ class AgentEventDispatcher(
                 delivered = true
             }
         }
-        if (!delivered) router.submit(event)
+        if (delivered) complete(event) else router.submit(event)
+    }
+
+    private suspend fun complete(event: AgentEvent) {
+        if (event.id > 0) events.complete(event.id)
     }
 
     suspend fun resume() {

@@ -2,6 +2,7 @@ package fan.x0.focus.data.assistant
 
 import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.toAppError
+import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.MessageNotifier
 import fan.x0.focus.core.notify.NotifyActionKind
 import kotlinx.coroutines.CancellationException
@@ -53,6 +54,7 @@ class ChatTurnRunner(
     private val titles: ChatTitleGenerator,
     private val keepAlive: ChatTurnKeepAlive,
     private val background: BackgroundCommandMonitor,
+    private val presence: AppPresence,
     private val notifier: MessageNotifier,
     private val events: AssistantEventSink,
     private val triggerBus: AssistantTriggerBus,
@@ -103,6 +105,9 @@ class ChatTurnRunner(
             background.completed.collect { completion ->
                 val conversation = chats.conversation(completion.conversationId) ?: return@collect
                 if (conversation.kind != ConversationKind.Chat) return@collect
+                if (conversation.archived) return@collect
+                if (!presence.foreground.value) return@collect
+                if (presence.visibleConversationId.value != completion.conversationId) return@collect
                 if (!isRunning(completion.conversationId)) {
                     start(
                         conversationId = completion.conversationId,

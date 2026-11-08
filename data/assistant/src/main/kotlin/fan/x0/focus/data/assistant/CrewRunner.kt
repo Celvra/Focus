@@ -61,6 +61,7 @@ class CrewRunner(
         scope.launch {
             background.completed.collect { completion ->
                 val group = store.group(completion.conversationId) ?: return@collect
+                if (group.archived) return@collect
                 val content = buildString {
                     append(completion.summary)
                     if (completion.logs.isNotBlank()) {
