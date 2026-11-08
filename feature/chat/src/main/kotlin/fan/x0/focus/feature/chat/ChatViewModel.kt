@@ -135,6 +135,7 @@ class ChatViewModel(
     private var redoEntry: PendingSend? = null
 
     init {
+        viewModelScope.launch { chats.ensureMainConversation() }
         ensureMentionSkills()
         ensureMentionBindings()
         loadJob = viewModelScope.launch {
