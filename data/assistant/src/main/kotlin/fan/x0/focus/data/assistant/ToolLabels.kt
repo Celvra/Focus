@@ -35,7 +35,17 @@ object ToolLabels {
         "propose_plan" -> "Plan"
         "todowrite", "todoread" -> "Tasks"
         "web_search" -> "Web search"
-        "spawn_agent" -> "Subagent"
+        ToolCatalog.START_SIDE_CHAT -> "Side chat"
+        ToolCatalog.LIST_SIDE_CHATS -> "Side chats"
+        ToolCatalog.READ_SIDE_CHAT -> "Side chat"
+        ToolCatalog.STOP_SIDE_CHAT -> "Side chat"
+        ToolCatalog.STAY_SILENT -> "Silent"
+        ToolCatalog.LIST_TRIGGERS, ToolCatalog.CREATE_CRON_TRIGGER,
+        ToolCatalog.CREATE_WEBHOOK_TRIGGER, ToolCatalog.SET_TRIGGER_ENABLED,
+        ToolCatalog.DELETE_TRIGGER -> "Triggers"
+        ToolCatalog.CREATE_DESKTOP_SHORTCUT -> "Shortcut"
+        ToolCatalog.LIST_ROLE_MODELS, ToolCatalog.SET_ROLE_MODEL,
+        ToolCatalog.CLEAR_ROLE_MODEL -> "Model roles"
         "mcp_list_tools", "mcp_call_tool", "mcp_list_resources", "mcp_read_resource" -> "MCP"
         "index_workspace", "search_files", "workspace_files" -> "Workspace"
         "bridge_bg_start", "bridge_bg_logs", "bridge_bg_kill", "bridge_bg_list", "bridge_bg_clear" -> "Background command"

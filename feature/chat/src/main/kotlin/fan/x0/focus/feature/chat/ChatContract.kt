@@ -20,7 +20,6 @@ import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ProviderModel
 import fan.x0.focus.data.assistant.ReasoningLevel
 import fan.x0.focus.data.assistant.TaskStatus
-import fan.x0.focus.data.assistant.WorkerProfile
 import fan.x0.focus.data.assistant.WorkspaceKind
 
 enum class TraceStatus { Pending, Running, Done, Failed }
@@ -180,31 +179,10 @@ data class BtwUi(
     val error: AppError? = null,
 )
 
-data class SubAgentRunUi(
-    val id: String,
-    val task: String,
-    val providerName: String,
-    val model: String,
-    val running: Boolean,
-    val failed: Boolean,
-    val summary: String,
-    val error: String?,
-    val entries: List<ChatEntry>,
-)
-
-data class SideResultUi(
-    val sideChatId: String,
-    val title: String,
-    val summary: String,
-    val failed: Boolean,
-    val attachments: List<AttachmentUi> = emptyList(),
-)
-
 data class SideChatRowUi(
     val id: String,
     val title: String,
     val status: TaskStatus,
-    val profile: WorkerProfile,
     val summary: String,
     val updatedAt: Long,
     val unseen: Boolean,
@@ -285,7 +263,6 @@ sealed interface ChatEntry {
         val tokensAfter: Int = 0,
     ) : ChatEntry
 
-    data class SideResult(override val key: String, val card: SideResultUi) : ChatEntry
 }
 
 data class ProviderOption(
@@ -318,13 +295,8 @@ data class ChatUiState(
     val loading: Boolean = true,
     val conversationId: String = "",
     val title: String = "",
-    val kind: ConversationKind = ConversationKind.Chat,
+    val kind: ConversationKind = ConversationKind.Side,
     val taskStatus: TaskStatus = TaskStatus.None,
-    val workerProfile: WorkerProfile = WorkerProfile.Standard,
-    val routerModel: String = "",
-    val routerProviderId: String = "",
-    val routerModelId: String = "",
-    val routerReasoning: ReasoningLevel = ReasoningLevel.Auto,
     val sideActiveCount: Int = 0,
     val sideUnreadCount: Int = 0,
     val sidePanel: SidePanelUi = SidePanelUi(),
@@ -364,8 +336,6 @@ data class ChatUiState(
     val slash: SlashUi = SlashUi(),
     val mention: MentionUi = MentionUi(),
     val btw: BtwUi = BtwUi(),
-    val subAgentRuns: Map<String, SubAgentRunUi> = emptyMap(),
-    val subAgentOpenId: String? = null,
     val highlightKey: String? = null,
     val selectionKey: String? = null,
     val plan: ProposedPlan? = null,
@@ -416,9 +386,6 @@ data class ChatUiState(
     val trust: TrustCardUi?
         get() = live.filterIsInstance<ChatEntry.Trust>().lastOrNull()?.card
 
-    val subAgent: SubAgentRunUi?
-        get() = subAgentOpenId?.let { subAgentRuns[it] }
-
     val providerName: String
         get() = providers.firstOrNull { it.id == providerId }?.name ?: providerId
 
@@ -428,7 +395,7 @@ data class ChatUiState(
     val isSide: Boolean get() = kind == ConversationKind.Side
 }
 
-enum class ComposerPicker { Model, RouterModel, Reasoning }
+enum class ComposerPicker { Model, Reasoning }
 
 sealed interface ChatAction : UiAction {
     data class InputChanged(val value: String) : ChatAction
@@ -453,7 +420,7 @@ sealed interface ChatAction : UiAction {
     data object RetryBtw : ChatAction
     data class OpenPicker(val picker: ComposerPicker?) : ChatAction
     data class SelectModel(val providerId: String, val model: String) : ChatAction
-    data class SelectRouterModel(val providerId: String, val model: String) : ChatAction
+    data object PromoteToMain : ChatAction
     data class ModelQueryChanged(val value: String) : ChatAction
     data object RefreshModels : ChatAction
     data class SelectReasoning(val level: ReasoningLevel) : ChatAction
@@ -486,8 +453,7 @@ sealed interface ChatAction : UiAction {
     data object RetryLast : ChatAction
     data object OpenSessions : ChatAction
     data object OpenSettings : ChatAction
-    data class OpenSubAgent(val id: String) : ChatAction
-    data object CloseSubAgent : ChatAction
+
     data object ConsumeMessage : ChatAction
     data object OpenSidePanel : ChatAction
     data object CloseSidePanel : ChatAction

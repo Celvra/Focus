@@ -23,7 +23,7 @@ class AgentEventBus(
                 event.copy(status = AgentEventStatus.Filtered, error = "source off: ${event.source.wire}"),
             )
         }
-        if (rateLimited(event.source, config.rateLimitPerMinute)) {
+        if (event.source.configurable && rateLimited(event.source, config.rateLimitPerMinute)) {
             return store.insert(
                 event.copy(status = AgentEventStatus.Filtered, error = "rate limited: ${event.source.wire}"),
             )

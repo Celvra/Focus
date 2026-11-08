@@ -9,11 +9,11 @@ import fan.x0.focus.data.assistant.AgentTrigger
 import fan.x0.focus.data.assistant.AgentTriggerKind
 import fan.x0.focus.data.assistant.AgentTriggerScheduler
 import fan.x0.focus.data.assistant.AgentTriggerStore
+import fan.x0.focus.data.assistant.AgentTriggerTarget
 import fan.x0.focus.data.assistant.AgentWebhookServer
 import fan.x0.focus.data.assistant.CronExpression
 import fan.x0.focus.data.assistant.DataUsage
 import fan.x0.focus.data.assistant.DataUsageStore
-import fan.x0.focus.data.assistant.WorkerProfile
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.koin.core.annotation.KoinViewModel
@@ -22,7 +22,6 @@ import java.time.ZoneId
 data class AgentSourceRowUi(
     val source: AgentEventSource,
     val enabled: Boolean,
-    val speculative: Boolean,
 )
 
 data class TriggerDraftUi(
@@ -32,7 +31,7 @@ data class TriggerDraftUi(
     val prompt: String = "",
     val schedule: String = "0 9 * * *",
     val timezone: String = ZoneId.systemDefault().id,
-    val profile: WorkerProfile = WorkerProfile.Standard,
+    val target: AgentTriggerTarget = AgentTriggerTarget.Side,
 )
 
 data class SuperAgentUiState(
@@ -52,7 +51,6 @@ data class SuperAgentUiState(
 
 sealed interface SuperAgentAction : fan.x0.focus.core.mvi.UiAction {
     data class ToggleSource(val source: AgentEventSource, val enabled: Boolean) : SuperAgentAction
-    data class ToggleSpeculative(val source: AgentEventSource, val enabled: Boolean) : SuperAgentAction
     data class SetConcurrent(val value: Int) : SuperAgentAction
     data class ToggleWatchdog(val enabled: Boolean) : SuperAgentAction
     data class SetRateLimit(val value: Int) : SuperAgentAction
@@ -91,11 +89,10 @@ class SuperAgentViewModel(
                 updateState {
                     copy(
                         loading = false,
-                        sources = AgentEventSource.entries.map { source ->
+                        sources = AgentEventSource.entries.filter { it.configurable }.map { source ->
                             AgentSourceRowUi(
                                 source = source,
                                 enabled = config.enabled(source),
-                                speculative = config.speculative(source),
                             )
                         },
                         maxConcurrent = config.maxConcurrentSideChats,
@@ -119,9 +116,6 @@ class SuperAgentViewModel(
         when (action) {
             is SuperAgentAction.ToggleSource -> persist {
                 settings.setSourceEnabled(action.source, action.enabled)
-            }
-            is SuperAgentAction.ToggleSpeculative -> persist {
-                settings.setSpeculative(action.source, action.enabled)
             }
             is SuperAgentAction.SetConcurrent -> persist {
                 settings.setMaxConcurrentSideChats(action.value)
@@ -149,7 +143,7 @@ class SuperAgentViewModel(
                             prompt = trigger.prompt,
                             schedule = trigger.schedule,
                             timezone = trigger.timezone,
-                            profile = trigger.profile,
+                            target = trigger.target,
                         ),
                         triggerError = null,
                     )
@@ -201,7 +195,7 @@ class SuperAgentViewModel(
                     prompt = prompt,
                     schedule = draft.schedule,
                     timezone = draft.timezone,
-                    profile = draft.profile,
+                    target = draft.target,
                 )
             } else {
                 triggerStore.update(
@@ -210,7 +204,7 @@ class SuperAgentViewModel(
                     prompt = prompt,
                     schedule = draft.schedule,
                     timezone = draft.timezone,
-                    profile = draft.profile,
+                    target = draft.target,
                 )
             }
             if (trigger != null) {

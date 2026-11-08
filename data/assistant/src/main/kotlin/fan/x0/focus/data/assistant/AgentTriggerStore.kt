@@ -24,6 +24,19 @@ enum class AgentTriggerKind {
     }
 }
 
+enum class AgentTriggerTarget {
+    Main,
+    Side,
+    ;
+
+    val wire: String get() = name.lowercase()
+
+    companion object {
+        fun fromWire(value: String): AgentTriggerTarget =
+            entries.firstOrNull { it.wire == value.lowercase() } ?: Side
+    }
+}
+
 data class AgentTrigger(
     val id: String,
     val name: String,
@@ -31,7 +44,7 @@ data class AgentTrigger(
     val prompt: String,
     val schedule: String = "",
     val timezone: String = "",
-    val profile: WorkerProfile = WorkerProfile.Standard,
+    val target: AgentTriggerTarget = AgentTriggerTarget.Side,
     val enabled: Boolean = true,
     val webhookToken: String = "",
     val nextRun: Long = 0,
@@ -78,7 +91,7 @@ class AgentTriggerStore(private val database: AssistantDatabase) {
         prompt: String,
         schedule: String,
         timezone: String = ZoneId.systemDefault().id,
-        profile: WorkerProfile = WorkerProfile.Standard,
+        target: AgentTriggerTarget = AgentTriggerTarget.Side,
     ): AgentTrigger = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val trigger = AgentTrigger(
@@ -88,7 +101,7 @@ class AgentTriggerStore(private val database: AssistantDatabase) {
             prompt = prompt.trim().take(8_000),
             schedule = if (kind == AgentTriggerKind.Cron) schedule.trim() else "",
             timezone = timezone,
-            profile = profile,
+            target = target,
             enabled = true,
             webhookToken = if (kind == AgentTriggerKind.Webhook) UUID.randomUUID().toString().replace("-", "") else "",
             createdAt = now,
@@ -106,7 +119,7 @@ class AgentTriggerStore(private val database: AssistantDatabase) {
         prompt: String,
         schedule: String,
         timezone: String,
-        profile: WorkerProfile,
+        target: AgentTriggerTarget,
     ): AgentTrigger? = withContext(Dispatchers.IO) {
         val existing = queryOne("id = ?", arrayOf(id)) ?: return@withContext null
         val updated = existing.copy(
@@ -114,7 +127,7 @@ class AgentTriggerStore(private val database: AssistantDatabase) {
             prompt = prompt.trim().take(8_000),
             schedule = if (existing.kind == AgentTriggerKind.Cron) schedule.trim() else "",
             timezone = timezone,
-            profile = profile,
+            target = target,
             updatedAt = System.currentTimeMillis(),
         )
         val withNext = updated.copy(nextRun = nextRunFor(updated))
@@ -211,7 +224,7 @@ class AgentTriggerStore(private val database: AssistantDatabase) {
         put("prompt", prompt)
         put("schedule", schedule)
         put("timezone", timezone)
-        put("profile", profile.wire)
+        put("target", target.wire)
         put("enabled", if (enabled) 1 else 0)
         put("webhook_token", webhookToken)
         put("next_run", nextRun)
@@ -228,7 +241,7 @@ class AgentTriggerStore(private val database: AssistantDatabase) {
         prompt = getString(3).orEmpty(),
         schedule = getString(4).orEmpty(),
         timezone = getString(5).orEmpty(),
-        profile = WorkerProfile.fromWire(getString(6)),
+        target = AgentTriggerTarget.fromWire(getString(6).orEmpty()),
         enabled = getInt(7) != 0,
         webhookToken = getString(8).orEmpty(),
         nextRun = getLong(9),
@@ -240,7 +253,7 @@ class AgentTriggerStore(private val database: AssistantDatabase) {
 
     private companion object {
         const val COLUMNS =
-            "id, name, kind, prompt, schedule, timezone, profile, enabled, webhook_token, " +
+            "id, name, kind, prompt, schedule, timezone, target, enabled, webhook_token, " +
                 "next_run, last_run, last_status, created_at, updated_at"
     }
 }

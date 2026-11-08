@@ -120,7 +120,7 @@ class AgentWebhookServer(
                         name = trigger.name,
                         prompt = trigger.prompt,
                         body = body,
-                        profile = trigger.profile,
+                        target = trigger.target,
                         dedupeKey = dedupe,
                     ),
                 )

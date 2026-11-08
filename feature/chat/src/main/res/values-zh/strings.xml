@@ -43,6 +43,7 @@
     </plurals>
     <string name="chat_history">会话</string>
     <string name="chat_history_empty">还没有会话。</string>
+    <string name="chat_promote_main">设为主会话</string>
     <string name="chat_new">新会话</string>
     <string name="chat_untitled">未命名会话</string>
     <string name="chat_current">当前</string>

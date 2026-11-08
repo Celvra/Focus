@@ -60,11 +60,6 @@ internal fun SettingsChatAgentPage(
                 AgentCard(state = state, onAction = onAction)
             }
         }
-        item(key = "subagent") {
-            FocusReveal(index = 3) {
-                SubagentCard(state = state, onAction = onAction)
-            }
-        }
         item(key = "judge") {
             AnimatedVisibility(
                 visible = state.policy == CommandPolicy.AutoPilot,
@@ -124,46 +119,6 @@ private fun PolicyCard(state: SettingsUiState, onAction: (SettingsAction) -> Uni
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun SubagentCard(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
-    val provider = state.providers.firstOrNull { it.id == state.subagentProviderId }
-    val modelLabel = provider?.modelOptions
-        ?.firstOrNull { it.id == state.subagentModel }
-        ?.name
-        ?.ifBlank { state.subagentModel }
-        ?: state.subagentModel
-    FocusCardGroup(title = stringResource(R.string.settings_subagent_title)) {
-        item(
-            headlineContent = {
-                Text(
-                    text = modelLabel.ifBlank {
-                        stringResource(R.string.settings_subagent_model_none)
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            supportingContent = {
-                Text(
-                    provider?.name ?: stringResource(R.string.settings_subagent_follow),
-                )
-            },
-            trailingContent = {
-                if (state.providerModelsLoading) {
-                    FocusLoadingBlob(size = 18.dp)
-                } else {
-                    Icon(
-                        imageVector = FocusIcons.Search,
-                        contentDescription = stringResource(R.string.settings_subagent_model_item),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            },
-            onClick = { onAction(SettingsAction.OpenSubagentModelPicker) },
-        )
     }
 }
 

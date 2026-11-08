@@ -59,41 +59,11 @@ fun SettingsModelsRoute(
                 )
             }
         }
-        item(key = "router") {
+        item(key = "helpers") {
             FocusReveal(index = 1) {
                 RoleModelSection(
-                    title = stringResource(R.string.settings_models_group_router),
-                    rows = state.rows.filter { it.role == AgentRole.Router || it.role == AgentRole.Judge },
-                    onOpen = { viewModel.onAction(RoleModelsAction.OpenPicker(it)) },
-                    onClear = { viewModel.onAction(RoleModelsAction.Clear(it)) },
-                )
-            }
-        }
-        item(key = "workers") {
-            FocusReveal(index = 2) {
-                RoleModelSection(
-                    title = stringResource(R.string.settings_models_group_workers),
-                    rows = state.rows.filter {
-                        it.role == AgentRole.WorkerLight ||
-                            it.role == AgentRole.WorkerStandard ||
-                            it.role == AgentRole.WorkerHeavy
-                    },
-                    onOpen = { viewModel.onAction(RoleModelsAction.OpenPicker(it)) },
-                    onClear = { viewModel.onAction(RoleModelsAction.Clear(it)) },
-                )
-            }
-        }
-        item(key = "helpers") {
-            FocusReveal(index = 3) {
-                RoleModelSection(
                     title = stringResource(R.string.settings_models_group_helpers),
-                    rows = state.rows.filter {
-                        it.role == AgentRole.Subagent ||
-                            it.role == AgentRole.Compactor ||
-                            it.role == AgentRole.Watchdog ||
-                            it.role == AgentRole.Title ||
-                            it.role == AgentRole.Suggestion
-                    },
+                    rows = state.rows.filter { it.role.configurable },
                     onOpen = { viewModel.onAction(RoleModelsAction.OpenPicker(it)) },
                     onClear = { viewModel.onAction(RoleModelsAction.Clear(it)) },
                 )
@@ -237,13 +207,8 @@ private fun RoleModelOption.toDetail(): FocusPickerDetail? {
 @Composable
 private fun roleLabel(role: AgentRole): String = stringResource(
     when (role) {
-        AgentRole.Router -> R.string.settings_models_role_router
-        AgentRole.WorkerLight -> R.string.settings_models_role_worker_light
-        AgentRole.WorkerStandard -> R.string.settings_models_role_worker_standard
-        AgentRole.WorkerHeavy -> R.string.settings_models_role_worker_heavy
-        AgentRole.Subagent -> R.string.settings_models_role_subagent
+        AgentRole.Main -> R.string.settings_models_role_main
         AgentRole.Compactor -> R.string.settings_models_role_compactor
-        AgentRole.Watchdog -> R.string.settings_models_role_watchdog
         AgentRole.Judge -> R.string.settings_models_role_judge
         AgentRole.Title -> R.string.settings_models_role_title
         AgentRole.Suggestion -> R.string.settings_models_role_suggestion
@@ -251,13 +216,8 @@ private fun roleLabel(role: AgentRole): String = stringResource(
 )
 
 private fun roleIcon(role: AgentRole) = when (role) {
-    AgentRole.Router -> FocusIcons.Bolt
-    AgentRole.WorkerLight -> FocusIcons.Chat
-    AgentRole.WorkerStandard -> FocusIcons.Chat
-    AgentRole.WorkerHeavy -> FocusIcons.Chat
-    AgentRole.Subagent -> FocusIcons.Groups
+    AgentRole.Main -> FocusIcons.Assistant
     AgentRole.Compactor -> FocusIcons.Folder
-    AgentRole.Watchdog -> FocusIcons.Notification
     AgentRole.Judge -> FocusIcons.Tool
     AgentRole.Title -> FocusIcons.Chat
     AgentRole.Suggestion -> FocusIcons.Idea

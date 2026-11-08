@@ -1,5 +1,6 @@
 package fan.x0.focus.data.assistant
 
+import fan.x0.focus.core.notify.MessageNotifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,9 +15,7 @@ class AgentWatchdog(
     private val turns: ChatTurnRunner,
     private val journal: TurnJournalStore,
     private val sideChats: SideChatManager,
-    private val router: RouterSession,
-    private val bus: AgentEventBus,
-    private val main: MainChannelSession,
+    private val notifier: MessageNotifier,
     private val settings: AgentEventSettings,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -31,6 +30,7 @@ class AgentWatchdog(
             }
         }
     }
+
     private suspend fun scan() {
         if (!settings.configOnce().watchdogEnabled) return
         val now = System.currentTimeMillis()
@@ -85,27 +85,10 @@ class AgentWatchdog(
             val conversation = chats.conversation(entry.conversationId) ?: return@forEach
             val tooLong = now - entry.startedAt > TURN_TIMEOUT_MS
             val repeated = entry.repeatedCalls >= REPEAT_LIMIT
-            val stalled = conversation.kind == ConversationKind.Router &&
-                now - entry.updatedAt > NO_PROGRESS_MS
-            if (!tooLong && !repeated && !stalled) return@forEach
-            val code = when {
-                repeated -> "repeated_tools"
-                stalled -> "no_progress"
-                else -> "timeout"
-            }
-            val text = when {
-                repeated -> "重复调用同一个工具，已停止。"
-                stalled -> "长时间没有输出，已停止。"
-                else -> "运行超过 30 分钟，已停止。"
-            }
-            if (conversation.kind == ConversationKind.Router) {
-                alarm(conversation.id, code, "Router $text")
-                router.stopCurrent()
-            } else {
-                alarm(conversation.id, code, text)
-                stop(entry.conversationId)
-                chats.setTaskStatus(entry.conversationId, TaskStatus.Interrupted)
-            }
+            if (!tooLong && !repeated) return@forEach
+            val text = if (repeated) "重复调用同一个工具，已停止。" else "运行超过 30 分钟，已停止。"
+            alarm(entry.conversationId, if (repeated) "repeated_tools" else "timeout", text)
+            stop(entry.conversationId)
             journal.finish(entry.conversationId, entry.turnId, "interrupted", text)
         }
     }
@@ -137,27 +120,27 @@ class AgentWatchdog(
         if (!alarmed.add(key)) return
         val conversation = chats.conversation(conversationId)
         val title = conversation?.title?.ifBlank { "旁聊" } ?: "旁聊"
-        main.appendWatchdog("$title：$text")
-        bus.publish(
-            AgentEvent.watchdogAlarm(
-                conversationId = conversationId,
-                code = code,
-                text = text,
-                dedupeKey = "watchdog:$conversationId:$code:${System.currentTimeMillis() / 600_000}",
-            ),
+        val body = "看门狗：$title：$text"
+        val main = chats.ensureMainConversation()
+        chats.append(
+            conversationId = main.id,
+            role = ChatRole.System,
+            content = body,
+            label = "watchdog",
+        )
+        notifier.notifyReply(
+            conversationId = main.id,
+            title = main.title.ifBlank { "主会话" },
+            preview = body.take(140),
+            failed = true,
         )
     }
 
     private suspend fun stop(conversationId: String) {
-        val conversation = chats.conversation(conversationId)
-        if (conversation?.kind == ConversationKind.Router) {
-            router.stopCurrent()
-        } else {
-            if (conversation?.kind == ConversationKind.Side) {
-                chats.setTaskStatus(conversationId, TaskStatus.Interrupted)
-            }
-            turns.stop(conversationId)
+        if (chats.conversation(conversationId)?.kind == ConversationKind.Side) {
+            chats.setTaskStatus(conversationId, TaskStatus.Interrupted)
         }
+        turns.stop(conversationId)
     }
 
     private data class Progress(

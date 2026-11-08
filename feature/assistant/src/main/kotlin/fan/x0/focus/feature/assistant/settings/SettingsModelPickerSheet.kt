@@ -52,15 +52,6 @@ internal fun SettingsModelPickerSheet(
             onRefresh = { onAction(SettingsAction.RefreshJudgeModels) },
             onAction = onAction,
         )
-        ModelPickerTarget.Subagent -> ModelPicker(
-            title = stringResource(R.string.settings_subagent_model_item),
-            groups = groups,
-            state = state,
-            selected = FocusPickerSelection(state.subagentProviderId, state.subagentModel),
-            onSelect = { onAction(SettingsAction.SelectModel(it.groupId, it.itemId)) },
-            onRefresh = { onAction(SettingsAction.RefreshSubagentModels) },
-            onAction = onAction,
-        )
     }
 }
 

@@ -10,11 +10,9 @@ import org.koin.core.annotation.Single
 @Single
 class AgentRuntime(
     private val chats: ChatStore,
-    private val router: RouterSession,
     private val sideChats: SideChatManager,
     private val dispatcher: AgentEventDispatcher,
     private val bus: AgentEventBus,
-    private val main: MainChannelSession,
     private val journal: TurnJournalStore,
     private val watchdog: AgentWatchdog,
     private val triggers: AgentTriggerScheduler,
@@ -23,10 +21,8 @@ class AgentRuntime(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     suspend fun start() {
-        main.ensureConversation()
-        chats.ensureRouterConversation()
+        chats.ensureMainConversation()
         journal.interruptAll()
-        router.prepare()
         sideChats.recover()
         dispatcher.resume()
         watchdog.start()

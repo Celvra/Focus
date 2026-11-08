@@ -14,15 +14,13 @@ import org.koin.core.annotation.Single
 
 data class AgentEventConfig(
     val sources: Map<AgentEventSource, Boolean>,
-    val speculative: Map<AgentEventSource, Boolean>,
     val maxConcurrentSideChats: Int,
     val watchdogEnabled: Boolean,
     val rateLimitPerMinute: Int,
     val postResultsToToday: Boolean = false,
 ) {
-    fun enabled(source: AgentEventSource): Boolean = sources[source] ?: true
-
-    fun speculative(source: AgentEventSource): Boolean = speculative[source] ?: false
+    fun enabled(source: AgentEventSource): Boolean =
+        if (!source.configurable) true else sources[source] ?: true
 
     companion object {
         const val DEFAULT_MAX_CONCURRENT = 3
@@ -31,12 +29,6 @@ data class AgentEventConfig(
 
         fun defaults(): AgentEventConfig = AgentEventConfig(
             sources = AgentEventSource.entries.associateWith { true },
-            speculative = AgentEventSource.entries.associateWith {
-                it == AgentEventSource.Background ||
-                    it == AgentEventSource.Reminder ||
-                    it == AgentEventSource.Feed ||
-                    it == AgentEventSource.Device
-            },
             maxConcurrentSideChats = DEFAULT_MAX_CONCURRENT,
             watchdogEnabled = true,
             rateLimitPerMinute = DEFAULT_RATE_LIMIT,
@@ -48,7 +40,6 @@ data class AgentEventConfig(
 @Serializable
 private data class AgentEventConfigPayload(
     val sources: Map<String, Boolean> = emptyMap(),
-    val speculative: Map<String, Boolean> = emptyMap(),
     val maxConcurrentSideChats: Int = AgentEventConfig.DEFAULT_MAX_CONCURRENT,
     val watchdogEnabled: Boolean = true,
     val rateLimitPerMinute: Int = AgentEventConfig.DEFAULT_RATE_LIMIT,
@@ -70,9 +61,6 @@ class AgentEventSettings(@Provided private val context: Context) {
             sources = defaults.sources.mapValues { (source, value) ->
                 stored.sources[source.wire] ?: value
             },
-            speculative = defaults.speculative.mapValues { (source, value) ->
-                stored.speculative[source.wire] ?: value
-            },
             maxConcurrentSideChats = stored.maxConcurrentSideChats
                 .coerceIn(1, AgentEventConfig.MAX_CONCURRENT_LIMIT),
             watchdogEnabled = stored.watchdogEnabled,
@@ -85,10 +73,6 @@ class AgentEventSettings(@Provided private val context: Context) {
 
     suspend fun setSourceEnabled(source: AgentEventSource, enabled: Boolean) = edit { payload ->
         payload.copy(sources = payload.sources + (source.wire to enabled))
-    }
-
-    suspend fun setSpeculative(source: AgentEventSource, enabled: Boolean) = edit { payload ->
-        payload.copy(speculative = payload.speculative + (source.wire to enabled))
     }
 
     suspend fun setMaxConcurrentSideChats(value: Int) = edit { payload ->

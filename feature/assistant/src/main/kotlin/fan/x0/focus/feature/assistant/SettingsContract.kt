@@ -83,8 +83,6 @@ data class SettingsUiState(
     val judgeContextWindow: Int = 2,
     val judgeMaxRisk: Int = 3,
     val judgeTimeoutSeconds: Int = 8,
-    val subagentProviderId: String = "",
-    val subagentModel: String = "",
     val maxRounds: Int = AgentDefaults.MAX_ROUNDS,
     val unlimitedRounds: Boolean = false,
     val maxRetries: Int = 4,
@@ -96,7 +94,7 @@ data class SettingsUiState(
     val balanceSupported: Boolean get() = editingProviderId != null
 }
 
-enum class ModelPickerTarget { Judge, Subagent, Active }
+enum class ModelPickerTarget { Judge, Active }
 
 enum class DataClearTarget { Conversations, FileIndex }
 
@@ -160,8 +158,6 @@ sealed interface SettingsAction : UiAction {
     data class JudgeContextChanged(val value: Int) : SettingsAction
     data class JudgeMaxRiskChanged(val value: Int) : SettingsAction
     data class JudgeTimeoutChanged(val value: Int) : SettingsAction
-    data object OpenSubagentModelPicker : SettingsAction
-    data object RefreshSubagentModels : SettingsAction
     data class MaxRoundsChanged(val value: Int) : SettingsAction
     data class MaxRetriesChanged(val value: Int) : SettingsAction
     data class UnlimitedRoundsChanged(val value: Boolean) : SettingsAction

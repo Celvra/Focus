@@ -2,7 +2,6 @@ package fan.x0.focus.data.assistant
 
 import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.toAppError
-import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.MessageNotifier
 import fan.x0.focus.core.notify.NotifyActionKind
 import kotlinx.coroutines.CancellationException
@@ -53,11 +52,8 @@ class ChatTurnRunner(
     private val chats: ChatStore,
     private val titles: ChatTitleGenerator,
     private val keepAlive: ChatTurnKeepAlive,
-    private val background: BackgroundCommandMonitor,
-    private val presence: AppPresence,
     private val notifier: MessageNotifier,
     private val events: AssistantEventSink,
-    private val triggerBus: AssistantTriggerBus,
     private val turnGuard: AssistantTurnGuard,
     private val journal: TurnJournalStore,
 ) {
@@ -79,46 +75,6 @@ class ChatTurnRunner(
 
     private val _actions = MutableSharedFlow<ChatAction>(extraBufferCapacity = 16)
     val actions: SharedFlow<ChatAction> = _actions.asSharedFlow()
-
-    init {
-        scope.launch {
-            triggerBus.events.collect { event ->
-                val conversation = chats.conversation(event.conversationId) ?: return@collect
-                if (conversation.kind != ConversationKind.Chat) return@collect
-                chats.append(
-                    conversationId = event.conversationId,
-                    role = ChatRole.System,
-                    content = "Trigger ${event.label}: ${event.prompt}",
-                    label = "trigger:${event.label}",
-                )
-                if (!isRunning(event.conversationId)) {
-                    start(
-                        conversationId = event.conversationId,
-                        text = "",
-                        options = TurnOptions(),
-                        appendUser = false,
-                    )
-                }
-            }
-        }
-        scope.launch {
-            background.completed.collect { completion ->
-                val conversation = chats.conversation(completion.conversationId) ?: return@collect
-                if (conversation.kind != ConversationKind.Chat) return@collect
-                if (conversation.archived) return@collect
-                if (!presence.foreground.value) return@collect
-                if (presence.visibleConversationId.value != completion.conversationId) return@collect
-                if (!isRunning(completion.conversationId)) {
-                    start(
-                        conversationId = completion.conversationId,
-                        text = "",
-                        options = TurnOptions(),
-                        appendUser = false,
-                    )
-                }
-            }
-        }
-    }
 
     fun state(conversationId: String): ChatTurnState =
         _states.value[conversationId] ?: ChatTurnState(conversationId = conversationId)
@@ -550,6 +506,7 @@ class ChatTurnRunner(
                 ?.text
                 ?.trim()
                 .orEmpty()
+            if (answer.isBlank() && errorText.isBlank()) return@launch
             notifier.notifyReply(
                 conversationId = state.conversationId,
                 title = titleOf(state.conversationId),

@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.data.assistant.TaskStatus
-import fan.x0.focus.data.assistant.WorkerProfile
 import java.text.DateFormat
 import java.util.Date
 
@@ -158,11 +157,6 @@ private fun SideChatRow(
                         color = statusColor(row.status),
                     )
                     Text(
-                        text = profileLabel(row.profile),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
                         text = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                             .format(Date(row.updatedAt)),
                         style = MaterialTheme.typography.labelSmall,
@@ -229,11 +223,4 @@ private fun statusLabel(status: TaskStatus) = stringResource(
     },
 )
 
-@Composable
-private fun profileLabel(profile: WorkerProfile) = stringResource(
-    when (profile) {
-        WorkerProfile.Light -> R.string.chat_side_profile_light
-        WorkerProfile.Standard -> R.string.chat_side_profile_standard
-        WorkerProfile.Heavy -> R.string.chat_side_profile_heavy
-    },
-)
+

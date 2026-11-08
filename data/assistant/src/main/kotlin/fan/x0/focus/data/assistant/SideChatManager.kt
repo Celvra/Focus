@@ -2,10 +2,15 @@ package fan.x0.focus.data.assistant
 
 import fan.x0.focus.core.notify.AppPresence
 import fan.x0.focus.core.notify.MessageNotifier
+import fan.x0.focus.core.notify.NotifyActionKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -15,11 +20,15 @@ data class SideChatSummary(
     val id: String,
     val title: String,
     val status: TaskStatus,
-    val profile: WorkerProfile,
     val note: String,
     val latest: String,
     val updatedAt: Long,
     val resultSeen: Boolean,
+)
+
+data class SideChatCounts(
+    val active: Int = 0,
+    val unread: Int = 0,
 )
 
 @Single
@@ -27,12 +36,11 @@ class SideChatManager(
     private val chats: ChatStore,
     private val turns: ChatTurnRunner,
     private val bus: AgentEventBus,
-    private val threads: ThreadRegistry,
     private val events: AgentEventSettings,
     private val models: ModelResolver,
-    private val main: MainChannelSession,
     private val notifier: MessageNotifier,
     private val presence: AppPresence,
+    private val today: TodayStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -42,6 +50,9 @@ class SideChatManager(
     private val running = mutableSetOf<String>()
     private val notified = mutableSetOf<String>()
     private val activeTurns = mutableMapOf<String, Long>()
+
+    private val _counts = MutableStateFlow(SideChatCounts())
+    val counts: StateFlow<SideChatCounts> = _counts.asStateFlow()
 
     init {
         scope.launch {
@@ -56,27 +67,19 @@ class SideChatManager(
                             chats.setTaskStatus(conversationId, TaskStatus.Waiting)
                         }
                         if (notified.add("$conversationId:${turn.turnId}:$waiting")) {
-                            main.appendSideApproval(conversationId, conversation.title, waiting)
-                            bus.publish(
-                                AgentEvent.sideChatApproval(
-                                    sideChatId = conversationId,
-                                    title = conversation.title,
-                                    note = waiting,
-                                ),
-                            )
+                            appendSideApproval(conversationId, conversation.title, waiting)
                         }
                     } else if (turn.running && conversation.taskStatus != TaskStatus.Running) {
                         chats.setTaskStatus(conversationId, TaskStatus.Running)
                     }
                 }
-                main.setActivities(workerActivities(states))
             }
         }
         scope.launch {
             turns.results.collect { results ->
                 results.forEach { (conversationId, result) ->
+                    if (activeTurns[conversationId] != result.turnId) return@forEach
                     val conversation = chats.conversation(conversationId) ?: return@forEach
-                    if (conversation.kind != ConversationKind.Side) return@forEach
                     finish(conversation, result)
                 }
             }
@@ -89,28 +92,23 @@ class SideChatManager(
     suspend fun create(
         title: String,
         task: String,
-        profile: WorkerProfile,
         note: String = "",
-        threadKey: String = "",
+        origin: ConversationOrigin = ConversationOrigin.Agent,
+        parentId: String = "",
         providerId: String = "",
         model: String = "",
         reasoning: ReasoningLevel = ReasoningLevel.Auto,
         attachments: List<ChatAttachment> = emptyList(),
     ): Conversation {
-        val role = when (profile) {
-            WorkerProfile.Light -> AgentRole.WorkerLight
-            WorkerProfile.Standard -> AgentRole.WorkerStandard
-            WorkerProfile.Heavy -> AgentRole.WorkerHeavy
-        }
         val resolved = if (providerId.isNotBlank() && model.isNotBlank()) {
             models.resolveManual(providerId, model, reasoning)
         } else {
-            models.resolve(role)
+            models.resolve(AgentRole.Main)
         }
+        val main = chats.ensureMainConversation()
         val conversation = chats.createSideChat(
             title = title.trim().take(40).ifBlank { "旁聊" },
-            parentId = ChatStore.MAIN_CONVERSATION_ID,
-            profile = profile,
+            parentId = parentId.ifBlank { main.id },
             note = buildString {
                 append(task)
                 if (note.isNotBlank()) append("\n\nNote: ").append(note)
@@ -118,34 +116,25 @@ class SideChatManager(
             providerId = resolved?.providerId.orEmpty(),
             model = resolved?.model.orEmpty(),
             reasoning = (resolved?.reasoning ?: reasoning).name,
+            origin = origin,
         )
-        if (threadKey.isNotBlank()) {
-            threads.subscribe(threadKey, conversation.id, "origin")
-        }
-        threads.subscribe("side:${conversation.id}", conversation.id, "self")
         enqueue(conversation.id, task, attachments)
         updateCounts()
         return conversation
     }
 
-    suspend fun createEmpty(profile: WorkerProfile = WorkerProfile.Standard): Conversation {
-        val role = when (profile) {
-            WorkerProfile.Light -> AgentRole.WorkerLight
-            WorkerProfile.Standard -> AgentRole.WorkerStandard
-            WorkerProfile.Heavy -> AgentRole.WorkerHeavy
-        }
-        val resolved = models.resolve(role)
+    suspend fun createEmpty(): Conversation {
+        val resolved = models.resolve(AgentRole.Main)
+        val main = chats.ensureMainConversation()
         val conversation = chats.createSideChat(
             title = "新旁聊",
-            parentId = ChatStore.MAIN_CONVERSATION_ID,
-            profile = profile,
+            parentId = main.id,
             note = "",
             providerId = resolved?.providerId.orEmpty(),
             model = resolved?.model.orEmpty(),
             reasoning = (resolved?.reasoning ?: ReasoningLevel.Auto).name,
             origin = ConversationOrigin.User,
         )
-        threads.subscribe("side:${conversation.id}", conversation.id, "self")
         chats.setTaskStatus(conversation.id, TaskStatus.None)
         updateCounts()
         return conversation
@@ -178,43 +167,16 @@ class SideChatManager(
         }
         turns.stop(id)
         chats.setTaskStatus(id, TaskStatus.Interrupted)
-        release(id)
         chats.append(
             conversationId = id,
             role = ChatRole.System,
             content = reason.ifBlank { "已停止。" },
             label = "agent_stop",
         )
-        bus.publish(
-            AgentEvent.sideChatResult(
-                sideChatId = id,
-                title = conversation.title,
-                summary = reason.ifBlank { "已停止。" },
-                failed = true,
-            ),
-        )
+        release(id)
     }
 
     suspend fun retry(id: String): Boolean = resume(id)
-
-    suspend fun showResult(id: String, message: String = "") {
-        val conversation = chats.conversation(id) ?: return
-        if (conversation.taskStatus == TaskStatus.Failed) return
-        val summary = message.ifBlank { latestSummary(id) }
-        val attachments = resultAttachments(id)
-        main.appendSideResult(
-            SideResultCard(
-                sideChatId = id,
-                title = conversation.title.ifBlank { "旁聊" },
-                summary = summary,
-                failed = conversation.taskStatus == TaskStatus.Failed ||
-                    conversation.taskStatus == TaskStatus.Interrupted,
-                createdAt = System.currentTimeMillis(),
-                attachments = attachments,
-            ),
-        )
-        updateCounts()
-    }
 
     suspend fun markSeen(id: String) {
         val conversation = chats.conversation(id) ?: return
@@ -230,7 +192,6 @@ class SideChatManager(
                 id = conversation.id,
                 title = conversation.title.ifBlank { "旁聊" },
                 status = conversation.taskStatus,
-                profile = conversation.workerProfile,
                 note = conversation.taskNote,
                 latest = latestSummary(conversation.id),
                 updatedAt = conversation.updatedAt,
@@ -255,23 +216,7 @@ class SideChatManager(
                     content = "进程中断，任务已标记为中断。可以重试。",
                     label = "agent_interrupted",
                 )
-                main.appendSideResult(
-                    SideResultCard(
-                        sideChatId = conversation.id,
-                        title = conversation.title.ifBlank { "旁聊" },
-                        summary = "进程中断，任务已标记为中断。",
-                        failed = true,
-                        createdAt = System.currentTimeMillis(),
-                    ),
-                )
-                bus.publish(
-                    AgentEvent.sideChatResult(
-                        sideChatId = conversation.id,
-                        title = conversation.title,
-                        summary = "进程中断，任务已标记为中断。",
-                        failed = true,
-                    ),
-                )
+                publishResult(conversation, "进程中断，任务已标记为中断。", failed = true, turnId = 0)
             }
         }
         updateCounts()
@@ -283,43 +228,28 @@ class SideChatManager(
         pump()
     }
 
-    suspend fun deliver(event: AgentEvent): Boolean {
-        val id = (event.route as? AgentEventRoute.Side)?.conversationId ?: return false
-        val conversation = chats.conversation(id) ?: return false
-        if (conversation.kind != ConversationKind.Side) return false
-        if (conversation.archived) return true
-        val text = eventPrompt(event)
-        if (turns.isRunning(id)) {
+    suspend fun deliver(conversationId: String, text: String) {
+        val conversation = chats.conversation(conversationId) ?: return
+        if (conversation.kind != ConversationKind.Side) return
+        if (conversation.archived) return
+        if (turns.isRunning(conversationId)) {
             chats.append(
-                conversationId = id,
+                conversationId = conversationId,
                 role = ChatRole.System,
                 content = text,
                 label = "agent_event",
             )
-            return true
+            return
         }
-        chats.setTaskStatus(id, TaskStatus.Queued)
+        chats.setTaskStatus(conversationId, TaskStatus.Queued)
         enqueue(
-            id,
+            conversationId,
             buildString {
                 append("新事件：\n")
                 append(text.take(4_000))
                 append("\n\n根据这个事件继续当前任务。需要告诉用户时直接说明；没有值得汇报的内容就安静结束。")
             },
         )
-        return true
-    }
-
-    private fun eventPrompt(event: AgentEvent): String = when (event.kind) {
-        AgentEventKind.BackgroundCommand ->
-            "后台命令完成：${event.text()}\n${event.payloadObject()["logs"].stringValue().take(2_000)}"
-        AgentEventKind.Reminder -> "提醒：${event.text()}"
-        AgentEventKind.DeviceTrigger -> "设备触发器：${event.text()}"
-        AgentEventKind.FeedUpdate ->
-            "订阅源更新：${event.payloadObject()["title"].stringValue()} " +
-                "新增 ${event.payloadObject()["count"].stringValue()} 篇"
-        AgentEventKind.WatchdogAlarm -> "看门狗：${event.text()}"
-        else -> event.text().ifBlank { event.note() }
     }
 
     private suspend fun enqueue(id: String, task: String, attachments: List<ChatAttachment> = emptyList()) {
@@ -385,38 +315,55 @@ class SideChatManager(
         }
         val summary = result.error?.let { it.serverMessage ?: it.serverTitle ?: it.type.name }
             ?: result.answer.trim()
-        val attachments = result.media.distinctBy { it.id }.take(8)
         chats.setTaskStatus(conversation.id, status)
         chats.setResultSeen(conversation.id, presence.visibleConversationId.value == conversation.id)
         release(conversation.id)
-        if (status == TaskStatus.Failed) {
-            main.appendSideResult(
-                SideResultCard(
-                    sideChatId = conversation.id,
-                    title = conversation.title.ifBlank { "旁聊" },
-                    summary = summary.ifBlank { "旁聊失败" },
-                    failed = true,
-                    createdAt = System.currentTimeMillis(),
-                    attachments = attachments,
-                ),
-            )
+        if (summary.isNotBlank() && events.configOnce().postResultsToToday) {
+            runCatching {
+                today.postUpdate(
+                    headline = conversation.title.ifBlank { "旁聊" },
+                    body = summary,
+                    reason = if (status == TaskStatus.Failed) "旁聊失败" else "旁聊完成",
+                    category = "旁聊",
+                    icon = if (status == TaskStatus.Failed) "warning" else "task",
+                    articleId = null,
+                )
+            }
         }
+        publishResult(conversation, summary, status == TaskStatus.Failed, result.turnId)
+        updateCounts()
+    }
+
+    private suspend fun publishResult(
+        conversation: Conversation,
+        summary: String,
+        failed: Boolean,
+        turnId: Long,
+    ) {
+        val main = chats.ensureMainConversation()
+        if (main.id == conversation.id) return
+        if (summary.isBlank() && !failed) return
         bus.publish(
             AgentEvent.sideChatResult(
+                mainId = main.id,
                 sideChatId = conversation.id,
-                title = conversation.title,
-                summary = summary.ifBlank { if (status == TaskStatus.Done) "完成" else "" },
-                failed = status == TaskStatus.Failed,
-                attachments = attachments,
+                title = conversation.title.ifBlank { "旁聊" },
+                summary = summary,
+                failed = failed,
+                turnId = turnId,
             ),
         )
-        notifier.notifyReply(
-            conversationId = conversation.id,
-            title = conversation.title.ifBlank { "旁聊" },
-            preview = summary.ifBlank { if (status == TaskStatus.Done) "旁聊完成" else "旁聊结束" },
-            failed = status == TaskStatus.Failed,
+    }
+
+    private suspend fun appendSideApproval(sideChatId: String, title: String, note: String) {
+        val main = chats.ensureMainConversation()
+        chats.append(
+            conversationId = main.id,
+            role = ChatRole.System,
+            content = "旁聊 $title 等待审批",
+            label = "side_approval",
         )
-        updateCounts()
+        notifier.notifyAction(sideChatId, title.ifBlank { "旁聊" }, NotifyActionKind.Approval)
     }
 
     private suspend fun release(id: String) {
@@ -426,12 +373,6 @@ class SideChatManager(
         }
         pump()
     }
-
-    private suspend fun resultAttachments(id: String): List<ChatAttachment> =
-        chats.messages(id, limit = 30)
-            .flatMap { it.attachments }
-            .distinctBy { it.id }
-            .take(8)
 
     private suspend fun latestSummary(id: String): String {
         return chats.messages(id, limit = 12)
@@ -445,33 +386,12 @@ class SideChatManager(
         val sides = chats.sideChats()
         val active = sides.count { it.taskStatus.active }
         val unseen = sides.count { !it.resultSeen && it.taskStatus.settledSide }
-        main.setActiveSideChats(active)
-        main.setUnreadResults(unseen)
+        _counts.update { SideChatCounts(active = active, unread = unseen) }
     }
 
     private val TaskStatus.settledSide: Boolean
         get() = this == TaskStatus.Done || this == TaskStatus.Failed || this == TaskStatus.NoResult ||
             this == TaskStatus.Interrupted
-
-    private suspend fun workerActivities(states: Map<String, ChatTurnState>): List<WorkerActivity> =
-        states.mapNotNull { (conversationId, turn) ->
-            if (!turn.running) return@mapNotNull null
-            val conversation = chats.conversation(conversationId) ?: return@mapNotNull null
-            if (conversation.kind != ConversationKind.Side) return@mapNotNull null
-            val waiting = waitingKey(turn)
-            val step = turn.entries
-                .filterIsInstance<ChatTurnEntry.Trace>()
-                .flatMap { it.steps }
-                .lastOrNull()
-            val label = waiting ?: step?.label ?: "正在处理"
-            WorkerActivity(
-                id = conversationId,
-                title = conversation.title.ifBlank { "旁聊" },
-                label = label,
-                running = waiting == null && step?.status != ChatTurnStepStatus.Done &&
-                    step?.status != ChatTurnStepStatus.Failed,
-            )
-        }
 
     private fun waitingKey(turn: ChatTurnState): String? {
         turn.entries.forEach { entry ->

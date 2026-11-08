@@ -52,8 +52,8 @@ import fan.x0.focus.core.mvi.CollectEffect
 import fan.x0.focus.data.assistant.AgentEventSource
 import fan.x0.focus.data.assistant.AgentTrigger
 import fan.x0.focus.data.assistant.AgentTriggerKind
+import fan.x0.focus.data.assistant.AgentTriggerTarget
 import fan.x0.focus.data.assistant.CronExpression
-import fan.x0.focus.data.assistant.WorkerProfile
 import fan.x0.focus.feature.assistant.R
 import org.koin.compose.viewmodel.koinViewModel
 import java.text.DateFormat
@@ -386,19 +386,18 @@ private fun TriggerEditorSheet(
                 )
             }
             Text(
-                text = stringResource(R.string.settings_super_trigger_profile),
+                text = stringResource(R.string.settings_super_trigger_target),
                 style = MaterialTheme.typography.labelLarge,
             )
             FocusChoiceButtons(
-                options = WorkerProfile.entries,
-                selected = draft.profile,
-                onSelect = { onAction(SuperAgentAction.TriggerDraftChanged(draft.copy(profile = it))) },
-                label = { profile ->
+                options = AgentTriggerTarget.entries,
+                selected = draft.target,
+                onSelect = { onAction(SuperAgentAction.TriggerDraftChanged(draft.copy(target = it))) },
+                label = { target ->
                     stringResource(
-                        when (profile) {
-                            WorkerProfile.Light -> R.string.settings_super_profile_light
-                            WorkerProfile.Standard -> R.string.settings_super_profile_standard
-                            WorkerProfile.Heavy -> R.string.settings_super_profile_heavy
+                        when (target) {
+                            AgentTriggerTarget.Main -> R.string.settings_super_target_main
+                            AgentTriggerTarget.Side -> R.string.settings_super_target_side
                         },
                     )
                 },
@@ -447,27 +446,8 @@ private fun SourceSections(
             subtitle = stringResource(R.string.settings_super_sources_body),
         )
         SourceGroup(
-            title = stringResource(R.string.settings_super_group_chat),
-            sources = listOf(AgentEventSource.User, AgentEventSource.SideChat),
-            state = state,
-            onAction = onAction,
-        )
-        SourceGroup(
             title = stringResource(R.string.settings_super_group_background),
-            sources = listOf(
-                AgentEventSource.Background,
-                AgentEventSource.Reminder,
-                AgentEventSource.Device,
-                AgentEventSource.Feed,
-                AgentEventSource.Schedule,
-                AgentEventSource.Webhook,
-            ),
-            state = state,
-            onAction = onAction,
-        )
-        SourceGroup(
-            title = stringResource(R.string.settings_super_group_system),
-            sources = listOf(AgentEventSource.Watchdog, AgentEventSource.System),
+            sources = AgentEventSource.entries.filter { it.configurable },
             state = state,
             onAction = onAction,
         )
@@ -497,27 +477,10 @@ private fun SourceGroup(
                     onCheckedChange = { onAction(SuperAgentAction.ToggleSource(source, it)) },
                     headlineContent = { Text(sourceLabel(source)) },
                     supportingContent = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                text = sourceBody(source),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            if (supportsSpeculative(source) && row.enabled) {
-                                FocusChip(
-                                    label = stringResource(R.string.settings_super_speculative),
-                                    selected = row.speculative,
-                                    leadingIcon = FocusIcons.Bolt,
-                                    onClick = {
-                                        onAction(
-                                            SuperAgentAction.ToggleSpeculative(
-                                                source,
-                                                !row.speculative,
-                                            ),
-                                        )
-                                    },
-                                )
-                            }
-                        }
+                        Text(
+                            text = sourceBody(source),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     },
                     leadingContent = { FocusCardGroupIcon(icon = sourceIcon(source)) },
                 )
@@ -680,53 +643,35 @@ private fun compactCount(value: Long): String = when {
 @Composable
 private fun sourceLabel(source: AgentEventSource) = stringResource(
     when (source) {
-        AgentEventSource.User -> R.string.settings_super_source_user
         AgentEventSource.SideChat -> R.string.settings_super_source_side_chat
         AgentEventSource.Background -> R.string.settings_super_source_background
         AgentEventSource.Reminder -> R.string.settings_super_source_reminder
         AgentEventSource.Device -> R.string.settings_super_source_device
         AgentEventSource.Feed -> R.string.settings_super_source_feed
-        AgentEventSource.Watchdog -> R.string.settings_super_source_watchdog
         AgentEventSource.Schedule -> R.string.settings_super_source_schedule
         AgentEventSource.Webhook -> R.string.settings_super_source_webhook
-        AgentEventSource.System -> R.string.settings_super_source_system
     },
 )
 
 @Composable
 private fun sourceBody(source: AgentEventSource) = stringResource(
     when (source) {
-        AgentEventSource.User -> R.string.settings_super_source_user_body
         AgentEventSource.SideChat -> R.string.settings_super_source_side_chat_body
         AgentEventSource.Background -> R.string.settings_super_source_background_body
         AgentEventSource.Reminder -> R.string.settings_super_source_reminder_body
         AgentEventSource.Device -> R.string.settings_super_source_device_body
         AgentEventSource.Feed -> R.string.settings_super_source_feed_body
-        AgentEventSource.Watchdog -> R.string.settings_super_source_watchdog_body
         AgentEventSource.Schedule -> R.string.settings_super_source_schedule_body
         AgentEventSource.Webhook -> R.string.settings_super_source_webhook_body
-        AgentEventSource.System -> R.string.settings_super_source_system_body
     },
 )
 
 private fun sourceIcon(source: AgentEventSource) = when (source) {
-    AgentEventSource.User -> FocusIcons.Chat
     AgentEventSource.SideChat -> FocusIcons.Groups
     AgentEventSource.Background -> FocusIcons.Terminal
     AgentEventSource.Reminder -> FocusIcons.Notification
     AgentEventSource.Device -> FocusIcons.Device
     AgentEventSource.Feed -> FocusIcons.Feed
-    AgentEventSource.Watchdog -> FocusIcons.Warning
     AgentEventSource.Schedule -> FocusIcons.Calendar
     AgentEventSource.Webhook -> FocusIcons.Link
-    AgentEventSource.System -> FocusIcons.Settings
-}
-
-private fun supportsSpeculative(source: AgentEventSource) = when (source) {
-    AgentEventSource.Background,
-    AgentEventSource.Reminder,
-    AgentEventSource.Device,
-    AgentEventSource.Feed,
-    -> true
-    else -> false
 }

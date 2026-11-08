@@ -31,7 +31,6 @@ data class BackgroundJobSnapshot(
 
 @Single
 class BackgroundCommandMonitor(
-    private val chats: ChatStore,
     private val bridge: BridgeRepository,
     private val bus: AgentEventBus,
     private val async: AsyncToolRegistry,
@@ -61,28 +60,7 @@ class BackgroundCommandMonitor(
                 if (!snapshot.done) delay(POLL_MS)
             }
             val tail = snapshot.logs.takeLast(LOG_TAIL_CHARS)
-            val content = if (tail.isBlank()) snapshot.summary else "${snapshot.summary}\n\nLogs:\n$tail"
-            val conversation = chats.conversation(conversationId)
-            if (conversation?.archived == true) {
-                jobs.remove(jobId)
-                return@launch
-            }
-            if (conversation?.kind == ConversationKind.Chat) {
-                chats.append(
-                    conversationId = conversationId,
-                    role = ChatRole.System,
-                    content = content,
-                    label = "bg:$jobId",
-                )
-            }
-            _completed.tryEmit(
-                BackgroundCompletion(
-                    conversationId = conversationId,
-                    jobId = jobId,
-                    summary = snapshot.summary,
-                    logs = tail,
-                ),
-            )
+            _completed.tryEmit(BackgroundCompletion(conversationId, jobId, snapshot.summary, tail))
             bus.publish(AgentEvent.backgroundCommand(conversationId, jobId, snapshot.summary, tail))
             jobs.remove(jobId)
         }
@@ -128,28 +106,7 @@ class BackgroundCommandMonitor(
                 append('.')
             }
             val tail = logs.toString().takeLast(LOG_TAIL_CHARS)
-            val content = if (tail.isBlank()) summary else "$summary\n\nLogs:\n$tail"
-            val conversation = chats.conversation(conversationId)
-            if (conversation?.archived == true) {
-                jobs.remove(jobId)
-                return@launch
-            }
-            if (conversation?.kind == ConversationKind.Chat) {
-                chats.append(
-                    conversationId = conversationId,
-                    role = ChatRole.System,
-                    content = content,
-                    label = "bg:$jobId",
-                )
-            }
-            _completed.tryEmit(
-                BackgroundCompletion(
-                    conversationId = conversationId,
-                    jobId = jobId,
-                    summary = summary,
-                    logs = tail,
-                ),
-            )
+            _completed.tryEmit(BackgroundCompletion(conversationId, jobId, summary, tail))
             bus.publish(AgentEvent.backgroundCommand(conversationId, jobId, summary, tail))
             jobs.remove(jobId)
         }

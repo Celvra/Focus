@@ -43,7 +43,7 @@ import fan.x0.focus.R
 import fan.x0.focus.core.designsystem.theme.focusColorScheme
 import fan.x0.focus.core.notify.R as NotifyR
 import fan.x0.focus.data.assistant.ChatStore
-import fan.x0.focus.data.assistant.MainChannelSession
+import fan.x0.focus.data.assistant.ChatTurnRunner
 import org.koin.mp.KoinPlatform
 
 class FocusWidgetProvider : GlanceAppWidgetReceiver() {
@@ -71,15 +71,16 @@ class FocusWidget : GlanceAppWidget() {
         return runCatching {
             val koin = KoinPlatform.getKoin()
             val chats = koin.get<ChatStore>()
-            val main = koin.get<MainChannelSession>()
-            val latest = chats.messages(ChatStore.MAIN_CONVERSATION_ID, limit = 8)
+            val turns = koin.get<ChatTurnRunner>()
+            val main = chats.ensureMainConversation()
+            val latest = chats.messages(main.id, limit = 8)
                 .lastOrNull { it.content.isNotBlank() }
                 ?.content
                 ?.let(::readable)
                 .orEmpty()
             WidgetSnapshot(
                 headline = latest,
-                working = main.state.value.working,
+                working = turns.isRunning(main.id),
                 active = chats.activeSideChats().size,
             )
         }.getOrElse {

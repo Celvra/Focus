@@ -91,7 +91,7 @@ class AgentTriggerScheduler(
                 triggerId = trigger.id,
                 name = trigger.name,
                 prompt = trigger.prompt,
-                profile = trigger.profile,
+                target = trigger.target,
                 runAt = trigger.nextRun,
             ),
         )
@@ -107,7 +107,7 @@ class AgentTriggerScheduler(
                     triggerId = trigger.id,
                     name = trigger.name,
                     prompt = trigger.prompt,
-                    profile = trigger.profile,
+                    target = trigger.target,
                     runAt = trigger.nextRun,
                 ),
             )

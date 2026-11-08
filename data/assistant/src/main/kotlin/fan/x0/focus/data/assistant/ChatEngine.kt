@@ -47,10 +47,6 @@ data class TurnOptions(
     val mentionedSkills: List<String> = emptyList(),
     val silentReply: Boolean = false,
     val autoTitle: Boolean = true,
-    val promptOverride: String? = null,
-    val allowedTools: Set<String>? = null,
-    val toolSpecs: List<ToolSpec>? = null,
-    val toolHandler: (suspend (CompletedToolCall) -> ToolResult?)? = null,
 )
 
 sealed interface ChatEvent {
@@ -110,7 +106,6 @@ class ChatEngine(
     private val tools: ToolExecutor,
     private val approvals: ApprovalStore,
     private val agent: AgentSettings,
-    private val subAgents: SubAgentRunner,
     private val compactor: ChatCompactor,
     private val workspaceTrust: WorkspaceTrustService,
 ) {
@@ -203,22 +198,20 @@ class ChatEngine(
                         ),
                     )
                 }
-                val specs = (options.toolSpecs ?: when (mode) {
-                    ChatMode.Chat -> tools.specsFor(agentMode)
+                val context = chats.context(conversationId)
+                val info = chats.conversation(conversationId)
+                val specs = when (mode) {
+                    ChatMode.Chat -> tools.specsFor(agentMode, main = info?.kind == ConversationKind.Main)
                     ChatMode.Onboarding -> ToolCatalog.onboarding()
-                }).let { list ->
-                    val allowed = options.allowedTools
-                    if (allowed != null) list.filter { it.name in allowed } else list
                 }.let { list ->
                     if (completesOnboarding) list.filterNot { it.name == "complete_onboarding" } else list
                 }
-                val context = chats.context(conversationId)
-                val info = chats.conversation(conversationId)
-                val system = options.promptOverride ?: when (mode) {
+                val system = when (mode) {
                     ChatMode.Chat -> prompt.chatPrompt(
                         title = info?.title.orEmpty(),
                         mode = agentMode,
                         mentionedSkills = options.mentionedSkills,
+                        main = info?.kind == ConversationKind.Main,
                         side = info?.kind == ConversationKind.Side,
                     )
                     ChatMode.Onboarding -> prompt.onboardingPrompt(
@@ -306,6 +299,10 @@ class ChatEngine(
                     )
                 }
                 val results = executeTools(message.toolCalls, conversationId, agentMode, providerId, model, options)
+                if (results.any { it.silent }) {
+                    emit(ChatEvent.Completed)
+                    return@flow
+                }
                 pendingMedia = results.flatMap { it.media }
                 for ((index, call) in message.toolCalls.withIndex()) {
                     var result = results[index]
@@ -562,74 +559,8 @@ class ChatEngine(
         options: TurnOptions,
     ): ToolResult {
         val startedAt = System.currentTimeMillis()
-        val allowed = options.allowedTools
-        val result = if (allowed != null && call.name !in allowed) {
-            ToolResult(
-                ok = false,
-                content = "Tool is not available in this turn: ${call.name}",
-                summary = "Tool blocked",
-            )
-        } else {
-            options.toolHandler?.invoke(call)
-                ?: if (call.name == "spawn_agent") {
-                    runSubAgent(call, providerId, model)
-                } else {
-                    tools.execute(call, conversationId, mode)
-                }
-        }
+        val result = tools.execute(call, conversationId, mode)
         return result.copy(durationMs = System.currentTimeMillis() - startedAt)
-    }
-
-    private suspend fun runSubAgent(
-        call: CompletedToolCall,
-        providerId: String,
-        model: String,
-    ): ToolResult {
-        val args = runCatching {
-            kotlinx.serialization.json.Json.parseToJsonElement(call.arguments)
-                as kotlinx.serialization.json.JsonObject
-        }.getOrNull() ?: return ToolResult(false, "Error: invalid spawn_agent arguments", "Invalid arguments")
-        val task = (args["task"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
-        val tools = (args["tools"] as? kotlinx.serialization.json.JsonArray)
-            ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
-            .orEmpty()
-        val overrideModel = (args["model"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
-        val rounds = (args["max_rounds"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: 6
-        val result = subAgents.run(
-            SubAgentRequest(
-                task = task,
-                tools = tools,
-                model = overrideModel,
-                parentProviderId = providerId,
-                parentModel = model,
-                maxRounds = rounds,
-                runId = call.id,
-            ),
-        )
-        val content = buildString {
-            appendLine(result.summary)
-            if (result.files.isNotEmpty()) {
-                appendLine()
-                appendLine("Files:")
-                result.files.forEach { appendLine("- $it") }
-            }
-            if (result.steps.isNotEmpty()) {
-                appendLine()
-                appendLine("Steps:")
-                result.steps.forEach { step ->
-                    appendLine("- ${step.label}: ${if (step.ok) "done" else "failed"} (${step.detail})")
-                }
-            }
-            result.error?.let {
-                appendLine()
-                appendLine("Error: $it")
-            }
-        }.trim()
-        return ToolResult(
-            ok = result.error == null,
-            content = content,
-            summary = if (result.error == null) "Subagent finished" else "Subagent failed: ${result.error}",
-        )
     }
 
     private suspend fun streamRound(

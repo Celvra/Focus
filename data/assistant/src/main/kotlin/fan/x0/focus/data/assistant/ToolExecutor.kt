@@ -42,6 +42,7 @@ data class ToolResult(
     val approval: ApprovalRequest? = null,
     val ask: AskRequest? = null,
     val workingText: String? = null,
+    val silent: Boolean = false,
     val completesOnboarding: Boolean = false,
     val todos: List<ConversationTodo>? = null,
     val plan: ProposedPlan? = null,
@@ -107,11 +108,18 @@ class ToolExecutor(
     private val providers: ToolProviderGroup,
     private val events: AssistantEventSink,
     private val asyncOps: AsyncToolRegistry,
+    private val roles: RoleModels,
+    private val triggers: AgentTriggerStore,
+    private val triggerScheduler: AgentTriggerScheduler,
+    private val webhook: AgentWebhookServer,
+    private val shortcuts: AgentShortcutManager,
 ) {
-    fun allSpecs(): List<ToolSpec> = ToolCatalog.chat() + providers.specs()
+    private val sideChats: SideChatManager by lazy { KoinPlatform.getKoin().get<SideChatManager>() }
 
-    fun specsFor(mode: AgentMode): List<ToolSpec> {
-        val specs = allSpecs()
+    fun allSpecs(main: Boolean = false): List<ToolSpec> = ToolCatalog.chat(main) + providers.specs()
+
+    fun specsFor(mode: AgentMode, main: Boolean = false): List<ToolSpec> {
+        val specs = allSpecs(main)
         return if (mode == AgentMode.Plan) {
             specs.filter { it.kind == ToolKind.Read || it.kind == ToolKind.Ask || it.kind == ToolKind.Plan }
         } else {
@@ -424,6 +432,185 @@ class ToolExecutor(
                 val updated = workspace.read(file)
                 val diff = LineDiff.compute(file.fileName, old, updated)
                 ok("Updated ${file.fileName}", "${file.fileName} updated.", listOfNotNull(diff))
+            }
+            ToolCatalog.START_SIDE_CHAT -> {
+                val conversation = chats.conversation(conversationId)
+                if (conversation?.kind != ConversationKind.Main) {
+                    return fail("Only the main conversation can start side chats.")
+                }
+                val title = args.text("title").orEmpty().trim()
+                val task = args.text("task").orEmpty().trim()
+                if (title.isBlank() || task.isBlank()) return fail("title and task are required")
+                val attachments = chats.messages(conversationId, limit = 10)
+                    .lastOrNull { it.role == ChatRole.User }
+                    ?.attachments
+                    .orEmpty()
+                val started = sideChats.create(
+                    title = title,
+                    task = task,
+                    note = args.text("note").orEmpty(),
+                    attachments = attachments,
+                )
+                ok(
+                    "Side chat started",
+                    "Side chat started: ${started.id} (${started.title}). It reports back when finished.",
+                )
+            }
+            ToolCatalog.LIST_SIDE_CHATS -> {
+                if (chats.conversation(conversationId)?.kind != ConversationKind.Main) {
+                    return fail("Only the main conversation can list side chats.")
+                }
+                val filter = args.text("status").orEmpty().trim().lowercase()
+                val limit = (args.number("limit") ?: 20).coerceIn(1, 50)
+                val items = sideChats.list(limit = 50).filter { item ->
+                    when (filter) {
+                        "", "all" -> true
+                        "active" -> item.status.active
+                        "waiting" -> item.status == TaskStatus.Waiting
+                        "done" -> item.status == TaskStatus.Done
+                        "failed" -> item.status == TaskStatus.Failed || item.status == TaskStatus.Interrupted
+                        else -> item.status.wire == filter
+                    }
+                }.take(limit)
+                if (items.isEmpty()) {
+                    ok("No side chats", "No side chats.")
+                } else {
+                    val text = items.joinToString("\n") { item ->
+                        "- ${item.id} | ${item.status.wire} | ${item.title} | " +
+                            item.latest.replace('\n', ' ').take(160)
+                    }
+                    ok("Side chats", text)
+                }
+            }
+            ToolCatalog.READ_SIDE_CHAT -> {
+                if (chats.conversation(conversationId)?.kind != ConversationKind.Main) {
+                    return fail("Only the main conversation can read side chats.")
+                }
+                val id = args.text("side_chat_id").orEmpty()
+                if (id.isBlank()) return fail("side_chat_id is required")
+                sideChatTranscript(id, (args.number("limit") ?: 20).coerceIn(1, 60))
+            }
+            ToolCatalog.STOP_SIDE_CHAT -> {
+                if (chats.conversation(conversationId)?.kind != ConversationKind.Main) {
+                    return fail("Only the main conversation can stop side chats.")
+                }
+                val id = args.text("side_chat_id").orEmpty()
+                if (id.isBlank()) return fail("side_chat_id is required")
+                sideChats.stop(id, args.text("reason").orEmpty())
+                ok("Stop requested", "Stop requested for $id.")
+            }
+            ToolCatalog.STAY_SILENT -> ToolResult(
+                ok = true,
+                content = "No reply.",
+                summary = "No reply.",
+                silent = true,
+            )
+            ToolCatalog.LIST_ROLE_MODELS -> {
+                val assigned = roles.configsOnce()
+                val config = settings.configOnce()
+                val lines = AgentRole.entries.filter { it.configurable }.map { role ->
+                    val entry = assigned[role]
+                    val provider = entry?.let { item -> config.providers.firstOrNull { it.id == item.providerId } }
+                    val value = if (entry == null || provider == null) {
+                        "follows current model"
+                    } else {
+                        "${provider.name} · ${entry.model}"
+                    }
+                    "- ${role.key}: $value"
+                }
+                ok("Model roles", lines.joinToString("\n"))
+            }
+            ToolCatalog.SET_ROLE_MODEL -> {
+                val role = AgentRole.fromKey(args.text("role"))
+                if (role == null || !role.configurable) {
+                    return fail("Unknown role. Use ${AgentRole.entries.filter { it.configurable }.joinToString { it.key }}.")
+                }
+                val providerId = args.text("provider_id").orEmpty()
+                val model = args.text("model").orEmpty()
+                val config = settings.configOnce()
+                if (config.providers.none { it.id == providerId }) return fail("Unknown provider: $providerId")
+                if (model.isBlank()) return fail("model is required")
+                roles.set(role, providerId, model, args.text("reasoning").orEmpty().ifBlank { ReasoningLevel.Auto.name })
+                ok("Role updated", "${role.key} now uses $providerId · $model.")
+            }
+            ToolCatalog.CLEAR_ROLE_MODEL -> {
+                val role = AgentRole.fromKey(args.text("role"))
+                if (role == null || !role.configurable) return fail("Unknown role.")
+                roles.clear(role)
+                ok("Role cleared", "${role.key} follows the current model again.")
+            }
+            ToolCatalog.LIST_TRIGGERS -> {
+                val items = triggers.list()
+                if (items.isEmpty()) {
+                    ok("No triggers", "No automatic triggers.")
+                } else {
+                    val lines = items.joinToString("\n") { trigger ->
+                        "- ${trigger.id} | ${trigger.kind.wire} | ${trigger.target.wire} | " +
+                            "${trigger.enabled} | ${trigger.name} | ${trigger.schedule.ifBlank { trigger.webhookPath }} | " +
+                            trigger.lastStatus
+                    }
+                    ok("Triggers", lines)
+                }
+            }
+            ToolCatalog.CREATE_CRON_TRIGGER -> {
+                val name = args.text("name").orEmpty().trim()
+                val prompt = args.text("prompt").orEmpty().trim()
+                val schedule = args.text("schedule").orEmpty().trim()
+                if (name.isBlank() || prompt.isBlank() || schedule.isBlank()) {
+                    return fail("name, prompt, and schedule are required")
+                }
+                CronExpression.validate(schedule)?.let { return fail(it) }
+                val target = AgentTriggerTarget.fromWire(args.text("target").orEmpty())
+                val trigger = triggers.create(
+                    name = name,
+                    kind = AgentTriggerKind.Cron,
+                    prompt = prompt,
+                    schedule = schedule,
+                    target = target,
+                )
+                triggerScheduler.sync(trigger)
+                ok("Trigger created", "Cron trigger created: ${trigger.id} (${trigger.schedule}, target ${trigger.target.wire}).")
+            }
+            ToolCatalog.CREATE_WEBHOOK_TRIGGER -> {
+                val name = args.text("name").orEmpty().trim()
+                val prompt = args.text("prompt").orEmpty().trim()
+                if (name.isBlank() || prompt.isBlank()) return fail("name and prompt are required")
+                val target = AgentTriggerTarget.fromWire(args.text("target").orEmpty())
+                val trigger = triggers.create(
+                    name = name,
+                    kind = AgentTriggerKind.Webhook,
+                    prompt = prompt,
+                    schedule = "",
+                    target = target,
+                )
+                ok(
+                    "Webhook created",
+                    "Webhook created: ${webhook.baseUrl()}${trigger.webhookPath} (target ${trigger.target.wire}).",
+                )
+            }
+            ToolCatalog.SET_TRIGGER_ENABLED -> {
+                val id = args.text("trigger_id").orEmpty()
+                if (id.isBlank()) return fail("trigger_id is required")
+                val enabled = args.flag("enabled") ?: return fail("enabled is required")
+                val trigger = triggers.setEnabled(id, enabled) ?: return fail("Trigger not found: $id")
+                if (enabled) triggerScheduler.sync(trigger) else triggerScheduler.cancel(trigger.id)
+                ok("Trigger updated", "${trigger.name} is now ${if (enabled) "enabled" else "disabled"}.")
+            }
+            ToolCatalog.DELETE_TRIGGER -> {
+                val id = args.text("trigger_id").orEmpty()
+                if (id.isBlank()) return fail("trigger_id is required")
+                triggers.delete(id)
+                triggerScheduler.cancel(id)
+                ok("Trigger deleted", "Trigger deleted.")
+            }
+            ToolCatalog.CREATE_DESKTOP_SHORTCUT -> {
+                val target = args.text("target").orEmpty().ifBlank { "overlay" }
+                val label = args.text("label").orEmpty().ifBlank { "Focus" }
+                if (shortcuts.pin(target, label)) {
+                    ok("Shortcut requested", "Confirm the pin in the system dialog.")
+                } else {
+                    fail("This launcher does not allow pinning shortcuts.")
+                }
             }
             ToolCatalog.SET_PROMPT -> {
                 val target = args.text("target").orEmpty().trim().lowercase()
@@ -1570,7 +1757,6 @@ class ToolExecutor(
                 val text = args.text("text") ?: return fail("text is required")
                 ok("IM message sent", bridge.sendText(chatId, text))
             }
-            "spawn_agent" -> fail("The subagent runner is only available from a chat turn")
             else -> fail("Unsupported tool: ${spec.name}")
         }
     } catch (e: CancellationException) {
@@ -1937,6 +2123,25 @@ class ToolExecutor(
         put("note", read.note)
         put("attached", true)
     }.toString()
+
+    private suspend fun sideChatTranscript(conversationId: String, limit: Int): ToolResult {
+        val conversation = chats.conversation(conversationId)
+            ?: return fail("No side chat found for $conversationId")
+        if (conversation.kind != ConversationKind.Side) return fail("$conversationId is not a side chat")
+        val messages = chats.messages(conversationId, limit = limit)
+        if (messages.isEmpty()) return ok("No messages", "No messages.")
+        val lines = messages.mapNotNull { message ->
+            val body = message.content.trim().replace('\n', ' ').take(1_000)
+            val tools = message.toolCalls.joinToString(", ") { it.name }.take(200)
+            when {
+                body.isBlank() && tools.isBlank() -> null
+                tools.isBlank() -> "${message.role.name.lowercase()}: $body"
+                body.isBlank() -> "${message.role.name.lowercase()} tools: $tools"
+                else -> "${message.role.name.lowercase()}: $body [tools: $tools]"
+            }
+        }
+        return ok("Side chat transcript", lines.joinToString("\n").take(12_000))
+    }
 
     private fun ok(summary: String, content: String, diffs: List<FileDiff> = emptyList()): ToolResult =
         ToolResult(ok = true, content = content, summary = summary, diffs = diffs)

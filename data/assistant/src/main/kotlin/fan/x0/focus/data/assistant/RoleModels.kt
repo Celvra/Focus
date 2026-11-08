@@ -17,23 +17,18 @@ enum class AgentRole(
     val key: String,
     val fallbacks: List<AgentRole> = emptyList(),
 ) {
-    Router("router"),
-    WorkerLight("worker_light"),
-    WorkerStandard("worker_standard"),
-    WorkerHeavy("worker_heavy", listOf(WorkerStandard)),
-    Subagent("subagent", listOf(WorkerLight)),
-    Compactor("compactor", listOf(WorkerLight)),
-    Watchdog("watchdog", listOf(WorkerLight)),
-    Judge("judge", listOf(Router)),
-    Title("title", listOf(WorkerLight)),
-    Suggestion("suggestion", listOf(WorkerLight)),
+    Main("main"),
+    Compactor("compactor"),
+    Judge("judge"),
+    Title("title"),
+    Suggestion("suggestion"),
     ;
 
-    val needsTools: Boolean
-        get() = this in setOf(Router, WorkerLight, WorkerStandard, WorkerHeavy, Subagent, Watchdog)
+    val configurable: Boolean get() = this != Main
 
-    val needsVision: Boolean
-        get() = this in setOf(Router, WorkerLight, WorkerStandard, WorkerHeavy, Subagent)
+    val needsTools: Boolean get() = this == Main
+
+    val needsVision: Boolean get() = this == Main
 
     companion object {
         fun fromKey(value: String?): AgentRole? = entries.firstOrNull { it.key == value }

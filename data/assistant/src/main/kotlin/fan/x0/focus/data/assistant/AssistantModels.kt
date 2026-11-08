@@ -98,9 +98,7 @@ data class ChatAttachment(
 }
 
 enum class ConversationKind {
-    Chat,
     Main,
-    Router,
     Side,
     ;
 
@@ -108,7 +106,7 @@ enum class ConversationKind {
 
     companion object {
         fun fromWire(value: String): ConversationKind =
-            entries.firstOrNull { it.wire == value.lowercase() } ?: Chat
+            entries.firstOrNull { it.wire == value.lowercase() } ?: Side
     }
 }
 
@@ -148,20 +146,6 @@ enum class TaskStatus {
     }
 }
 
-enum class WorkerProfile {
-    Light,
-    Standard,
-    Heavy,
-    ;
-
-    val wire: String get() = name.lowercase()
-
-    companion object {
-        fun fromWire(value: String): WorkerProfile =
-            entries.firstOrNull { it.wire == value.lowercase() } ?: Standard
-    }
-}
-
 fun TaskStatus.sideChatRank(): Int = when (this) {
     TaskStatus.Waiting -> 0
     TaskStatus.Running -> 1
@@ -184,11 +168,10 @@ data class Conversation(
     val plan: ProposedPlan? = null,
     val planStatus: PlanStatus = PlanStatus.None,
     val planRequestId: String = "",
-    val kind: ConversationKind = ConversationKind.Chat,
+    val kind: ConversationKind = ConversationKind.Side,
     val parentId: String = "",
     val origin: ConversationOrigin = ConversationOrigin.User,
     val taskStatus: TaskStatus = TaskStatus.None,
-    val workerProfile: WorkerProfile = WorkerProfile.Standard,
     val taskNote: String = "",
     val resultSeen: Boolean = true,
 )

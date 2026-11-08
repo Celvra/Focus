@@ -44,6 +44,7 @@
     </plurals>
     <string name="chat_history">Conversations</string>
     <string name="chat_history_empty">No conversations yet.</string>
+    <string name="chat_promote_main">Make main session</string>
     <string name="chat_new">New chat</string>
     <string name="chat_untitled">Untitled chat</string>
     <string name="chat_current">Current</string>

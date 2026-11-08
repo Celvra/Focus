@@ -28,6 +28,28 @@ data class ToolSpec(
 object ToolCatalog {
     const val SET_WORKING_TEXT = "set_working_text"
     const val SET_PROMPT = "set_prompt"
+    const val START_SIDE_CHAT = "start_side_chat"
+    const val LIST_SIDE_CHATS = "list_side_chats"
+    const val READ_SIDE_CHAT = "read_side_chat"
+    const val STOP_SIDE_CHAT = "stop_side_chat"
+    const val STAY_SILENT = "stay_silent"
+    const val LIST_ROLE_MODELS = "list_role_models"
+    const val SET_ROLE_MODEL = "set_role_model"
+    const val CLEAR_ROLE_MODEL = "clear_role_model"
+    const val LIST_TRIGGERS = "list_triggers"
+    const val CREATE_CRON_TRIGGER = "create_cron_trigger"
+    const val CREATE_WEBHOOK_TRIGGER = "create_webhook_trigger"
+    const val SET_TRIGGER_ENABLED = "set_trigger_enabled"
+    const val DELETE_TRIGGER = "delete_trigger"
+    const val CREATE_DESKTOP_SHORTCUT = "create_desktop_shortcut"
+
+    val dispatchTools: Set<String> = setOf(
+        START_SIDE_CHAT,
+        LIST_SIDE_CHATS,
+        READ_SIDE_CHAT,
+        STOP_SIDE_CHAT,
+        STAY_SILENT,
+    )
 
     val all: List<ToolSpec> = listOf(
         ToolSpec(
@@ -755,6 +777,129 @@ object ToolCatalog {
             },
         ),
         ToolSpec(
+            name = START_SIDE_CHAT,
+            description = "Start a side chat for work that can run in parallel. Pass the user's request mostly as written. " +
+                "The side chat gets the current user message attachments. It reports back when finished.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("title", "task")) {
+                put("title", string("Short title, at most 30 characters"))
+                put("task", string("The user's request. Add only context the side chat cannot discover."))
+                put("note", string("One line the user may see later, optional"))
+            },
+        ),
+        ToolSpec(
+            name = LIST_SIDE_CHATS,
+            description = "List side chats with status, title, and the latest summary.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("status", string("all, active, waiting, done, or failed. Default all"))
+                put("limit", number("Maximum rows, default 20"))
+            },
+        ),
+        ToolSpec(
+            name = READ_SIDE_CHAT,
+            description = "Read a side chat's recent messages and tool trace.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("side_chat_id")) {
+                put("side_chat_id", string("Side chat id"))
+                put("limit", number("Maximum messages, default 20"))
+            },
+        ),
+        ToolSpec(
+            name = STOP_SIDE_CHAT,
+            description = "Stop a running side chat.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("side_chat_id")) {
+                put("side_chat_id", string("Side chat id"))
+                put("reason", string("Short reason, optional"))
+            },
+        ),
+        ToolSpec(
+            name = STAY_SILENT,
+            description = "End this turn without a visible reply when a background result needs no user-facing message.",
+            kind = ToolKind.Read,
+            parameters = schema {},
+        ),
+        ToolSpec(
+            name = LIST_ROLE_MODELS,
+            description = "List the auxiliary model roles and their configured provider and model.",
+            kind = ToolKind.Read,
+            parameters = schema {},
+        ),
+        ToolSpec(
+            name = SET_ROLE_MODEL,
+            description = "Set the model for one auxiliary role. Only use when the user explicitly asks.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("role", "provider_id", "model")) {
+                put("role", string("compactor, judge, title, or suggestion"))
+                put("provider_id", string("Provider id"))
+                put("model", string("Model id"))
+                put("reasoning", string("Reasoning level: off, auto, low, medium, high, xhigh, or max. Default auto"))
+            },
+        ),
+        ToolSpec(
+            name = CLEAR_ROLE_MODEL,
+            description = "Clear one auxiliary role so it follows the current model again.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("role")) {
+                put("role", string("Role key"))
+            },
+        ),
+        ToolSpec(
+            name = LIST_TRIGGERS,
+            description = "List automatic cron and webhook triggers with schedule, target, next run, and URL.",
+            kind = ToolKind.Read,
+            parameters = schema {},
+        ),
+        ToolSpec(
+            name = CREATE_CRON_TRIGGER,
+            description = "Create a recurring cron trigger that runs a task in the main conversation or a side chat.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("name", "prompt", "schedule")) {
+                put("name", string("Short trigger name"))
+                put("prompt", string("Work instruction for each run"))
+                put("schedule", string("Cron: minute hour day month weekday. Six fields add seconds. Supports L, W, and #."))
+                put("target", string("main or side. Default side"))
+            },
+        ),
+        ToolSpec(
+            name = CREATE_WEBHOOK_TRIGGER,
+            description = "Create a webhook trigger and return its URL.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("name", "prompt")) {
+                put("name", string("Short trigger name"))
+                put("prompt", string("Work instruction to apply to the webhook payload"))
+                put("target", string("main or side. Default side"))
+            },
+        ),
+        ToolSpec(
+            name = SET_TRIGGER_ENABLED,
+            description = "Enable or disable one automatic trigger.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("trigger_id", "enabled")) {
+                put("trigger_id", string("Trigger id from list_triggers"))
+                put("enabled", boolean("True to enable, false to disable"))
+            },
+        ),
+        ToolSpec(
+            name = DELETE_TRIGGER,
+            description = "Delete one automatic trigger.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("trigger_id")) {
+                put("trigger_id", string("Trigger id from list_triggers"))
+            },
+        ),
+        ToolSpec(
+            name = CREATE_DESKTOP_SHORTCUT,
+            description = "Ask the launcher to pin a home screen shortcut to the floating assistant or the main session. " +
+                "The user confirms the pin in the system dialog.",
+            kind = ToolKind.Read,
+            parameters = schema {
+                put("target", string("overlay for the floating assistant, main for the main session. Default overlay"))
+                put("label", string("Shortcut label, at most 30 characters"))
+            },
+        ),
+        ToolSpec(
             name = "web_search",
             description = "Search the web with the configured provider. Returns titles, links, and snippets. Use it for current facts and cite the links.",
             kind = ToolKind.Read,
@@ -764,21 +909,6 @@ object ToolCatalog {
                 put("provider", string("deepseek, tavily, tinyfish, exa, bing, duckduckgo, or yandex"))
                 put("language", string("Language hint, optional"))
                 put("time_range", string("day, week, month, or year, optional"))
-            },
-        ),
-        ToolSpec(
-            name = "spawn_agent",
-            description = "Run a self-contained subtask in a separate read-only agent context. It uses the chat provider and model unless a subagent model is set in settings. Use it to inspect a large area without flooding this chat. Returns a summary, files, and steps.",
-            kind = ToolKind.Read,
-            parameters = schema(required = listOf("task")) {
-                put("task", string("Clear task with the expected result"))
-                put("tools", buildJsonObject {
-                    put("type", "array")
-                    put("description", "Optional read-only tool names for the subagent")
-                    putJsonObject("items") { put("type", "string") }
-                })
-                put("model", string("Optional model id override for this run"))
-                put("max_rounds", number("Maximum tool rounds, default 6"))
             },
         ),
         ToolSpec(
@@ -976,7 +1106,9 @@ object ToolCatalog {
 
     fun onboarding(): List<ToolSpec> = all.filter { it.name in onboardingTools }
 
-    fun chat(): List<ToolSpec> = all.filterNot { it.name == "complete_onboarding" }
+    fun chat(main: Boolean = false): List<ToolSpec> = all.filterNot { spec ->
+        spec.name == "complete_onboarding" || (!main && spec.name in dispatchTools)
+    }
 
     fun redactArguments(name: String, arguments: String): String {
         if (name !in secretArgumentTools) return arguments

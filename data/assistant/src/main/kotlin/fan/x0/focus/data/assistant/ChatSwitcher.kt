@@ -13,7 +13,7 @@ sealed interface ChatCommand {
 
 // Lets the drawer ask the single chat screen to switch conversations.
 @Single
-class ChatSwitcher {
+class ChatSwitcher(private val main: MainSessionStore) {
     private val _command = MutableStateFlow<ChatCommand?>(null)
     val command: StateFlow<ChatCommand?> = _command.asStateFlow()
 
@@ -28,7 +28,7 @@ class ChatSwitcher {
 
     fun requestAssist() {
         _assistRequest.value = true
-        open(ChatStore.MAIN_CONVERSATION_ID)
+        open(main.id.value)
     }
 
     fun consumeAssistRequest() {

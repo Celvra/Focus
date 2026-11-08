@@ -561,6 +561,7 @@
     <string name="settings_models_group_router">Routing</string>
     <string name="settings_models_group_workers">Side chats</string>
     <string name="settings_models_group_helpers">Helpers</string>
+    <string name="settings_models_role_main">Main</string>
     <string name="settings_models_role_router">Router</string>
     <string name="settings_models_role_worker_light">Light worker</string>
     <string name="settings_models_role_worker_standard">Standard worker</string>
@@ -659,6 +660,9 @@
     <string name="settings_super_trigger_cancel">Cancel</string>
     <string name="settings_super_trigger_save">Save</string>
     <string name="settings_super_trigger_deleted">Trigger deleted</string>
+    <string name="settings_super_trigger_target">Target</string>
+    <string name="settings_super_target_main">Main session</string>
+    <string name="settings_super_target_side">Side chat</string>
     <string name="settings_super_profile_light">Light</string>
     <string name="settings_super_profile_standard">Standard</string>
     <string name="settings_super_profile_heavy">Heavy</string>

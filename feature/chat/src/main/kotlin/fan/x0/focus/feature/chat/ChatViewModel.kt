@@ -5,7 +5,6 @@ import fan.x0.focus.core.error.AppError
 import fan.x0.focus.core.error.AppErrorType
 import fan.x0.focus.core.mvi.BaseViewModel
 import fan.x0.focus.data.assistant.AgentMode
-import fan.x0.focus.data.assistant.AgentRole
 import fan.x0.focus.data.assistant.AskAnswer
 import fan.x0.focus.data.assistant.AskKind
 import fan.x0.focus.data.assistant.AttachmentKind
@@ -36,15 +35,12 @@ import fan.x0.focus.data.assistant.ConversationTodo
 import fan.x0.focus.data.assistant.FileMentionBinding
 import fan.x0.focus.data.assistant.FileMentionEntry
 import fan.x0.focus.data.assistant.FileMentionService
-import fan.x0.focus.data.assistant.MainChannelSession
 import fan.x0.focus.data.assistant.MessageStats
 import fan.x0.focus.data.assistant.MentionItemUi
 import fan.x0.focus.data.assistant.MentionKind
 import fan.x0.focus.data.assistant.MentionText
 import fan.x0.focus.data.assistant.MentionUi
 import fan.x0.focus.data.assistant.modelOptions
-import fan.x0.focus.data.assistant.ModelResolver
-import fan.x0.focus.data.assistant.SideResultCard
 import fan.x0.focus.data.assistant.SideChatManager
 import fan.x0.focus.data.assistant.TaskStatus
 import fan.x0.focus.data.assistant.WORKSPACE_BIND_PREFIX
@@ -54,20 +50,14 @@ import fan.x0.focus.data.assistant.PolicySettings
 import fan.x0.focus.data.assistant.ProposedPlan
 import fan.x0.focus.data.assistant.ProviderModelCatalog
 import fan.x0.focus.data.assistant.ReasoningLevel
-import fan.x0.focus.data.assistant.RoleModels
-import fan.x0.focus.data.assistant.RouterSession
 import fan.x0.focus.data.assistant.SkillEntry
 import fan.x0.focus.data.assistant.SkillRepository
-import fan.x0.focus.data.assistant.SubAgentRunState
-import fan.x0.focus.data.assistant.SubAgentRunStatus
-import fan.x0.focus.data.assistant.SubAgentRunStore
 import fan.x0.focus.data.assistant.TodoPriority
 import fan.x0.focus.data.assistant.TodoStatus
 import fan.x0.focus.data.assistant.ToolCatalog
 import fan.x0.focus.data.assistant.ToolLabels
 import fan.x0.focus.data.assistant.ToolPayload
 import fan.x0.focus.data.assistant.TurnOptions
-import fan.x0.focus.data.assistant.WorkerProfile
 import fan.x0.focus.data.assistant.WorkspaceStore
 import fan.x0.focus.data.im.ImChatKind
 import fan.x0.focus.data.im.ImChatStore
@@ -105,15 +95,10 @@ class ChatViewModel(
     private val details: ChatDetailSettings,
     private val policy: PolicySettings,
     private val btw: BtwRunner,
-    private val subAgents: SubAgentRunStore,
     private val skills: SkillRepository,
     private val fileMentions: FileMentionService,
     private val imChats: ImChatStore,
-    private val mainChannel: MainChannelSession,
     private val sideChats: SideChatManager,
-    private val router: RouterSession,
-    private val models: ModelResolver,
-    private val roles: RoleModels,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
@@ -146,9 +131,6 @@ class ChatViewModel(
     private var awaitingUserTurn = false
     private var lastSend: PendingSend? = null
     private var redoEntry: PendingSend? = null
-    private var mainSubmitting = false
-    private var mainWasWorking = false
-    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
     init {
         ensureMentionSkills()
@@ -207,16 +189,6 @@ class ChatViewModel(
             }
         }
         viewModelScope.launch {
-            subAgents.runs.collect { runs ->
-                updateState {
-                    copy(
-                        subAgentRuns = runs.mapValues { it.value.toUi() },
-                        subAgentOpenId = subAgentOpenId?.takeIf { it in runs },
-                    )
-                }
-            }
-        }
-        viewModelScope.launch {
             settings.config.collect { config ->
                 updateState {
                     if (loading) return@updateState this
@@ -248,43 +220,12 @@ class ChatViewModel(
             }
         }
         viewModelScope.launch {
-            mainChannel.state.collect { channel ->
-                val isMain = currentState.isMain
+            sideChats.counts.collect { counts ->
                 updateState {
                     copy(
-                        routerModel = channel.routerModel,
-                        sideActiveCount = channel.activeSideChats,
-                        sideUnreadCount = channel.unreadResults,
+                        sideActiveCount = counts.active,
+                        sideUnreadCount = counts.unread,
                     )
-                }
-                if (!isMain || currentState.loading) return@collect
-                if (channel.reasoning.isNotBlank() || channel.reasoningMs > 0) {
-                    updateMainReasoning(channel.reasoning, channel.reasoningMs)
-                }
-                if (channel.streaming.isNotBlank() && currentState.conversationId == ChatStore.MAIN_CONVERSATION_ID) {
-                    updateDisplayTarget(currentState.conversationId, 0L, channel.streaming)
-                    updateState { copy(sending = true) }
-                }
-                when {
-                    channel.working -> {
-                        mainSubmitting = false
-                        mainWasWorking = true
-                        updateState {
-                            copy(
-                                sending = true,
-                                workingText = channel.workingText.ifBlank { workingText },
-                            )
-                        }
-                    }
-                    mainWasWorking -> {
-                        mainWasWorking = false
-                        mainSubmitting = false
-                        updateState { copy(sending = false, workingText = "") }
-                        reload()
-                    }
-                    !mainSubmitting -> updateState {
-                        if (sending) copy(sending = false, workingText = "") else this
-                    }
                 }
             }
         }
@@ -314,14 +255,11 @@ class ChatViewModel(
             ChatAction.RetryBtw -> retryBtw()
             is ChatAction.OpenPicker -> {
                 updateState { copy(picker = action.picker, modelQuery = "") }
-                if ((action.picker == ComposerPicker.Model || action.picker == ComposerPicker.RouterModel) &&
-                    !currentState.modelsLoaded
-                ) {
+                if (action.picker == ComposerPicker.Model && !currentState.modelsLoaded) {
                     loadModels()
                 }
             }
             is ChatAction.SelectModel -> selectModel(action.providerId, action.model)
-            is ChatAction.SelectRouterModel -> selectRouterModel(action.providerId, action.model)
             is ChatAction.ModelQueryChanged -> updateState { copy(modelQuery = action.value) }
             ChatAction.RefreshModels -> loadModels(force = true)
             is ChatAction.SelectReasoning -> selectReasoning(action.level)
@@ -365,8 +303,7 @@ class ChatViewModel(
             ChatAction.RetryLast -> retryLast()
             ChatAction.OpenSessions -> sendEffect(ChatEffect.OpenSessions)
             ChatAction.OpenSettings -> sendEffect(ChatEffect.OpenSettings)
-            is ChatAction.OpenSubAgent -> updateState { copy(subAgentOpenId = action.id) }
-            ChatAction.CloseSubAgent -> updateState { copy(subAgentOpenId = null) }
+            ChatAction.PromoteToMain -> promoteToMain()
             ChatAction.ConsumeMessage -> updateState { copy(message = null) }
             ChatAction.OpenSidePanel -> openSidePanel()
             ChatAction.CloseSidePanel -> updateState { copy(sidePanel = sidePanel.copy(open = false)) }
@@ -769,6 +706,7 @@ class ChatViewModel(
             agentMode = state.mode,
             replyToId = replyToId,
             mentionedSkills = mentionedSkills,
+            autoTitle = !state.isMain,
         )
         lastSend = PendingSend(text, attachments, replyToId, mentionedSkills)
         redoEntry = null
@@ -808,23 +746,7 @@ class ChatViewModel(
                 ),
             )
         }
-        localTurnId = if (state.isMain) {
-            mainSubmitting = true
-            viewModelScope.launch {
-                val delivered = mainChannel.submit(
-                    text = text,
-                    attachments = attachments.map { it.toModel() },
-                    replyToId = replyToId,
-                )
-                if (delivered == null) {
-                    mainSubmitting = false
-                    updateState { copy(sending = false, workingText = "") }
-                }
-            }
-            0L
-        } else {
-            turns.start(conversationId, text, options)?.turnId ?: 0L
-        }
+        localTurnId = turns.start(conversationId, text, options)?.turnId ?: 0L
         startStatsTicker()
     }
 
@@ -857,14 +779,10 @@ class ChatViewModel(
             SlashCommandId.Resume -> resume(argument)
             SlashCommandId.Sessions -> sendEffect(ChatEffect.OpenSessions)
             SlashCommandId.Models -> {
-                if (currentState.isMain) {
-                    onAction(ChatAction.OpenPicker(ComposerPicker.RouterModel))
-                } else {
-                    if (argument.isNotBlank()) {
-                        updateState { copy(modelQuery = argument) }
-                    }
-                    onAction(ChatAction.OpenPicker(ComposerPicker.Model))
+                if (argument.isNotBlank()) {
+                    updateState { copy(modelQuery = argument) }
                 }
+                onAction(ChatAction.OpenPicker(ComposerPicker.Model))
             }
             SlashCommandId.Effort -> {
                 val level = ReasoningLevel.entries.firstOrNull {
@@ -884,16 +802,10 @@ class ChatViewModel(
             return
         }
         viewModelScope.launch {
-            val threadKey = currentState.history
-                .lastOrNull { it is ChatEntry.User }
-                ?.messageId
-                ?.let { "main:$it" }
-                .orEmpty()
             val conversation = sideChats.create(
                 title = text.take(24),
                 task = text,
-                profile = WorkerProfile.Standard,
-                threadKey = threadKey,
+                parentId = currentState.conversationId,
             )
             switchTo(conversation.id)
         }
@@ -1318,46 +1230,7 @@ class ChatViewModel(
         updateState { copy(providerId = providerId, model = model, picker = null) }
     }
 
-    private fun selectRouterModel(providerId: String, model: String) {
-        launchGuarded(onError = {}) {
-            roles.set(AgentRole.Router, providerId, model, currentState.routerReasoning.name)
-            val config = settings.configOnce()
-            val provider = config.providers.firstOrNull { it.id == providerId }
-            val label = provider?.modelOptions
-                ?.firstOrNull { it.id == model }
-                ?.name
-                ?.ifBlank { model }
-                ?: model
-            mainChannel.setRouterModel(label)
-            updateState {
-                copy(
-                    picker = null,
-                    routerProviderId = providerId,
-                    routerModelId = model,
-                    routerModel = label,
-                )
-            }
-        }
-    }
-
     private fun selectReasoning(level: ReasoningLevel) {
-        if (currentState.isMain) {
-            launchGuarded(onError = {}) {
-                val config = settings.configOnce()
-                val assigned = roles.configsOnce()[AgentRole.Router]
-                val providerId = currentState.routerProviderId
-                    .ifBlank { assigned?.providerId.orEmpty() }
-                    .ifBlank { config.activeProviderId }
-                val model = currentState.routerModelId
-                    .ifBlank { assigned?.model.orEmpty() }
-                    .ifBlank { config.activeProvider?.model.orEmpty() }
-                if (providerId.isNotBlank() && model.isNotBlank()) {
-                    roles.set(AgentRole.Router, providerId, model, level.name)
-                }
-                updateState { copy(routerReasoning = level) }
-            }
-            return
-        }
         persistTurnSettings(reasoning = level.name)
         updateState { copy(reasoningLevel = level) }
     }
@@ -1410,17 +1283,25 @@ class ChatViewModel(
     private fun stop() {
         val conversationId = currentState.conversationId
         if (conversationId.isBlank()) return
-        if (currentState.isMain) {
-            router.stopCurrent()
-            updateState { copy(sending = false, workingText = "") }
-            return
-        }
         if (currentState.isSide) {
             viewModelScope.launch { sideChats.stop(conversationId) }
             updateState { copy(sending = false, workingText = "") }
             return
         }
         turns.stop(conversationId)
+        updateState { copy(sending = false, workingText = "") }
+    }
+
+    private fun promoteToMain() {
+        val id = currentState.conversationId
+        if (id.isBlank() || currentState.isMain) return
+        viewModelScope.launch {
+            if (chats.promoteToMain(id)) {
+                updateState { copy(kind = ConversationKind.Main) }
+                refreshSidePanel()
+                reload()
+            }
+        }
     }
 
     private fun openSidePanel() {
@@ -1436,7 +1317,6 @@ class ChatViewModel(
                     id = item.id,
                     title = item.title,
                     status = item.status,
-                    profile = item.profile,
                     summary = item.latest,
                     updatedAt = item.updatedAt,
                     unseen = !item.resultSeen,
@@ -1470,7 +1350,7 @@ class ChatViewModel(
 
     private fun backToMain() {
         viewModelScope.launch {
-            switchTo(ChatStore.MAIN_CONVERSATION_ID)
+            switchTo(chats.ensureMainConversation().id)
         }
     }
 
@@ -1493,10 +1373,8 @@ class ChatViewModel(
         val provider = config.providers.firstOrNull { it.id == providerId } ?: config.activeProvider
         val model = conversation?.model?.ifBlank { null } ?: provider?.model.orEmpty()
         val todos = chats.todos(id)
-        val entries = messages.toEntries(compaction, main = conversation?.kind == ConversationKind.Main) +
+        val entries = messages.toEntries(compaction) +
             listOfNotNull(planEntry(conversation))
-        val routerLabel = routerLabel()
-        val routerConfig = roles.configsOnce()[AgentRole.Router]
         if (currentState.conversationId != id || generation != loadGeneration) return
         if (turns.isRunning(id)) return
         resetDisplay(id)
@@ -1505,22 +1383,13 @@ class ChatViewModel(
             copy(
                 history = entries,
                 live = emptyList(),
-                sending = conversation?.kind == ConversationKind.Main && mainChannel.state.value.working,
+                sending = false,
                 compacting = false,
-                workingText = if (conversation?.kind == ConversationKind.Main) {
-                    mainChannel.state.value.workingText
-                } else {
-                    ""
-                },
-                kind = conversation?.kind ?: ConversationKind.Chat,
+                workingText = "",
+                kind = conversation?.kind ?: ConversationKind.Side,
                 taskStatus = conversation?.taskStatus ?: TaskStatus.None,
-                workerProfile = conversation?.workerProfile ?: WorkerProfile.Standard,
-                routerModel = routerLabel.ifBlank { mainChannel.state.value.routerModel },
-                routerProviderId = routerConfig?.providerId.orEmpty(),
-                routerModelId = routerConfig?.model.orEmpty(),
-                routerReasoning = ReasoningLevel.fromName(routerConfig?.reasoning),
-                sideActiveCount = mainChannel.state.value.activeSideChats,
-                sideUnreadCount = mainChannel.state.value.unreadResults,
+                sideActiveCount = sideChats.counts.value.active,
+                sideUnreadCount = sideChats.counts.value.unread,
                 providers = config.providers.map { ProviderOption(it.id, it.name, it.model, it.icon, it.models) },
                 providerId = providerId,
                 model = model,
@@ -1565,14 +1434,8 @@ class ChatViewModel(
             ?: ReasoningLevel.Auto
         val todos = chats.todos(conversationId)
         val source = imChats.bindingForConversation(conversationId)
-        val routerLabel = routerLabel()
-        val routerConfig = roles.configsOnce()[AgentRole.Router]
         if (conversation?.kind == ConversationKind.Side) {
             sideChats.markSeen(conversationId)
-        }
-        if (conversation?.kind == ConversationKind.Main) {
-            mainWasWorking = mainChannel.state.value.working
-            mainSubmitting = false
         }
         if (generation != loadGeneration) return
         val runningTurn = turns.state(conversationId)
@@ -1585,34 +1448,25 @@ class ChatViewModel(
             messages
         }
         if (runningTurn.running) localTurnId = 0
-        val entries = visibleMessages.toEntries(compaction, main = conversation?.kind == ConversationKind.Main) +
+        val entries = visibleMessages.toEntries(compaction) +
             listOfNotNull(planEntry(conversation))
         updateState {
             copy(
                 loading = false,
                 conversationId = conversationId,
                 title = conversation?.title.orEmpty(),
-                kind = conversation?.kind ?: ConversationKind.Chat,
+                kind = conversation?.kind ?: ConversationKind.Side,
                 taskStatus = conversation?.taskStatus ?: TaskStatus.None,
-                workerProfile = conversation?.workerProfile ?: WorkerProfile.Standard,
-                routerModel = routerLabel.ifBlank { mainChannel.state.value.routerModel },
-                routerProviderId = routerConfig?.providerId.orEmpty(),
-                routerModelId = routerConfig?.model.orEmpty(),
-                routerReasoning = ReasoningLevel.fromName(routerConfig?.reasoning),
-                sideActiveCount = mainChannel.state.value.activeSideChats,
-                sideUnreadCount = mainChannel.state.value.unreadResults,
+                sideActiveCount = sideChats.counts.value.active,
+                sideUnreadCount = sideChats.counts.value.unread,
                 name = name,
                 assistantName = assistantName,
                 history = entries,
                 live = emptyList(),
                 suggestions = emptyList(),
-                sending = conversation?.kind == ConversationKind.Main && mainChannel.state.value.working,
+                sending = false,
                 compacting = false,
-                workingText = if (conversation?.kind == ConversationKind.Main) {
-                    mainChannel.state.value.workingText
-                } else {
-                    ""
-                },
+                workingText = "",
                 input = "",
                 turn = 0,
                 attachments = emptyList(),
@@ -1635,7 +1489,6 @@ class ChatViewModel(
                 slash = SlashUi(open = false),
                 mention = MentionUi(),
                 btw = BtwUi(),
-                subAgentOpenId = null,
                 highlightKey = null,
                 selectionKey = null,
                 plan = conversation?.plan,
@@ -1650,13 +1503,6 @@ class ChatViewModel(
             )
         }
         switcher.markLoaded(conversationId)
-        if (conversation?.kind == ConversationKind.Main) {
-            val streaming = mainChannel.state.value.streaming
-            if (streaming.isNotBlank()) {
-                updateDisplayTarget(conversationId, 0L, streaming)
-                updateState { copy(sending = true) }
-            }
-        }
         applyTurn(turns.state(conversationId))
         turns.result(conversationId)?.let { handleResult(it) }
         if (messages.isEmpty() && !turns.isRunning(conversationId)) {
@@ -1700,19 +1546,8 @@ class ChatViewModel(
             openSidePanel()
             return
         }
-        if (currentState.isSide) {
-            val conversation = sideChats.createEmpty()
-            switchTo(conversation.id)
-            return
-        }
-        loadGeneration++
-        loadJob?.cancel()
-        if (currentState.history.isEmpty() && currentState.conversationId.isNotBlank()) {
-            load(currentState.conversationId)
-            return
-        }
-        val conversation = chats.createConversation("", currentState.mode)
-        load(conversation.id)
+        val conversation = sideChats.createEmpty()
+        switchTo(conversation.id)
     }
 
     private suspend fun ask(text: String) {
@@ -1888,40 +1723,6 @@ class ChatViewModel(
         }
     }
 
-    private fun updateMainReasoning(reasoning: String, reasoningMs: Long) {
-        updateState {
-            val index = live.indexOfLast { it is ChatEntry.Assistant }
-            if (index >= 0) {
-                val entry = live[index] as ChatEntry.Assistant
-                val startedAt = when {
-                    reasoningMs > 0 -> 0L
-                    entry.reasoningStartedAt > 0 -> entry.reasoningStartedAt
-                    else -> System.currentTimeMillis()
-                }
-                copy(
-                    live = live.toMutableList().also {
-                        it[index] = entry.copy(
-                            reasoning = reasoning,
-                            reasoningMs = reasoningMs,
-                            reasoningStartedAt = startedAt,
-                        )
-                    },
-                )
-            } else {
-                copy(
-                    live = live + ChatEntry.Assistant(
-                        key = "live-answer-final-0",
-                        text = "",
-                        live = true,
-                        reasoning = reasoning,
-                        reasoningMs = reasoningMs,
-                        reasoningStartedAt = if (reasoningMs > 0) 0L else System.currentTimeMillis(),
-                    ),
-                )
-            }
-        }
-    }
-
     private fun showDisplayText() {
         if (displayConversationId != currentState.conversationId) return
         val shown = displayTarget.take(displayText.length)
@@ -1953,15 +1754,6 @@ class ChatViewModel(
         if (shown == entry.text) return this
         return toMutableList().also { it[index] = entry.copy(text = shown) }
     }
-
-    private suspend fun routerLabel(): String =
-        models.resolve(AgentRole.Router)?.let { resolved ->
-            resolved.provider.modelOptions
-                .firstOrNull { it.id == resolved.model }
-                ?.name
-                ?.ifBlank { resolved.model }
-                ?: resolved.model
-        }.orEmpty()
 
     private suspend fun refreshTitle() {
         val id = currentState.conversationId
@@ -2030,20 +1822,6 @@ class ChatViewModel(
         )
     }
 
-    private fun SubAgentRunState.toUi(): SubAgentRunUi = SubAgentRunUi(
-        id = id,
-        task = task,
-        providerName = providerName,
-        model = model,
-        running = status == SubAgentRunStatus.Running,
-        failed = status == SubAgentRunStatus.Failed,
-        summary = summary,
-        error = error,
-        entries = entries.mapIndexed { index, entry ->
-            entry.toUi("subagent-$id", index)
-        },
-    )
-
     private fun ChatTurnStep.toUi(): TraceStep = TraceStep(
         label = label,
         status = when (status) {
@@ -2078,7 +1856,6 @@ class ChatViewModel(
 
     private suspend fun List<ChatMessage>.toEntries(
         compaction: ConversationCompaction?,
-        main: Boolean = currentState.isMain,
     ): List<ChatEntry> {
         val quotes = chats.messagesByIds(mapNotNull { it.replyToId }.toSet())
         val argumentsByCall = flatMap { it.toolCalls }.associate { it.id to it.arguments }
@@ -2137,7 +1914,7 @@ class ChatViewModel(
                     }
                 }
                 ChatRole.Tool -> {
-                    if (!main && message.name != ToolCatalog.SET_WORKING_TEXT) {
+                    if (message.name != ToolCatalog.SET_WORKING_TEXT && message.name != ToolCatalog.STAY_SILENT) {
                         entries += ChatEntry.Trace(
                             key = "m${message.id}",
                             steps = message.toSteps(argumentsByCall[message.toolCallId.orEmpty()].orEmpty()),
@@ -2151,23 +1928,6 @@ class ChatViewModel(
                             message = message.content,
                             retryable = true,
                         )
-                        message.label == MainChannelSession.SIDE_RESULT_LABEL -> {
-                            val card = runCatching {
-                                json.decodeFromString(SideResultCard.serializer(), message.content)
-                            }.getOrNull()
-                            if (card != null) {
-                                entries += ChatEntry.SideResult(
-                                    key = "m${message.id}",
-                                    card = SideResultUi(
-                                        sideChatId = card.sideChatId,
-                                        title = card.title,
-                                        summary = card.summary,
-                                        failed = card.failed,
-                                        attachments = card.attachments.map { it.toUi() },
-                                    ),
-                                )
-                            }
-                        }
                         else -> entries += ChatEntry.Notice(
                             key = "m${message.id}",
                             text = message.content,

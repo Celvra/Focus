@@ -283,7 +283,6 @@ fun ChatScreen(
                         state.sending -> state.workingText.ifBlank {
                             stringResource(R.string.chat_working)
                         }
-                        state.isMain && state.routerModel.isNotBlank() -> state.routerModel
                         state.imSource != null -> stringResource(
                             R.string.chat_im_source,
                             state.imSource.accountName,
@@ -340,6 +339,13 @@ fun ChatScreen(
                                 }
                             }
                         } else {
+                            IconButton(onClick = hapticTap { onAction(ChatAction.PromoteToMain) }) {
+                                Icon(
+                                    FocusIcons.Assistant,
+                                    contentDescription = stringResource(R.string.chat_promote_main),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             IconButton(onClick = hapticTap { onAction(ChatAction.NewConversation) }) {
                                 Icon(
                                     FocusIcons.Add,
@@ -474,12 +480,6 @@ fun ChatScreen(
                 btw = state.btw,
                 onClose = { onAction(ChatAction.CloseBtw) },
                 onRetry = { onAction(ChatAction.RetryBtw) },
-            )
-        }
-        state.subAgent?.let { run ->
-            SubAgentSheet(
-                run = run,
-                onClose = { onAction(ChatAction.CloseSubAgent) },
             )
         }
         SideChatSheet(
@@ -765,7 +765,6 @@ private fun ChatThread(
                         is ChatEntry.Failure -> "failure"
                         is ChatEntry.Notice -> "notice"
                         is ChatEntry.Compaction -> "compaction"
-                        is ChatEntry.SideResult -> "side_result"
                     }
                 },
             ) { entry ->
@@ -818,7 +817,7 @@ private fun ChatThread(
                         }
                         is ChatEntry.Trace -> FocusTraceCard(
                             steps = entry.steps.map { it.toFocusStep() },
-                            onOpen = { onAction(ChatAction.OpenSubAgent(it)) },
+                            onOpen = {},
                         )
                         is ChatEntry.Activity -> FocusActivity(
                             reasoning = entry.reasoning,
@@ -826,7 +825,7 @@ private fun ChatThread(
                             reasoningMs = entry.reasoningMs,
                             reasoningStartedAt = entry.reasoningStartedAt,
                             steps = entry.steps.map { it.toFocusStep() },
-                            onOpen = { onAction(ChatAction.OpenSubAgent(it)) },
+                            onOpen = {},
                             live = entry.live,
                         )
                         is ChatEntry.Approval -> FocusApprovalCard(
@@ -865,11 +864,6 @@ private fun ChatThread(
                             streaming = entry.streaming,
                             tokensBefore = entry.tokensBefore,
                             tokensAfter = entry.tokensAfter,
-                        )
-                        is ChatEntry.SideResult -> ChatSideResultCard(
-                            card = entry.card,
-                            onOpen = { onAction(ChatAction.OpenSideChat(entry.card.sideChatId)) },
-                            onRetry = { onAction(ChatAction.RetrySideChat(entry.card.sideChatId)) },
                         )
                     }
                 }
@@ -949,7 +943,7 @@ private fun TraceStep.toFocusStep(): FocusTraceStep = FocusTraceStep(
     tool = tool,
     input = arguments,
     output = output.orEmpty(),
-    openKey = if (tool == "spawn_agent" && id.isNotBlank()) id else null,
+    openKey = null,
     durationMs = durationMs,
     startedAt = startedAt,
     diffs = diffs.map { it.toFocusDiff() },

@@ -3,8 +3,6 @@ package fan.x0.focus.data.device
 import android.content.Context
 import fan.x0.focus.data.assistant.AgentEvent
 import fan.x0.focus.data.assistant.AgentEventBus
-import fan.x0.focus.data.assistant.AssistantTriggerBus
-import fan.x0.focus.data.assistant.AssistantTriggerEvent
 import fan.x0.focus.data.device.system.DeviceTriggerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +21,6 @@ class DeviceTriggerManager(
     private val store: DeviceStore,
     private val shell: DeviceShell,
     private val notifier: DeviceNotifier,
-    private val triggerBus: AssistantTriggerBus,
     private val agentEvents: AgentEventBus,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -71,22 +68,13 @@ class DeviceTriggerManager(
                                     "notification",
                                 )
                                 "chat" -> {
-                                    if (trigger.conversationId.isNotBlank()) {
-                                        triggerBus.emit(
-                                            AssistantTriggerEvent(
-                                                conversationId = trigger.conversationId,
-                                                label = trigger.name,
-                                                prompt = trigger.command,
-                                            ),
-                                        )
-                                        agentEvents.publish(
-                                            AgentEvent.deviceTrigger(
-                                                label = trigger.name,
-                                                prompt = trigger.command,
-                                                conversationId = trigger.conversationId,
-                                            ),
-                                        )
-                                    }
+                                    agentEvents.publish(
+                                        AgentEvent.deviceTrigger(
+                                            label = trigger.name,
+                                            prompt = trigger.command,
+                                            conversationId = trigger.conversationId,
+                                        ),
+                                    )
                                     notifier.showTrigger(trigger.name, trigger.command, true, "sent to chat")
                                 }
                                 else -> {

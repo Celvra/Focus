@@ -93,8 +93,6 @@ class SettingsViewModel(
                     judgeContextWindow = policyConfig.contextWindow,
                     judgeMaxRisk = policyConfig.maxRisk,
                     judgeTimeoutSeconds = policyConfig.timeoutSeconds,
-                    subagentProviderId = agentConfig.subagentProviderId,
-                    subagentModel = agentConfig.subagentModel,
                     maxRounds = agentConfig.maxRounds,
                     unlimitedRounds = agentConfig.unlimited,
                     maxRetries = agentConfig.retry.maxRetries,
@@ -269,7 +267,6 @@ class SettingsViewModel(
             is SettingsAction.SelectModel -> {
                 when (currentState.modelPickerTarget) {
                     ModelPickerTarget.Judge -> setJudgeSelection(action.providerId, action.id)
-                    ModelPickerTarget.Subagent -> setSubagentSelection(action.providerId, action.id)
                     ModelPickerTarget.Active -> Unit
                 }
             }
@@ -281,8 +278,6 @@ class SettingsViewModel(
             is SettingsAction.JudgeContextChanged -> setJudgeContext(action.value)
             is SettingsAction.JudgeMaxRiskChanged -> setJudgeMaxRisk(action.value)
             is SettingsAction.JudgeTimeoutChanged -> setJudgeTimeout(action.value)
-            SettingsAction.OpenSubagentModelPicker -> openSubagentModelPicker()
-            SettingsAction.RefreshSubagentModels -> openSubagentModelPicker()
             is SettingsAction.MaxRoundsChanged -> setMaxRounds(action.value)
             is SettingsAction.MaxRetriesChanged -> setMaxRetries(action.value)
             is SettingsAction.UnlimitedRoundsChanged -> setUnlimitedRounds(action.value)
@@ -328,22 +323,6 @@ class SettingsViewModel(
     private fun setJudgeTimeout(value: Int) {
         updateState { copy(judgeTimeoutSeconds = value) }
         viewModelScope.launch { policy.setTimeoutSeconds(value) }
-    }
-
-    private fun setSubagentSelection(providerId: String, model: String) {
-        updateState {
-            copy(
-                modelPickerOpen = false,
-                modelQuery = "",
-                subagentProviderId = providerId,
-                subagentModel = model,
-            )
-        }
-        viewModelScope.launch { agent.setSubagentProvider(providerId, model) }
-    }
-
-    private fun openSubagentModelPicker() {
-        openModelPicker(ModelPickerTarget.Subagent)
     }
 
     private fun setMaxRounds(value: Int) {

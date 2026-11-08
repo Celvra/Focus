@@ -63,8 +63,17 @@ class ShellViewModel(
     fun archiveConversation(id: String) {
         viewModelScope.launch {
             chats.archive(id)
-            if (switcher.current.value == id) switcher.open(ChatStore.MAIN_CONVERSATION_ID)
+            if (switcher.current.value == id) switcher.open(chats.ensureMainConversation().id)
             load()
+        }
+    }
+
+    fun promoteConversation(id: String) {
+        viewModelScope.launch {
+            if (chats.promoteToMain(id)) {
+                switcher.open(id)
+                load()
+            }
         }
     }
 
@@ -88,7 +97,9 @@ class ShellViewModel(
     }
 
     fun openMain() {
-        switcher.open(ChatStore.MAIN_CONVERSATION_ID)
+        viewModelScope.launch {
+            switcher.open(chats.ensureMainConversation().id)
+        }
     }
 
     private suspend fun load() {

@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 21) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 22) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -373,6 +373,7 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                 schedule TEXT NOT NULL DEFAULT '',
                 timezone TEXT NOT NULL DEFAULT '',
                 profile TEXT NOT NULL DEFAULT 'standard',
+                target TEXT NOT NULL DEFAULT 'side',
                 enabled INTEGER NOT NULL DEFAULT 1,
                 webhook_token TEXT NOT NULL DEFAULT '',
                 next_run INTEGER NOT NULL DEFAULT 0,
@@ -763,6 +764,7 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
                     schedule TEXT NOT NULL DEFAULT '',
                     timezone TEXT NOT NULL DEFAULT '',
                     profile TEXT NOT NULL DEFAULT 'standard',
+                    target TEXT NOT NULL DEFAULT 'side',
                     enabled INTEGER NOT NULL DEFAULT 1,
                     webhook_token TEXT NOT NULL DEFAULT '',
                     next_run INTEGER NOT NULL DEFAULT 0,
@@ -776,6 +778,18 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             db.execSQL(
                 "CREATE INDEX IF NOT EXISTS idx_agent_triggers_due ON agent_triggers(enabled, next_run)",
             )
+        }
+        if (oldVersion < 22) {
+            db.execSQL("ALTER TABLE agent_triggers ADD COLUMN target TEXT NOT NULL DEFAULT 'side'")
+            db.execSQL("UPDATE conversations SET kind = 'side' WHERE kind = 'chat'")
+            db.execSQL("DELETE FROM messages WHERE conversation_id = 'router'")
+            db.execSQL("DELETE FROM conversation_todos WHERE conversation_id = 'router'")
+            db.execSQL("DELETE FROM turn_journal WHERE conversation_id = 'router'")
+            db.execSQL("DELETE FROM conversations WHERE id = 'router' OR kind = 'router'")
+            db.execSQL("DELETE FROM agent_events")
+            db.execSQL("DROP TABLE IF EXISTS thread_subscriptions")
+            db.execSQL("UPDATE conversations SET kind = 'side' WHERE kind NOT IN ('main', 'side')")
+            db.execSQL("UPDATE conversations SET kind = 'main' WHERE id = 'main'")
         }
     }
 

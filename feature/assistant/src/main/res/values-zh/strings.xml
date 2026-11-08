@@ -561,6 +561,7 @@
     <string name="settings_models_group_router">调度</string>
     <string name="settings_models_group_workers">旁聊</string>
     <string name="settings_models_group_helpers">辅助</string>
+    <string name="settings_models_role_main">主会话</string>
     <string name="settings_models_role_router">Router</string>
     <string name="settings_models_role_worker_light">轻档旁聊</string>
     <string name="settings_models_role_worker_standard">标准旁聊</string>
@@ -659,6 +660,9 @@
     <string name="settings_super_trigger_cancel">取消</string>
     <string name="settings_super_trigger_save">保存</string>
     <string name="settings_super_trigger_deleted">触发器已删除</string>
+    <string name="settings_super_trigger_target">目标</string>
+    <string name="settings_super_target_main">主会话</string>
+    <string name="settings_super_target_side">旁聊</string>
     <string name="settings_super_profile_light">轻档</string>
     <string name="settings_super_profile_standard">标准</string>
     <string name="settings_super_profile_heavy">重档</string>
