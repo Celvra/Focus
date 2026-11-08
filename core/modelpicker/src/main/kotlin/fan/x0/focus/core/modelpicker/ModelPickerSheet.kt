@@ -6,12 +6,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -50,6 +52,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import fan.x0.focus.core.designsystem.components.BrandIcon
+import fan.x0.focus.core.designsystem.components.BrandIcons
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusIconBadge
 import fan.x0.focus.core.designsystem.components.FocusLoadingBlob
@@ -420,7 +424,7 @@ private fun ModelRow(
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ProviderAvatar(icon = group.icon, size = 40.dp)
+            ModelAvatar(group = group, model = model, selected = selected)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -495,6 +499,42 @@ private fun CapabilityChip(capability: FocusPickerCapability) {
             Text(
                 text = capability.label,
                 style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
+
+@Composable
+private fun ModelAvatar(
+    group: ModelPickerGroup,
+    model: ModelPickerModel,
+    selected: Boolean,
+) {
+    val brand = BrandIcons.forModel(model.id)
+    if (brand == null) {
+        ProviderAvatar(icon = group.icon, size = 40.dp)
+        return
+    }
+    Surface(
+        modifier = Modifier.size(40.dp),
+        shape = MaterialTheme.shapes.small,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        },
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            BrandIcon(
+                icon = brand,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
             )
         }
     }
