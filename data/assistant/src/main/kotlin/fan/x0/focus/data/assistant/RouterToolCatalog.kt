@@ -26,6 +26,11 @@ object RouterToolCatalog {
     const val SET_ROLE_MODEL = "set_role_model"
     const val CLEAR_ROLE_MODEL = "clear_role_model"
     const val SHOW_SIDE_CHAT_RESULT = "show_side_chat_result"
+    const val LIST_TRIGGERS = "list_triggers"
+    const val CREATE_CRON_TRIGGER = "create_cron_trigger"
+    const val CREATE_WEBHOOK_TRIGGER = "create_webhook_trigger"
+    const val SET_TRIGGER_ENABLED = "set_trigger_enabled"
+    const val DELETE_TRIGGER = "delete_trigger"
 
     val names: Set<String> = setOf(
         START_SIDE_CHAT,
@@ -42,6 +47,11 @@ object RouterToolCatalog {
         SET_ROLE_MODEL,
         CLEAR_ROLE_MODEL,
         SHOW_SIDE_CHAT_RESULT,
+        LIST_TRIGGERS,
+        CREATE_CRON_TRIGGER,
+        CREATE_WEBHOOK_TRIGGER,
+        SET_TRIGGER_ENABLED,
+        DELETE_TRIGGER,
     )
 
     val specs: List<ToolSpec> = listOf(
@@ -169,6 +179,51 @@ object RouterToolCatalog {
                 put("message", string("One short line for the user, optional"))
             },
         ),
+        ToolSpec(
+            name = LIST_TRIGGERS,
+            description = "List automatic cron and webhook triggers with schedule, next run, and URL.",
+            kind = ToolKind.Read,
+            parameters = schema {},
+        ),
+        ToolSpec(
+            name = CREATE_CRON_TRIGGER,
+            description = "Create a recurring cron trigger. Use when the user asks for something to run on a schedule. " +
+                "The trigger starts a side chat with the given instruction at each run.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("name", "prompt", "schedule")) {
+                put("name", string("Short trigger name"))
+                put("prompt", string("Work instruction for each run"))
+                put("schedule", string("Five-field cron: minute hour day month weekday. Six fields add seconds."))
+                put("profile", string("light, standard, or heavy. Default standard"))
+            },
+        ),
+        ToolSpec(
+            name = CREATE_WEBHOOK_TRIGGER,
+            description = "Create a webhook trigger and return its URL. Use when the user wants an external service to start work.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("name", "prompt")) {
+                put("name", string("Short trigger name"))
+                put("prompt", string("Work instruction to apply to the webhook payload"))
+                put("profile", string("light, standard, or heavy. Default standard"))
+            },
+        ),
+        ToolSpec(
+            name = SET_TRIGGER_ENABLED,
+            description = "Enable or disable one automatic trigger.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("trigger_id", "enabled")) {
+                put("trigger_id", string("Trigger id from list_triggers"))
+                put("enabled", boolean("True to enable, false to disable"))
+            },
+        ),
+        ToolSpec(
+            name = DELETE_TRIGGER,
+            description = "Delete one automatic trigger.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("trigger_id")) {
+                put("trigger_id", string("Trigger id from list_triggers"))
+            },
+        ),
     )
 
     private val byName = specs.associateBy { it.name }
@@ -196,6 +251,11 @@ object RouterToolCatalog {
 
     private fun number(description: String): JsonObject = buildJsonObject {
         put("type", "integer")
+        put("description", description)
+    }
+
+    private fun boolean(description: String): JsonObject = buildJsonObject {
+        put("type", "boolean")
         put("description", description)
     }
 }

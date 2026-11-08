@@ -18,6 +18,8 @@ enum class AgentEventKind {
     DeviceTrigger,
     FeedUpdate,
     WatchdogAlarm,
+    Scheduled,
+    Webhook,
     ;
 
     val wire: String get() = name.lowercase()
@@ -36,6 +38,8 @@ enum class AgentEventSource {
     Device,
     Feed,
     Watchdog,
+    Schedule,
+    Webhook,
     System,
     ;
 
@@ -269,6 +273,49 @@ data class AgentEvent(
                 put("text", text)
             }.toString(),
             dedupeKey = dedupeKey,
+        )
+
+        fun scheduled(
+            triggerId: String,
+            name: String,
+            prompt: String,
+            profile: WorkerProfile,
+            runAt: Long,
+        ): AgentEvent = AgentEvent(
+            source = AgentEventSource.Schedule,
+            kind = AgentEventKind.Scheduled,
+            target = AgentEventRoute.ROUTER_TARGET,
+            threadKey = "trigger:$triggerId",
+            payload = buildJsonObject {
+                put("trigger_id", triggerId)
+                put("name", name)
+                put("text", prompt)
+                put("profile", profile.wire)
+                put("run_at", runAt)
+            }.toString(),
+            dedupeKey = "schedule:$triggerId:$runAt",
+        )
+
+        fun webhook(
+            triggerId: String,
+            name: String,
+            prompt: String,
+            body: String,
+            profile: WorkerProfile,
+            dedupeKey: String = "",
+        ): AgentEvent = AgentEvent(
+            source = AgentEventSource.Webhook,
+            kind = AgentEventKind.Webhook,
+            target = AgentEventRoute.ROUTER_TARGET,
+            threadKey = "trigger:$triggerId",
+            payload = buildJsonObject {
+                put("trigger_id", triggerId)
+                put("name", name)
+                put("text", body)
+                put("prompt", prompt)
+                put("profile", profile.wire)
+            }.toString(),
+            dedupeKey = dedupeKey.takeIf { it.isNotBlank() },
         )
     }
 }

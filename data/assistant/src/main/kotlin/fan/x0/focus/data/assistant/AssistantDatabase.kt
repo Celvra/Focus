@@ -7,7 +7,7 @@ import org.koin.core.annotation.Provided
 import org.koin.core.annotation.Single
 
 @Single
-class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 20) {
+class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, "assistant.db", null, 21) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -363,6 +363,27 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             """.trimIndent(),
         )
         db.execSQL("CREATE INDEX idx_turn_journal_conversation ON turn_journal(conversation_id, id)")
+        db.execSQL(
+            """
+            CREATE TABLE agent_triggers(
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                schedule TEXT NOT NULL DEFAULT '',
+                timezone TEXT NOT NULL DEFAULT '',
+                profile TEXT NOT NULL DEFAULT 'standard',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                webhook_token TEXT NOT NULL DEFAULT '',
+                next_run INTEGER NOT NULL DEFAULT 0,
+                last_run INTEGER NOT NULL DEFAULT 0,
+                last_status TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX idx_agent_triggers_due ON agent_triggers(enabled, next_run)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -729,6 +750,31 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             db.execSQL(
                 "CREATE INDEX IF NOT EXISTS idx_turn_journal_conversation " +
                     "ON turn_journal(conversation_id, id)",
+            )
+        }
+        if (oldVersion < 21) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS agent_triggers(
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    prompt TEXT NOT NULL,
+                    schedule TEXT NOT NULL DEFAULT '',
+                    timezone TEXT NOT NULL DEFAULT '',
+                    profile TEXT NOT NULL DEFAULT 'standard',
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    webhook_token TEXT NOT NULL DEFAULT '',
+                    next_run INTEGER NOT NULL DEFAULT 0,
+                    last_run INTEGER NOT NULL DEFAULT 0,
+                    last_status TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS idx_agent_triggers_due ON agent_triggers(enabled, next_run)",
             )
         }
     }

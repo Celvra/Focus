@@ -17,6 +17,8 @@ class AgentRuntime(
     private val main: MainChannelSession,
     private val journal: TurnJournalStore,
     private val watchdog: AgentWatchdog,
+    private val triggers: AgentTriggerScheduler,
+    private val webhook: AgentWebhookServer,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -28,6 +30,8 @@ class AgentRuntime(
         sideChats.recover()
         dispatcher.resume()
         watchdog.start()
+        triggers.start()
+        webhook.start()
         bus.cleanup()
         journal.cleanup()
         scope.launch {

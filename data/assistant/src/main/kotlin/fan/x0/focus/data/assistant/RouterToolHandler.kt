@@ -2,6 +2,7 @@ package fan.x0.focus.data.assistant
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import org.koin.core.annotation.Single
 
@@ -9,6 +10,7 @@ data class RouterTurnFlags(
     var silent: Boolean = false,
     var started: Int = 0,
     val attachments: List<ChatAttachment> = emptyList(),
+    val preferredProfile: WorkerProfile? = null,
 )
 
 @Single
@@ -19,6 +21,9 @@ class RouterToolHandler(
     private val settings: AssistantSettings,
     private val main: MainChannelSession,
     private val memory: RouterMemoryStore,
+    private val triggers: AgentTriggerStore,
+    private val triggerScheduler: AgentTriggerScheduler,
+    private val webhook: AgentWebhookServer,
 ) {
     suspend fun handle(call: fan.x0.focus.core.network.openai.CompletedToolCall, flags: RouterTurnFlags): ToolResult? {
         val args = runCatching {
@@ -49,6 +54,11 @@ class RouterToolHandler(
             RouterToolCatalog.SET_ROLE_MODEL -> setRoleModel(args)
             RouterToolCatalog.CLEAR_ROLE_MODEL -> clearRoleModel(args)
             RouterToolCatalog.SHOW_SIDE_CHAT_RESULT -> showResult(args)
+            RouterToolCatalog.LIST_TRIGGERS -> listTriggers()
+            RouterToolCatalog.CREATE_CRON_TRIGGER -> createCron(args)
+            RouterToolCatalog.CREATE_WEBHOOK_TRIGGER -> createWebhook(args)
+            RouterToolCatalog.SET_TRIGGER_ENABLED -> setTriggerEnabled(args)
+            RouterToolCatalog.DELETE_TRIGGER -> deleteTrigger(args)
             else -> null
         }
     }
@@ -57,7 +67,10 @@ class RouterToolHandler(
         val title = args.string("title").trim()
         val task = args.string("task").trim()
         if (title.isBlank() || task.isBlank()) return fail("title and task are required")
-        val profile = WorkerProfile.fromWire(args.string("profile"))
+        val profile = args.string("profile").takeIf { it.isNotBlank() }
+            ?.let { WorkerProfile.fromWire(it) }
+            ?: flags.preferredProfile
+            ?: WorkerProfile.Standard
         val conversation = sideChats.create(
             title = title,
             task = task,
@@ -195,6 +208,72 @@ class RouterToolHandler(
         return ok("Result card shown in the main conversation.")
     }
 
+    private suspend fun listTriggers(): ToolResult {
+        val items = triggers.list()
+        if (items.isEmpty()) return ok("No automatic triggers.")
+        return ok(
+            items.joinToString("\n") { trigger ->
+                val target = when (trigger.kind) {
+                    AgentTriggerKind.Cron -> trigger.schedule
+                    AgentTriggerKind.Webhook -> "${webhook.baseUrl()}${trigger.webhookPath}"
+                }
+                "- ${trigger.id} | ${if (trigger.enabled) "on" else "off"} | ${trigger.kind.wire} | " +
+                    "${trigger.name} | $target"
+            },
+        )
+    }
+
+    private suspend fun createCron(args: JsonObject): ToolResult {
+        val name = args.string("name").trim()
+        val prompt = args.string("prompt").trim()
+        val schedule = args.string("schedule").trim()
+        if (name.isBlank() || prompt.isBlank() || schedule.isBlank()) {
+            return fail("name, prompt, and schedule are required")
+        }
+        CronExpression.validate(schedule)?.let { return fail(it) }
+        val trigger = triggers.create(
+            name = name,
+            kind = AgentTriggerKind.Cron,
+            prompt = prompt,
+            schedule = schedule,
+            profile = WorkerProfile.fromWire(args.string("profile")),
+        )
+        triggerScheduler.sync(trigger)
+        return ok("Cron trigger created: ${trigger.id}. Next run: ${trigger.nextRun}.")
+    }
+
+    private suspend fun createWebhook(args: JsonObject): ToolResult {
+        val name = args.string("name").trim()
+        val prompt = args.string("prompt").trim()
+        if (name.isBlank() || prompt.isBlank()) return fail("name and prompt are required")
+        val trigger = triggers.create(
+            name = name,
+            kind = AgentTriggerKind.Webhook,
+            prompt = prompt,
+            schedule = "",
+            profile = WorkerProfile.fromWire(args.string("profile")),
+        )
+        return ok(
+            "Webhook trigger created: ${trigger.id}. URL: ${webhook.baseUrl()}${trigger.webhookPath}",
+        )
+    }
+
+    private suspend fun setTriggerEnabled(args: JsonObject): ToolResult {
+        val id = args.string("trigger_id")
+        val enabled = args.boolean("enabled") ?: return fail("enabled is required")
+        val trigger = triggers.setEnabled(id, enabled) ?: return fail("Trigger not found: $id")
+        if (enabled) triggerScheduler.sync(trigger) else triggerScheduler.cancel(trigger.id)
+        return ok("${trigger.name} is now ${if (enabled) "on" else "off"}.")
+    }
+
+    private suspend fun deleteTrigger(args: JsonObject): ToolResult {
+        val id = args.string("trigger_id")
+        if (id.isBlank()) return fail("trigger_id is required")
+        triggers.delete(id)
+        triggerScheduler.cancel(id)
+        return ok("Trigger deleted: $id.")
+    }
+
     private fun ok(content: String): ToolResult =
         ToolResult(ok = true, content = content, summary = content.lineSequence().firstOrNull().orEmpty().take(120))
 
@@ -206,4 +285,7 @@ class RouterToolHandler(
 
     private fun JsonObject.int(key: String, default: Int): Int =
         (this[key] as? JsonPrimitive)?.intOrNull ?: default
+
+    private fun JsonObject.boolean(key: String): Boolean? =
+        (this[key] as? JsonPrimitive)?.booleanOrNull
 }

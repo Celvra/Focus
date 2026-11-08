@@ -74,9 +74,13 @@ class RouterSession(
         synchronized(queuedIds) { batch.forEach { queuedIds.remove(it.id) } }
         if (claimed.isEmpty()) return
         val sideResults = claimed.filter { it.kind == AgentEventKind.SideChatResult }
+        val triggerEvent = claimed.firstOrNull {
+            it.kind == AgentEventKind.Scheduled || it.kind == AgentEventKind.Webhook
+        }
         val workingText = when {
             sideResults.size > 1 -> "${sideResults.size} 个旁聊已结束，正在整理"
             sideResults.size == 1 -> "旁聊 ${sideResults.first().payloadObject()["title"].stringValue()} 已结束，正在整理"
+            triggerEvent != null -> "自动触发 ${triggerEvent.payloadObject()["name"].stringValue()} 正在处理"
             else -> "Router 正在处理"
         }
         main.setWorking(true, workingText)
@@ -92,6 +96,9 @@ class RouterSession(
             val prompt = assembler.build(claimed)
             val flags = RouterTurnFlags(
                 attachments = claimed.flatMap { it.attachments() }.distinctBy { it.id },
+                preferredProfile = triggerEvent?.payloadObject()?.get("profile")?.stringValue()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { WorkerProfile.fromWire(it) },
             )
             val eventText = claimed.joinToString("\n\n") { assembler.describe(it) }
             val attachments = claimed.flatMap { it.attachments() }.distinctBy { it.id }

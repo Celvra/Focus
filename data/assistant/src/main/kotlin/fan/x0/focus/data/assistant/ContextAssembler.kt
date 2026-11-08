@@ -44,11 +44,16 @@ class ContextAssembler(
         builder.appendLine("- Use recall or read_side_chat when a result needs detail. Do not ask the user to read a side chat for you.")
         builder.appendLine("- Memory is yours. Use read_memory and write_memory for durable routing preferences and standing rules.")
         builder.appendLine("- Change role models only when the user explicitly asks. Use list_role_models first.")
+        builder.appendLine("- When the user asks for a recurring task or an external trigger, use create_cron_trigger " +
+            "or create_webhook_trigger, then report the schedule or URL. Use list_triggers before changing one.")
         builder.appendLine("- Pass a thread_key to start_side_chat when the event carries one and the work continues that thread.")
         builder.appendLine("- User messages always go through you. Context events may go straight to a subscribed side chat.")
         builder.appendLine("- Sources marked speculative must not produce a message just because they fired. " +
             "Check whether anything useful or actionable exists. If not, stay silent. " +
             "If it needs checking, start a light side chat and stay silent until its result.")
+        builder.appendLine("- Scheduled and webhook events are explicit work orders from a rule the user created. " +
+            "Start a side chat for them unless the payload is empty or clearly already handled. " +
+            "Do not ask the user whether to run them.")
         builder.appendLine("- Stay silent when nothing needs the user. Quiet is the default.")
         builder.appendLine("- ${language()}")
         if (userName.isNotBlank()) builder.appendLine("- The user's name is $userName.")
@@ -142,6 +147,24 @@ class ContextAssembler(
         AgentEventKind.FeedUpdate -> "Feed update: ${event.payloadObject()["title"].stringValue()} " +
             "(${event.payloadObject()["count"].stringValue()} new)"
         AgentEventKind.WatchdogAlarm -> "Watchdog: ${event.text()}"
+        AgentEventKind.Scheduled -> buildString {
+            append("Scheduled trigger ")
+            append(event.payloadObject()["name"].stringValue())
+            append(" (profile ")
+            append(event.payloadObject()["profile"].stringValue())
+            append("): ")
+            append(event.text())
+        }
+        AgentEventKind.Webhook -> buildString {
+            append("Webhook ")
+            append(event.payloadObject()["name"].stringValue())
+            append(" (profile ")
+            append(event.payloadObject()["profile"].stringValue())
+            append(")")
+            val instruction = event.payloadObject()["prompt"].stringValue()
+            if (instruction.isNotBlank()) append("\nInstruction: ").append(instruction)
+            append("\nPayload: ").append(event.text())
+        }
     }
 
     private suspend fun language(): String {
