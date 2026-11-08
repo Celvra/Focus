@@ -553,7 +553,7 @@
     <string name="settings_page_models">Model allocation</string>
     <string name="settings_page_models_body">Choose the model for the router, side chats, and helper roles.</string>
     <string name="settings_models_title">Model allocation</string>
-    <string name="settings_models_intro">Each role can use its own model. A role without a model follows its fallback, then the main model. The light worker drives subagents, compaction, the watchdog, titles, and suggestions.</string>
+    <string name="settings_models_intro">Helper roles can use their own model. Without one, they follow the current model.</string>
     <string name="settings_models_group_helpers">Helpers</string>
     <string name="settings_models_role_main">Main</string>
     <string name="settings_models_role_compactor">Compaction</string>

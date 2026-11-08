@@ -4,8 +4,6 @@
     <string name="chat_main_title">Main session</string>
     <string name="chat_side_title">Side chat · %1$s</string>
     <string name="chat_side_panel_title">Side chats</string>
-    <string name="chat_router_model">Router</string>
-    <string name="chat_router_model_title">Router model</string>
     <string name="chat_side_panel_refresh">Refresh</string>
     <string name="chat_side_panel_empty">No side chats yet. Ask for work that needs tools and it opens here.</string>
     <string name="chat_side_panel_stop">Stop</string>
@@ -18,9 +16,6 @@
     <string name="chat_side_status_no_result">No result</string>
     <string name="chat_side_status_none">Idle</string>
     <string name="chat_side_unread">Unread</string>
-    <string name="chat_side_profile_light">Light</string>
-    <string name="chat_side_profile_standard">Standard</string>
-    <string name="chat_side_profile_heavy">Heavy</string>
     <string name="chat_subtitle">Ask anything about your day</string>
     <string name="chat_working">Working</string>
     <string name="chat_compacting">Compacting context</string>
@@ -224,11 +219,5 @@
     <string name="chat_btw_note">Read only, not saved to this chat</string>
     <string name="chat_btw_question">Question</string>
     <string name="chat_btw_close">Close</string>
-    <string name="chat_subagent_title">Subagent</string>
-    <string name="chat_subagent_task">Task</string>
-    <string name="chat_subagent_running">Running</string>
-    <string name="chat_subagent_done">Finished</string>
-    <string name="chat_subagent_failed">Failed</string>
-    <string name="chat_subagent_close">Close</string>
     <string name="chat_im_source">%1$s / %2$s</string>
 </resources>

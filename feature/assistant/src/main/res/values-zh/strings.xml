@@ -551,9 +551,9 @@
     <string name="settings_assistant_hijack_missing">未加载。请在 LSPosed 中启用 Focus 并重启。</string>
     <string name="settings_assistant_hijack_hint">在 LSPosed 中启用 Focus，勾选 system、com.android.systemui、com.android.launcher 三个作用域后重启。授予悬浮窗权限后，长按电源键或使用手势即可打开悬浮助手。</string>
     <string name="settings_page_models">模型分配</string>
-    <string name="settings_page_models_body">分别为 Router、旁聊和辅助角色选择模型。</string>
+    <string name="settings_page_models_body">为主会话、旁聊和辅助角色选择模型。</string>
     <string name="settings_models_title">模型分配</string>
-    <string name="settings_models_intro">每个角色可以单独选模型。没有单独设置的角色按回退链跟随，最后跟随主模型。轻档模型会带动子代理、上下文压缩、看门狗、标题和开场建议。</string>
+    <string name="settings_models_intro">辅助角色可以单独指定模型，没有设置时跟随当前模型。</string>
     <string name="settings_models_group_helpers">辅助</string>
     <string name="settings_models_role_main">主会话</string>
     <string name="settings_models_role_compactor">上下文压缩</string>
@@ -608,7 +608,7 @@
     <string name="settings_super_concurrency_pill">%1$d 路并行</string>
     <string name="settings_super_watchdog_on">看门狗开启</string>
     <string name="settings_super_watchdog_off">看门狗关闭</string>
-    <string name="settings_super_sources_body">只有开启的来源会进入 Router，旁聊结果仍会按时回来。</string>
+    <string name="settings_super_sources_body">只有开启的来源会进入自动化分发。</string>
     <string name="settings_super_group_background">后台</string>
     <string name="settings_super_runtime_body">同时能跑多少 worker、事件进入的频率，以及什么时候停止任务。</string>
     <string name="settings_super_output">输出</string>

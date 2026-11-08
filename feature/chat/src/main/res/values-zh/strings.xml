@@ -4,8 +4,6 @@
     <string name="chat_main_title">主会话</string>
     <string name="chat_side_title">旁聊 · %1$s</string>
     <string name="chat_side_panel_title">旁聊</string>
-    <string name="chat_router_model">Router</string>
-    <string name="chat_router_model_title">Router 模型</string>
     <string name="chat_side_panel_refresh">刷新</string>
     <string name="chat_side_panel_empty">还没有旁聊。需要工具的任务会出现在这里。</string>
     <string name="chat_side_panel_stop">停止</string>
@@ -18,9 +16,6 @@
     <string name="chat_side_status_no_result">无结果</string>
     <string name="chat_side_status_none">空闲</string>
     <string name="chat_side_unread">未读</string>
-    <string name="chat_side_profile_light">轻档</string>
-    <string name="chat_side_profile_standard">标准</string>
-    <string name="chat_side_profile_heavy">重档</string>
     <string name="chat_subtitle">问什么都行</string>
     <string name="chat_working">正在处理</string>
     <string name="chat_compacting">正在压缩上下文</string>
@@ -223,11 +218,5 @@
     <string name="chat_btw_note">只读问答，不会写入当前会话</string>
     <string name="chat_btw_question">问题</string>
     <string name="chat_btw_close">关闭</string>
-    <string name="chat_subagent_title">子代理</string>
-    <string name="chat_subagent_task">任务</string>
-    <string name="chat_subagent_running">运行中</string>
-    <string name="chat_subagent_done">已完成</string>
-    <string name="chat_subagent_failed">已失败</string>
-    <string name="chat_subagent_close">关闭</string>
     <string name="chat_im_source">%1$s / %2$s</string>
 </resources>
