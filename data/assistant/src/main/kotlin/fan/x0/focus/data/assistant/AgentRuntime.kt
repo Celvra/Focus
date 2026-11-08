@@ -22,6 +22,7 @@ class AgentRuntime(
 
     suspend fun start() {
         chats.ensureMainConversation()
+        chats.cleanupEmptySideChats()
         journal.interruptAll()
         sideChats.recover()
         dispatcher.resume()

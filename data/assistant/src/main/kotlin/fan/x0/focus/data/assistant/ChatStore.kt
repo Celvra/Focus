@@ -139,6 +139,16 @@ class ChatStore(
         }
     }
 
+    suspend fun cleanupEmptySideChats() = withContext(Dispatchers.IO) {
+        database.writableDatabase.delete(
+            "conversations",
+            "kind = 'side' AND archived = 0 AND task_status = 'none' " +
+                "AND id NOT IN ('main', 'onboarding') " +
+                "AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = conversations.id)",
+            null,
+        )
+    }
+
     suspend fun createConversation(
         title: String,
         mode: AgentMode = AgentMode.Build,
