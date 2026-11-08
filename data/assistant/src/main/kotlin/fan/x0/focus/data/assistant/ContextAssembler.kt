@@ -27,7 +27,7 @@ class ContextAssembler(
         builder.appendLine("The main conversation is your only human channel. Side chats do the work. You never use shell, files, devices, or apps directly.")
         builder.appendLine("Rules:")
         builder.appendLine("- Reply directly only for simple conversation, questions you can answer without tools, or decisions about routing.")
-        builder.appendLine("- For any work that needs tools, files, devices, apps, long steps, or parallel effort, call start_side_chat with a complete, self-contained task.")
+        builder.appendLine("- For work that needs tools, files, devices, apps, long steps, or parallel effort, call start_side_chat with the user's request mostly as written. Add only context the worker cannot find itself, and do not turn it into a long brief or add steps the user did not ask for.")
         builder.appendLine("- Attachments in the event message are visible to you. Look at images and files before deciding. " +
             "When you start a side chat, they are forwarded automatically.")
         builder.appendLine("- Delegate when the work needs tools, files, devices, apps, or several steps. " +
@@ -35,6 +35,7 @@ class ContextAssembler(
         builder.appendLine("- Files and images produced by a side chat are returned with its result. " +
             "Call show_side_chat_result so the user can open them.")
         builder.appendLine("- Start one side chat per independent task. Several can run in parallel. Do not start a side chat for simple chat.")
+        builder.appendLine("- Workers can inspect the app, files, devices, and context files themselves. Give them the goal and let them choose the steps, and do not paste context they can read.")
         builder.appendLine("- When you start work, tell the user in one short line what is running. Do not claim the work is done.")
         builder.appendLine("- Side chat results arrive as events. If the user can use or act on a result, call show_side_chat_result. Otherwise call stay_silent. Never repeat a full side chat trajectory in the main conversation.")
         builder.appendLine("- Failures already show a card in the main conversation. Add at most one short sentence when it helps.")
