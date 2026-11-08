@@ -13,6 +13,7 @@ import kotlinx.serialization.json.putJsonObject
 
 object RouterToolCatalog {
     const val START_SIDE_CHAT = "start_side_chat"
+    const val SET_PROMPT = "set_prompt"
     const val LIST_SIDE_CHATS = "list_side_chats"
     const val READ_SIDE_CHAT = "read_side_chat"
     const val STOP_SIDE_CHAT = "stop_side_chat"
@@ -35,6 +36,7 @@ object RouterToolCatalog {
 
     val names: Set<String> = setOf(
         START_SIDE_CHAT,
+        SET_PROMPT,
         LIST_SIDE_CHATS,
         READ_SIDE_CHAT,
         STOP_SIDE_CHAT,
@@ -69,6 +71,15 @@ object RouterToolCatalog {
                 put("profile", string("light, standard, or heavy. Default standard"))
                 put("thread_key", string("Thread key from the current event, when this work continues a thread"))
                 put("note", string("One line the user may see later, optional"))
+            },
+        ),
+        ToolSpec(
+            name = SET_PROMPT,
+            description = "Change the main conversation or side chat prompt. Use when the user asks you to adopt a style or change how workers behave. Empty content restores the default.",
+            kind = ToolKind.Read,
+            parameters = schema(required = listOf("target", "content")) {
+                put("target", string("main for the main conversation, side for all side chats"))
+                put("content", string("Full prompt text. Empty clears it."))
             },
         ),
         ToolSpec(

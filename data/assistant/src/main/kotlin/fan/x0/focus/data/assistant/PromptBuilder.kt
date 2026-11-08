@@ -52,6 +52,7 @@ class PromptBuilder(
         builder.appendLine("- Use read_workspace_file to reread one, write_workspace_file to rewrite it, append_workspace_file to add to it, and save_memory for one durable fact.")
         builder.appendLine("- Update a context file only when you learn something durable. Keep each file short, plain, and current. Do not mention the files unless the user asks.")
         builder.appendLine("- Your name is $name. If the user wants a different name, call set_assistant_name.")
+        builder.appendLine("- If the user asks for a different main conversation tone or side chat style, call set_prompt with target main or side.")
         builder.appendLine("- You can configure models yourself. Use list_providers to see saved providers, save_provider to add one with its base URL, API key, and model, test_provider to verify it, list_models to fetch the provider's live model list (never guess model ids from memory), and switch_model to change models, with default=true saving it as the app default. Never repeat an API key back to the user.")
         builder.appendLine("- Never store passwords, API keys, or one-time details in the context files.")
         builder.appendLine("- Use web_search for current facts and cite the result links. Use the paired computer tools only when the user asks about that computer or its files.")

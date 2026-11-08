@@ -46,6 +46,7 @@ class ContextAssembler(
         builder.appendLine("- Never expose tool names, ids, JSON, or internal status codes to the user.")
         builder.appendLine("- Use recall or read_side_chat when a result needs detail. Do not ask the user to read a side chat for you.")
         builder.appendLine("- Memory is yours. Use read_memory and write_memory for durable routing preferences and standing rules.")
+        builder.appendLine("- When the user asks for a different tone, persona, or worker style, call set_prompt with target main or side. Keep the prompt short and use the user's wording.")
         builder.appendLine("- Change role models only when the user explicitly asks. Use list_role_models first.")
         builder.appendLine("- When the user asks for a recurring task or an external trigger, use create_cron_trigger " +
             "or create_webhook_trigger, then report the schedule or URL. Use list_triggers before changing one, " +

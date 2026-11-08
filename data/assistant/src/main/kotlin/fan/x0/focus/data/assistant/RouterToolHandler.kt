@@ -21,6 +21,7 @@ class RouterToolHandler(
     private val settings: AssistantSettings,
     private val main: MainChannelSession,
     private val memory: RouterMemoryStore,
+    private val prompts: PromptSettings,
     private val triggers: AgentTriggerStore,
     private val triggerScheduler: AgentTriggerScheduler,
     private val webhook: AgentWebhookServer,
@@ -32,6 +33,7 @@ class RouterToolHandler(
         }.getOrNull() ?: JsonObject(emptyMap())
         return when (call.name) {
             RouterToolCatalog.START_SIDE_CHAT -> start(args, flags)
+            RouterToolCatalog.SET_PROMPT -> setPrompt(args)
             RouterToolCatalog.LIST_SIDE_CHATS -> list(args)
             RouterToolCatalog.READ_SIDE_CHAT -> read(args)
             RouterToolCatalog.STOP_SIDE_CHAT -> stop(args)
@@ -86,6 +88,17 @@ class RouterToolHandler(
             "Side chat started: ${conversation.id} (${conversation.title}, ${profile.wire}). " +
                 "It reports back when it finishes.",
         )
+    }
+
+    private suspend fun setPrompt(args: JsonObject): ToolResult {
+        val target = args.string("target").trim().lowercase()
+        val content = args.string("content").trim()
+        when (target) {
+            "main" -> prompts.setMain(content)
+            "side" -> prompts.setSide(content)
+            else -> return fail("target must be main or side")
+        }
+        return ok("Prompt updated.")
     }
 
     private suspend fun list(args: JsonObject): ToolResult {

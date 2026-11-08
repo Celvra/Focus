@@ -88,6 +88,7 @@ class ToolExecutor(
     private val reminders: ReminderStore,
     private val workspace: WorkspaceStore,
     private val settings: AssistantSettings,
+    private val prompts: PromptSettings,
     private val reminderScheduler: ReminderScheduler,
     private val chats: ChatStore,
     private val secrets: SecretStore,
@@ -423,6 +424,16 @@ class ToolExecutor(
                 val updated = workspace.read(file)
                 val diff = LineDiff.compute(file.fileName, old, updated)
                 ok("Updated ${file.fileName}", "${file.fileName} updated.", listOfNotNull(diff))
+            }
+            ToolCatalog.SET_PROMPT -> {
+                val target = args.text("target").orEmpty().trim().lowercase()
+                val content = args.text("content").orEmpty().trim()
+                when (target) {
+                    "main" -> prompts.setMain(content)
+                    "side" -> prompts.setSide(content)
+                    else -> return fail("target must be main or side")
+                }
+                ok("Prompt updated", "Prompt updated.")
             }
             "list_reminders" -> {
                 val list = reminders.upcoming(ToolTime.now())

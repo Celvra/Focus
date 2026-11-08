@@ -27,6 +27,7 @@ data class ToolSpec(
 
 object ToolCatalog {
     const val SET_WORKING_TEXT = "set_working_text"
+    const val SET_PROMPT = "set_prompt"
 
     val all: List<ToolSpec> = listOf(
         ToolSpec(
@@ -339,6 +340,15 @@ object ToolCatalog {
             parameters = schema(required = listOf("file", "content")) {
                 put("file", string("One of: soul, persona, user, agent, memory"))
                 put("content", string("Text to append"))
+            },
+        ),
+        ToolSpec(
+            name = SET_PROMPT,
+            description = "Change the main conversation or side chat prompt. Use when the user asks you to adopt a style or change how workers behave. Empty content restores the default.",
+            kind = ToolKind.Write,
+            parameters = schema(required = listOf("target", "content")) {
+                put("target", string("main for the main conversation, side for all side chats"))
+                put("content", string("Full prompt text. Empty clears it."))
             },
         ),
         ToolSpec(
