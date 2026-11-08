@@ -47,7 +47,7 @@ class ChatStore(
     suspend fun sideChats(): List<Conversation> = withContext(Dispatchers.IO) {
         database.readableDatabase.rawQuery(
             "SELECT $CONVERSATION_COLUMNS FROM conversations " +
-                "WHERE kind = 'side' AND archived = 0 ORDER BY updated_at DESC",
+                "WHERE kind = 'side' AND archived = 0 AND parent_id <> '' ORDER BY updated_at DESC",
             null,
         ).use { cursor ->
             buildList {
@@ -59,8 +59,8 @@ class ChatStore(
     suspend fun activeSideChats(): List<Conversation> = withContext(Dispatchers.IO) {
         database.readableDatabase.rawQuery(
             "SELECT $CONVERSATION_COLUMNS FROM conversations " +
-                "WHERE kind = 'side' AND archived = 0 AND task_status IN ('queued', 'running', 'waiting') " +
-                "ORDER BY updated_at DESC",
+                "WHERE kind = 'side' AND archived = 0 AND parent_id <> '' " +
+                "AND task_status IN ('queued', 'running', 'waiting') ORDER BY updated_at DESC",
             null,
         ).use { cursor ->
             buildList {
@@ -116,6 +116,7 @@ class ChatStore(
             try {
                 val demote = ContentValues().apply {
                     put("kind", ConversationKind.Side.wire)
+                    put("parent_id", id)
                     put("updated_at", now)
                 }
                 db.update("conversations", demote, "kind = 'main'", null)
