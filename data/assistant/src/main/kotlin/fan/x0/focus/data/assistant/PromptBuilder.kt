@@ -12,6 +12,7 @@ class PromptBuilder(
     private val workspaceTrust: WorkspaceTrustService,
     private val skills: SkillRepository,
     private val external: ExternalPromptProvider,
+    private val prompts: PromptSettings,
 ) {
     @Volatile
     private var trustCache: CachedSection? = null
@@ -23,6 +24,7 @@ class PromptBuilder(
         title: String = "",
         mode: AgentMode = AgentMode.Build,
         mentionedSkills: List<String> = emptyList(),
+        side: Boolean = false,
     ): String = coroutineScope {
         val trustJob = async { trustedWorkspaceSection() }
         val skillJob = async { skillsSection() }
@@ -77,6 +79,14 @@ class PromptBuilder(
             builder.appendLine("- Current chat title: $title")
         }
         builder.appendLine("- Current time: ${ToolTime.full(ToolTime.now())} (${java.util.TimeZone.getDefault().id}).")
+        if (side) {
+            val sidePrompt = prompts.configOnce().side.trim()
+            if (sidePrompt.isNotBlank()) {
+                builder.appendLine("Side chat instructions from the user:")
+                builder.appendLine("Follow these for tone, format, and working style. They do not override the tool and safety rules above.")
+                builder.appendLine(sidePrompt)
+            }
+        }
         builder.appendLine("Today feed and ideas:")
         builder.appendLine("- When the user asks for their feed, a digest, or to post something, read the sources with list_articles first, then call post_update once per card.")
         builder.appendLine("- When the user asks what to do next, call save_idea. Give each idea a title, a detail, and up to four steps.")

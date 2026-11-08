@@ -194,6 +194,17 @@
     <string name="settings_page_account_body">服务商、密钥和当前模型。</string>
     <string name="settings_page_chat_agent">对话与代理</string>
     <string name="settings_page_chat_agent_body">批准方式、工具轮数和自动巡航判定。</string>
+    <string name="settings_page_prompts">提示词</string>
+    <string name="settings_page_prompts_body">分别为主会话和旁聊设置额外的提示词。</string>
+    <string name="settings_prompts_main_title">主会话提示词</string>
+    <string name="settings_prompts_main_body">只影响主会话里的说话方式，例如换成猫娘语气。</string>
+    <string name="settings_prompts_main_hint">例如：你是一只活泼的猫娘，句尾带喵。</string>
+    <string name="settings_prompts_side_title">旁聊提示词</string>
+    <string name="settings_prompts_side_body">影响所有旁聊的工作方式，适合要求认真、简洁、按步骤执行。</string>
+    <string name="settings_prompts_side_hint">例如：保持专业，先验证结果，不要扮演角色。</string>
+    <string name="settings_prompts_empty">留空则使用默认提示词。</string>
+    <string name="settings_prompts_save">保存提示词</string>
+    <string name="settings_prompts_saved">提示词已保存</string>
     <string name="settings_page_tools">工具</string>
     <string name="settings_page_tools_body">网页搜索、MCP、桥接、工作区索引和订阅刷新。</string>
     <string name="settings_page_plugins">插件</string>

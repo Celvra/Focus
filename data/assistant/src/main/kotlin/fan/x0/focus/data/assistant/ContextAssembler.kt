@@ -13,6 +13,7 @@ class ContextAssembler(
     private val eventSettings: AgentEventSettings,
     private val memory: RouterMemoryStore,
     private val workspace: WorkspaceStore,
+    private val prompts: PromptSettings,
 ) {
     suspend fun build(batch: List<AgentEvent>): String {
         val config = eventSettings.configOnce()
@@ -22,6 +23,7 @@ class ContextAssembler(
         val sides = sideChats.list(limit = 12)
         val recent = events.recent(limit = 12)
         val note = memory.read()
+        val promptConfig = prompts.configOnce()
         val builder = StringBuilder()
         builder.appendLine("You are $name, the router of a personal agent system on the user's Android phone.")
         builder.appendLine("The main conversation is your only human channel. Side chats do the work. You never use shell, files, devices, or apps directly.")
@@ -62,6 +64,12 @@ class ContextAssembler(
         builder.appendLine("- ${language()}")
         if (userName.isNotBlank()) builder.appendLine("- The user's name is $userName.")
         builder.appendLine("- Current time: ${time()}.")
+        if (promptConfig.main.isNotBlank()) {
+            builder.appendLine()
+            builder.appendLine("Main conversation instructions from the user:")
+            builder.appendLine("Apply these to replies shown to the user. Keep side chat tasks and tool arguments neutral.")
+            builder.appendLine(promptConfig.main.trim())
+        }
         builder.appendLine()
         builder.appendLine("Sources:")
         AgentEventSource.entries.forEach { source ->

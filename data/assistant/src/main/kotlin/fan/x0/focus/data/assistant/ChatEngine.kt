@@ -213,11 +213,13 @@ class ChatEngine(
                     if (completesOnboarding) list.filterNot { it.name == "complete_onboarding" } else list
                 }
                 val context = chats.context(conversationId)
+                val info = chats.conversation(conversationId)
                 val system = options.promptOverride ?: when (mode) {
                     ChatMode.Chat -> prompt.chatPrompt(
-                        title = chats.conversation(conversationId)?.title.orEmpty(),
+                        title = info?.title.orEmpty(),
                         mode = agentMode,
                         mentionedSkills = options.mentionedSkills,
+                        side = info?.kind == ConversationKind.Side,
                     )
                     ChatMode.Onboarding -> prompt.onboardingPrompt(
                         turn = context.messages.count { it.role == ChatRole.User },
