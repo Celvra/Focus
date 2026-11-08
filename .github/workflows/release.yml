@@ -42,15 +42,20 @@ jobs:
           FOCUS_KEYSTORE_PASSWORD: ${{ secrets.FOCUS_KEYSTORE_PASSWORD }}
           FOCUS_KEY_ALIAS: ${{ secrets.FOCUS_KEY_ALIAS }}
           FOCUS_KEY_PASSWORD: ${{ secrets.FOCUS_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease -Pfocus.abis=all --console=plain -Pkotlin.daemon.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=1024m"
+        run: ./gradlew :app:assembleRelease -Pfocus.abis=all -Pfocus.splitAbi=true --console=plain -Pkotlin.daemon.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=1024m"
       - name: Collect apk
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/focus-${FOCUS_VERSION_NAME}.apk"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            cp "app/build/outputs/apk/release/app-${abi}-release.apk" "dist/focus-${FOCUS_VERSION_NAME}-${abi}.apk"
+          done
+          cp app/build/outputs/mapping/release/mapping.txt "dist/focus-${FOCUS_VERSION_NAME}-mapping.txt"
+          cp app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip "dist/focus-${FOCUS_VERSION_NAME}-native-debug-symbols.zip"
+          ls -lh dist
       - uses: actions/upload-artifact@v7
         with:
           name: focus-apk
-          path: dist/*.apk
+          path: dist/*
           if-no-files-found: error
 
   bridge:

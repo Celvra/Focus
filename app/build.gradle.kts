@@ -17,6 +17,7 @@ val targetAbis = when (requestedAbis) {
     "all" -> emptyList()
     else -> requestedAbis.split(',').map { it.trim() }.filter { it.isNotEmpty() }
 }
+val splitAbi = providers.gradleProperty("focus.splitAbi").orNull?.toBoolean() ?: false
 
 android {
     namespace = "fan.x0.focus"
@@ -46,11 +47,30 @@ android {
         }
     }
 
+    splits {
+        abi {
+            isEnable = splitAbi
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = false
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             if (releaseKeystoreFile != null) {
                 signingConfig = signingConfigs.getByName("release")
+            }
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
