@@ -381,7 +381,7 @@ class SideChatManager(
             else -> TaskStatus.Done
         }
         val summary = result.error?.let { it.serverMessage ?: it.serverTitle ?: it.type.name }
-            ?: result.answer.trim().take(600)
+            ?: result.answer.trim()
         val attachments = result.media.distinctBy { it.id }.take(8)
         chats.setTaskStatus(conversation.id, status)
         chats.setResultSeen(conversation.id, presence.visibleConversationId.value == conversation.id)
@@ -435,7 +435,6 @@ class SideChatManager(
             .lastOrNull { it.role == ChatRole.Assistant && it.content.isNotBlank() }
             ?.content
             ?.trim()
-            ?.take(600)
             .orEmpty()
     }
 
