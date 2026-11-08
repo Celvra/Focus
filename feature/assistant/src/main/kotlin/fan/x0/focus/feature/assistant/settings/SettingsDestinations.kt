@@ -8,7 +8,6 @@ enum class SettingsDestination : NavKey {
     Home,
     Account,
     ChatAgent,
-    Prompts,
     Models,
     SuperAgent,
     Tools,

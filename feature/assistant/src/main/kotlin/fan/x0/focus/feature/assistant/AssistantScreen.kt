@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -21,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -45,13 +47,17 @@ import fan.x0.focus.core.designsystem.components.AvatarStyle
 import fan.x0.focus.core.designsystem.components.FocusAvatar
 import fan.x0.focus.core.designsystem.components.FocusCardGroup
 import fan.x0.focus.core.designsystem.components.FocusCardGroupIcon
+import fan.x0.focus.core.designsystem.components.FocusCardGroupScope
 import fan.x0.focus.core.designsystem.components.FocusIcons
 import fan.x0.focus.core.designsystem.components.FocusLargeTopBar
+import fan.x0.focus.core.designsystem.components.FocusPrimaryButton
 import fan.x0.focus.core.designsystem.components.FocusReveal
+import fan.x0.focus.core.designsystem.components.FocusTextButton
 import fan.x0.focus.core.designsystem.components.LocalFocusSettingsOpener
 import fan.x0.focus.core.designsystem.components.hapticTap
 import fan.x0.focus.core.designsystem.error.HandleAppErrors
 import fan.x0.focus.core.designsystem.theme.LocalFocusTypography
+import fan.x0.focus.core.mvi.CollectEffect
 import fan.x0.focus.data.assistant.WorkspaceFile
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -59,7 +65,13 @@ import org.koin.compose.viewmodel.koinViewModel
 fun AssistantRoute(viewModel: AssistantViewModel = koinViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    val promptSaved = stringResource(R.string.assistant_prompts_saved)
     HandleAppErrors(viewModel.errors, snackbar)
+    CollectEffect(viewModel.effect) { effect ->
+        when (effect) {
+            AssistantEffect.PromptSaved -> snackbar.showSnackbar(promptSaved)
+        }
+    }
     AssistantScreen(state = state, onAction = viewModel::onAction, snackbar = snackbar)
 }
 
@@ -114,8 +126,13 @@ fun AssistantScreen(
                     WorkspaceGroup(state = state, onAction = onAction)
                 }
             }
-            item(key = "more") {
+            item(key = "prompts") {
                 FocusReveal(index = 2) {
+                    PromptGroup(state = state, onAction = onAction)
+                }
+            }
+            item(key = "more") {
+                FocusReveal(index = 3) {
                     FocusCardGroup(title = stringResource(R.string.assistant_more)) {
                         item(
                             headlineContent = { Text(stringResource(R.string.assistant_settings_row)) },
@@ -145,6 +162,15 @@ fun AssistantScreen(
         DocumentSheet(
             document = document,
             onClose = { onAction(AssistantAction.CloseDocument) },
+        )
+    }
+    state.promptEditor?.let { editor ->
+        PromptEditorSheet(
+            editor = editor,
+            saving = state.promptSaving,
+            onValueChange = { onAction(AssistantAction.PromptChanged(it)) },
+            onClose = { onAction(AssistantAction.ClosePrompt) },
+            onSave = { onAction(AssistantAction.SavePrompt) },
         )
     }
 }
@@ -179,6 +205,144 @@ private fun WorkspaceGroup(state: AssistantUiState, onAction: (AssistantAction) 
                 headlineContent = { Text(stringResource(R.string.assistant_workspace_empty)) },
                 supportingContent = { Text(stringResource(R.string.assistant_workspace_body)) },
             )
+        }
+    }
+}
+
+@Composable
+private fun PromptGroup(state: AssistantUiState, onAction: (AssistantAction) -> Unit) {
+    val title = stringResource(R.string.assistant_prompts_title)
+    val main = stringResource(R.string.assistant_prompts_main)
+    val side = stringResource(R.string.assistant_prompts_side)
+    val empty = stringResource(R.string.assistant_prompts_empty)
+    FocusCardGroup(title = title) {
+        promptItem(
+            target = PromptTarget.Main,
+            label = main,
+            empty = empty,
+            value = state.mainPrompt,
+            icon = FocusIcons.Chat,
+            onAction = onAction,
+        )
+        promptItem(
+            target = PromptTarget.Side,
+            label = side,
+            empty = empty,
+            value = state.sidePrompt,
+            icon = FocusIcons.Groups,
+            onAction = onAction,
+        )
+    }
+}
+
+private fun FocusCardGroupScope.promptItem(
+    target: PromptTarget,
+    label: String,
+    empty: String,
+    value: String,
+    icon: ImageVector,
+    onAction: (AssistantAction) -> Unit,
+) {
+    val preview = value.lineSequence().firstOrNull { it.isNotBlank() }?.take(60)
+    item(
+        headlineContent = { Text(label) },
+        supportingContent = {
+            Text(preview ?: empty)
+        },
+        leadingContent = {
+            FocusCardGroupIcon(icon = icon)
+        },
+        trailingContent = {
+            Icon(
+                FocusIcons.Chevron,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        onClick = { onAction(AssistantAction.OpenPrompt(target)) },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PromptEditorSheet(
+    editor: PromptEditorUi,
+    saving: Boolean,
+    onValueChange: (String) -> Unit,
+    onClose: () -> Unit,
+    onSave: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val title = stringResource(
+        if (editor.target == PromptTarget.Main) R.string.assistant_prompts_main else R.string.assistant_prompts_side,
+    )
+    val body = stringResource(
+        if (editor.target == PromptTarget.Main) {
+            R.string.assistant_prompts_main_body
+        } else {
+            R.string.assistant_prompts_side_body
+        },
+    )
+    val hint = stringResource(
+        if (editor.target == PromptTarget.Main) {
+            R.string.assistant_prompts_main_hint
+        } else {
+            R.string.assistant_prompts_side_hint
+        },
+    )
+    ModalBottomSheet(
+        onDismissRequest = onClose,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .imePadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLargeEmphasized,
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = editor.value,
+                onValueChange = onValueChange,
+                placeholder = { Text(hint) },
+                minLines = 8,
+                maxLines = 20,
+                supportingText = {
+                    Text(stringResource(R.string.assistant_prompts_empty))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Spacer(Modifier.weight(1f))
+                FocusTextButton(
+                    text = stringResource(R.string.assistant_prompts_cancel),
+                    onClick = onClose,
+                )
+                FocusPrimaryButton(
+                    text = stringResource(R.string.assistant_prompts_save),
+                    onClick = onSave,
+                    loading = saving,
+                    enabled = !saving,
+                )
+            }
         }
     }
 }

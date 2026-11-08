@@ -23,7 +23,6 @@ import fan.x0.focus.core.designsystem.theme.FocusMotionDefaults
 import fan.x0.focus.feature.assistant.settings.SettingsAccountPage
 import fan.x0.focus.feature.assistant.settings.SettingsAppearancePage
 import fan.x0.focus.feature.assistant.settings.SettingsChatAgentPage
-import fan.x0.focus.feature.assistant.settings.SettingsPromptsRoute
 import fan.x0.focus.feature.assistant.settings.SettingsChatDetailRoute
 import fan.x0.focus.feature.assistant.settings.SettingsDataPage
 import fan.x0.focus.feature.assistant.settings.SettingsDestination
@@ -148,10 +147,6 @@ internal fun SettingsScreen(
                         state = latestState.value,
                         onAction = onAction,
                         onBack = { backStack.removeLastOrNull() },
-                    )
-                    SettingsDestination.Prompts -> SettingsPromptsRoute(
-                        onBack = { backStack.removeLastOrNull() },
-                        snackbar = snackbar,
                     )
                     SettingsDestination.Models -> SettingsModelsRoute(
                         onBack = { backStack.removeLastOrNull() },
