@@ -449,6 +449,10 @@ class ToolExecutor(
                     title = title,
                     task = task,
                     note = args.text("note").orEmpty(),
+                    parentId = conversation.id,
+                    providerId = conversation.providerId,
+                    model = conversation.model,
+                    reasoning = ReasoningLevel.fromName(conversation.reasoning.takeIf { it.isNotBlank() }),
                     attachments = attachments,
                 )
                 ok(

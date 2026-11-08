@@ -818,6 +818,9 @@ class ChatViewModel(
                 title = text.take(24),
                 task = text,
                 parentId = currentState.conversationId,
+                providerId = currentState.providerId,
+                model = currentState.model,
+                reasoning = currentState.reasoningLevel,
             )
             switchTo(conversation.id)
         }
