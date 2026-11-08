@@ -89,6 +89,9 @@ class SideChatManager(
         scope.launch {
             chats.changes.collect { updateCounts() }
         }
+        scope.launch {
+            updateCounts()
+        }
     }
 
     suspend fun create(
