@@ -42,22 +42,18 @@ Focus has a Today page that gathers what is worth seeing each day.
 
 Calendar events, files, feeds, and articles can all be handed to the assistant directly. No copy-paste needed.
 
-## Super agent
+## Main conversation and side chats
 
-Inspired by DeepSeek's Super Agent architecture.
+The main conversation is a normal chat. It uses tools directly and can hand parallel work to side chats.
 
-Focus's main conversation is handled by a resident Router. Every message you send goes to the Router first. It either answers directly or splits the work into side chats.
+Side chats run alongside the main conversation with their own model, tools, and full trace. Their results return to the main conversation, which decides whether to tell you. Any side chat can be promoted to main, and the old main becomes a side chat.
 
-Side chats run in parallel with the main conversation. Each side chat has its own model tier, tools, and full trace, and reports back to the Router when done. The Router then decides whether to tell you directly, show a result card, or ask a follow-up.
-
-- Side chats come in light, standard, and heavy tiers for tasks of different complexity.
-- You can limit how many side chats run at once. Extra work queues up.
-- Attachments are forwarded to side chats automatically. Images and files do not need to be uploaded again.
-- The watchdog handles timeouts, repeated tool calls, and tasks that stop reporting.
-- The voice assistant and overlay assistant both use the main conversation, so they share the same Router.
-- You can assign separate models to the Router, side chats, subagents, compaction, the watchdog, and the safety judge.
-
-The Router can also create and manage scheduled tasks, webhooks, and home screen shortcuts itself, without opening Settings.
+- You can limit how many side chats run at once. The rest queue.
+- Attachments are passed to side chats automatically.
+- The watchdog handles timeouts, repeated tool calls, and stuck tasks.
+- The voice and overlay assistants follow the current main conversation.
+- Main and side chats use the current model. Compaction, the safety judge, titles, and suggestions can use separate helper models.
+- The assistant can create and manage scheduled tasks, webhooks, and home screen shortcuts itself.
 
 ## Always within reach
 
@@ -112,11 +108,11 @@ Focus supports several triggers, so you do not have to stay around, as long as A
 - Webhook: each trigger has its own URL that external apps can call. Settings shows the actual port.
 - Device triggers: match by app, on-screen text, or event type, then run a shell command, send a notification, or start a chat.
 - Background commands: Bridge and on-device background tasks can notify you when they finish, and can pass results back to the assistant.
-- Feed refresh: new articles can enter the Router.
+- Feed refresh: new articles show a notice in the main conversation.
 - Reminders: fire on time.
 - Watchdog: steps in when a task is stuck or keeps calling tools.
 
-The Router can create, pause, and delete these triggers itself. You do not need to configure them manually.
+Each trigger can target the main conversation or a side chat. The assistant can create, pause, and delete them itself.
 
 ## Approvals
 
@@ -140,7 +136,7 @@ Supported protocols:
 - OpenAI Chat Completions
 - Anthropic Messages
 
-Different roles can use different models. The Router handles dispatch, side chats have light, standard, and heavy tiers, and subagents, context compaction, the watchdog, the safety judge, chat titles, and opening suggestions can all be assigned separately. When unset, they follow the main model. Heavy side chats fall back to standard, and subagents fall back to light.
+Main and side chats use the current model. Context compaction, the safety judge, chat titles, and opening suggestions can use separate helper models. When unset, they follow the current model.
 
 ## Plugins and skills
 
