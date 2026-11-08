@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -26,6 +28,7 @@ class ChatStore(
     private val diffsSerializer = ListSerializer(ListSerializer(FileDiff.serializer()))
     private val _changes = MutableSharedFlow<String>(extraBufferCapacity = 32)
     val changes: SharedFlow<String> = _changes.asSharedFlow()
+    private val mainLock = Mutex()
 
     suspend fun conversations(archived: Boolean = false): List<Conversation> = withContext(Dispatchers.IO) {
         database.readableDatabase.rawQuery(
@@ -78,57 +81,61 @@ class ChatStore(
     suspend fun ensureConversation(): Conversation = ensureMainConversation()
 
     suspend fun ensureMainConversation(): Conversation = withContext(Dispatchers.IO) {
-        queryConversation("kind = 'main'")?.let { main ->
-            mainSession.set(main.id)
-            return@withContext main
+        mainLock.withLock {
+            queryConversation("kind = 'main'")?.let { main ->
+                mainSession.set(main.id)
+                return@withLock main
+            }
+            conversation(MAIN_CONVERSATION_ID)?.let { existing ->
+                val values = ContentValues().apply { put("kind", ConversationKind.Main.wire) }
+                database.writableDatabase.update("conversations", values, "id = ?", arrayOf(existing.id))
+                val promoted = existing.copy(kind = ConversationKind.Main)
+                mainSession.set(promoted.id)
+                _changes.tryEmit(promoted.id)
+                return@withLock promoted
+            }
+            insertConversation(
+                id = MAIN_CONVERSATION_ID,
+                title = MAIN_CONVERSATION_TITLE,
+                kind = ConversationKind.Main,
+                origin = ConversationOrigin.User,
+            ).also { mainSession.set(it.id) }
         }
-        conversation(MAIN_CONVERSATION_ID)?.let { existing ->
-            val values = ContentValues().apply { put("kind", ConversationKind.Main.wire) }
-            database.writableDatabase.update("conversations", values, "id = ?", arrayOf(existing.id))
-            val promoted = existing.copy(kind = ConversationKind.Main)
-            mainSession.set(promoted.id)
-            _changes.tryEmit(promoted.id)
-            return@withContext promoted
-        }
-        insertConversation(
-            id = MAIN_CONVERSATION_ID,
-            title = MAIN_CONVERSATION_TITLE,
-            kind = ConversationKind.Main,
-            origin = ConversationOrigin.User,
-        ).also { mainSession.set(it.id) }
     }
 
     suspend fun mainConversation(): Conversation = ensureMainConversation()
 
     suspend fun promoteToMain(id: String): Boolean = withContext(Dispatchers.IO) {
-        val target = queryConversation("id = ?", arrayOf(id)) ?: return@withContext false
-        if (target.archived || target.kind == ConversationKind.Main) return@withContext false
-        val previous = queryConversation("kind = 'main'")
-        val now = System.currentTimeMillis()
-        val db = database.writableDatabase
-        db.beginTransaction()
-        try {
-            val demote = ContentValues().apply {
-                put("kind", ConversationKind.Side.wire)
-                put("updated_at", now)
+        mainLock.withLock {
+            val target = queryConversation("id = ?", arrayOf(id)) ?: return@withLock false
+            if (target.archived || target.kind == ConversationKind.Main) return@withLock false
+            val previous = queryConversation("kind = 'main'")
+            val now = System.currentTimeMillis()
+            val db = database.writableDatabase
+            db.beginTransaction()
+            try {
+                val demote = ContentValues().apply {
+                    put("kind", ConversationKind.Side.wire)
+                    put("updated_at", now)
+                }
+                db.update("conversations", demote, "kind = 'main'", null)
+                val promote = ContentValues().apply {
+                    put("kind", ConversationKind.Main.wire)
+                    put("parent_id", "")
+                    put("archived", 0)
+                    put("result_seen", 1)
+                    put("updated_at", now)
+                }
+                db.update("conversations", promote, "id = ?", arrayOf(id))
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
             }
-            db.update("conversations", demote, "kind = 'main'", null)
-            val promote = ContentValues().apply {
-                put("kind", ConversationKind.Main.wire)
-                put("parent_id", "")
-                put("archived", 0)
-                put("result_seen", 1)
-                put("updated_at", now)
-            }
-            db.update("conversations", promote, "id = ?", arrayOf(id))
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
+            mainSession.set(id)
+            previous?.let { _changes.tryEmit(it.id) }
+            _changes.tryEmit(id)
+            true
         }
-        mainSession.set(id)
-        previous?.let { _changes.tryEmit(it.id) }
-        _changes.tryEmit(id)
-        true
     }
 
     suspend fun createConversation(title: String, mode: AgentMode = AgentMode.Build): Conversation =
