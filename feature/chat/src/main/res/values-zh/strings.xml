@@ -4,8 +4,14 @@
     <string name="chat_main_title">主会话</string>
     <string name="chat_side_title">旁聊 · %1$s</string>
     <string name="chat_side_panel_title">旁聊</string>
+    <string name="chat_side_panel_close">关闭</string>
+    <string name="chat_side_panel_summary">%1$d 个会话，%2$d 个进行中</string>
+    <string name="chat_side_panel_summary_idle">%1$d 个会话</string>
+    <string name="chat_side_panel_section_active">进行中</string>
+    <string name="chat_side_panel_section_recent">最近</string>
+    <string name="chat_side_panel_empty_title">还没有旁聊</string>
     <string name="chat_side_panel_refresh">刷新</string>
-    <string name="chat_side_panel_empty">还没有旁聊。需要工具的任务会出现在这里。</string>
+    <string name="chat_side_panel_empty">主会话可以派发任务，触发器也可以自动创建旁聊。</string>
     <string name="chat_side_panel_stop">停止</string>
     <string name="chat_side_status_queued">排队中</string>
     <string name="chat_side_status_running">运行中</string>

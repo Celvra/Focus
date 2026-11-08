@@ -4,8 +4,14 @@
     <string name="chat_main_title">Main session</string>
     <string name="chat_side_title">Side chat · %1$s</string>
     <string name="chat_side_panel_title">Side chats</string>
+    <string name="chat_side_panel_close">Close</string>
+    <string name="chat_side_panel_summary">%1$d chats, %2$d active</string>
+    <string name="chat_side_panel_summary_idle">%1$d chats</string>
+    <string name="chat_side_panel_section_active">Active</string>
+    <string name="chat_side_panel_section_recent">Recent</string>
+    <string name="chat_side_panel_empty_title">No side chats yet</string>
     <string name="chat_side_panel_refresh">Refresh</string>
-    <string name="chat_side_panel_empty">No side chats yet. Ask for work that needs tools and it opens here.</string>
+    <string name="chat_side_panel_empty">The main conversation can hand off work, and triggers can create side chats automatically.</string>
     <string name="chat_side_panel_stop">Stop</string>
     <string name="chat_side_status_queued">Queued</string>
     <string name="chat_side_status_running">Running</string>
