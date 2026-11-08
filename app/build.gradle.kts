@@ -26,8 +26,8 @@ android {
         applicationId = "fan.x0.focus"
         minSdk = 26
         targetSdk = 37
-        versionCode = releaseVersionCode ?: 2
-        versionName = releaseVersionName ?: "1.0.1"
+        versionCode = releaseVersionCode ?: 3
+        versionName = releaseVersionName ?: "1.0.2"
         if (targetAbis.isNotEmpty()) {
             ndk {
                 abiFilters += targetAbis
