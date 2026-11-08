@@ -49,6 +49,15 @@ object ToolCatalog {
         READ_SIDE_CHAT,
         STOP_SIDE_CHAT,
         STAY_SILENT,
+        LIST_ROLE_MODELS,
+        SET_ROLE_MODEL,
+        CLEAR_ROLE_MODEL,
+        LIST_TRIGGERS,
+        CREATE_CRON_TRIGGER,
+        CREATE_WEBHOOK_TRIGGER,
+        SET_TRIGGER_ENABLED,
+        DELETE_TRIGGER,
+        CREATE_DESKTOP_SHORTCUT,
     )
 
     val all: List<ToolSpec> = listOf(
