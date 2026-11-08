@@ -94,8 +94,8 @@ class AgentEventDispatcher(
         val main = chats.ensureMainConversation()
         if (turns.isRunning(main.id)) return
         if (!events.claim(event.id)) return
-        val label = "trigger:${event.kind.wire}"
-        if (chats.messages(main.id, limit = 10).none { it.label == label && it.content == event.instruction() }) {
+        val label = "trigger:${event.id}"
+        if (chats.messages(main.id, limit = 20).none { it.label == label }) {
             chats.append(
                 conversationId = main.id,
                 role = ChatRole.System,
@@ -157,12 +157,15 @@ class AgentEventDispatcher(
         }
         if (turns.isRunning(conversation.id)) return
         if (!events.claim(event.id)) return
-        chats.append(
-            conversationId = conversation.id,
-            role = ChatRole.System,
-            content = event.instruction(),
-            label = "event:${event.kind.wire}",
-        )
+        val label = "event:${event.id}"
+        if (chats.messages(conversation.id, limit = 20).none { it.label == label }) {
+            chats.append(
+                conversationId = conversation.id,
+                role = ChatRole.System,
+                content = event.instruction(),
+                label = label,
+            )
+        }
         val handle = turns.start(
             conversationId = conversation.id,
             text = "",
@@ -179,12 +182,15 @@ class AgentEventDispatcher(
     private suspend fun appendMainNotice(event: AgentEvent) {
         if (!events.claim(event.id)) return
         val main = chats.ensureMainConversation()
-        chats.append(
-            conversationId = main.id,
-            role = ChatRole.System,
-            content = event.instruction(),
-            label = "event:${event.kind.wire}",
-        )
+        val label = "event:${event.id}"
+        if (chats.messages(main.id, limit = 20).none { it.label == label }) {
+            chats.append(
+                conversationId = main.id,
+                role = ChatRole.System,
+                content = event.instruction(),
+                label = label,
+            )
+        }
         events.complete(event.id)
     }
 
