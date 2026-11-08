@@ -91,6 +91,21 @@ class AssistantSettings(@Provided private val context: Context) {
         }
     }
 
+    suspend fun setDefaultModel(providerId: String, model: String) {
+        val normalized = model.trim()
+        if (normalized.isBlank()) return
+        context.assistantDataStore.edit { prefs ->
+            val current = readProviders(prefs)
+            val index = current.indexOfFirst { it.id == providerId }
+            if (index < 0) return@edit
+            val next = current.toMutableList().also {
+                it[index] = it[index].copy(model = normalized)
+            }
+            prefs[Keys.providers] = json.encodeToString(providersSerializer, next)
+            prefs[Keys.activeProviderId] = providerId
+        }
+    }
+
     suspend fun removeProvider(providerId: String) {
         context.assistantDataStore.edit { prefs ->
             val next = readProviders(prefs).filterNot { it.id == providerId }

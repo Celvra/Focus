@@ -1243,6 +1243,7 @@ class ChatViewModel(
     private fun selectModel(providerId: String, model: String) {
         persistTurnSettings(providerId = providerId, model = model)
         updateState { copy(providerId = providerId, model = model, picker = null) }
+        viewModelScope.launch { settings.setDefaultModel(providerId, model) }
     }
 
     private fun selectReasoning(level: ReasoningLevel) {
