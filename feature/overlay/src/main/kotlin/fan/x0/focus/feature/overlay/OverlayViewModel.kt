@@ -134,7 +134,7 @@ class OverlayViewModel(
             val handle = turns.start(
                 conversationId = mainId,
                 text = message.ifBlank { "看一下这张图片" },
-                options = TurnOptions(attachments = listOfNotNull(chatAttachment)),
+                options = TurnOptions(attachments = listOfNotNull(chatAttachment), autoTitle = false),
             )
             if (handle == null) {
                 pendingSubmit = false

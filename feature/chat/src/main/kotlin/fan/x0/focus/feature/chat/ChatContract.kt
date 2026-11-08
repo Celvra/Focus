@@ -391,8 +391,8 @@ data class ChatUiState(
 
     val canSend: Boolean get() = (input.isNotBlank() || attachments.isNotEmpty()) && !sending
     val isEmpty: Boolean get() = history.isEmpty() && !sending && streaming.isBlank() && reasoning.isBlank()
-    val isMain: Boolean get() = kind == ConversationKind.Main
-    val isSide: Boolean get() = kind == ConversationKind.Side
+    val isMain: Boolean get() = kind == ConversationKind.Main && conversationId.isNotBlank()
+    val isSide: Boolean get() = kind == ConversationKind.Side && conversationId.isNotBlank()
 }
 
 enum class ComposerPicker { Model, Reasoning }
