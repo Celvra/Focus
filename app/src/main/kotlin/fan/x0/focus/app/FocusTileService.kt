@@ -8,6 +8,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import fan.x0.focus.AssistantEntryActivity
 import fan.x0.focus.R
+import fan.x0.focus.core.notify.R as NotifyR
 
 class FocusTileService : TileService() {
 
@@ -15,7 +16,7 @@ class FocusTileService : TileService() {
         qsTile?.apply {
             state = Tile.STATE_INACTIVE
             label = getString(R.string.tile_focus_label)
-            icon = Icon.createWithResource(this@FocusTileService, R.drawable.ic_tile_focus)
+            icon = Icon.createWithResource(this@FocusTileService, NotifyR.drawable.ic_notification_mascot)
             updateTile()
         }
     }

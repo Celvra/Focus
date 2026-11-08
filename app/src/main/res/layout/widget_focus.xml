@@ -29,7 +29,7 @@
                 android:layout_width="36dp"
                 android:layout_height="36dp"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_tile_focus" />
+                android:src="@drawable/ic_notification_mascot" />
 
             <TextView
                 android:id="@+id/widget_title"

@@ -43,7 +43,7 @@
         <service
             android:name=".app.FocusTileService"
             android:exported="true"
-            android:icon="@drawable/ic_tile_focus"
+            android:icon="@drawable/ic_notification_mascot"
             android:label="@string/tile_focus_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
