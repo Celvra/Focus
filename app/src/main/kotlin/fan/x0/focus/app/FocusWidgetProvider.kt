@@ -1,138 +1,235 @@
 package fan.x0.focus.app
 
-import android.app.PendingIntent
-import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProvider
-import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.RectF
-import android.os.Build
-import android.widget.RemoteViews
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
+import androidx.glance.GlanceId
+import androidx.glance.GlanceModifier
+import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.LocalContext
+import androidx.glance.LocalSize
+import androidx.glance.action.actionStartActivity
+import androidx.glance.action.clickable
+import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.components.FilledButton
+import androidx.glance.appwidget.components.OutlineButton
+import androidx.glance.appwidget.components.Scaffold
+import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.provideContent
+import androidx.glance.background
+import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
+import androidx.glance.layout.Column
+import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.padding
+import androidx.glance.layout.size
+import androidx.glance.layout.width
+import androidx.glance.material3.ColorProviders
+import androidx.glance.text.FontWeight
+import androidx.glance.text.Text
+import androidx.glance.text.TextStyle
 import fan.x0.focus.AssistantEntryActivity
 import fan.x0.focus.MainActivity
 import fan.x0.focus.R
-import fan.x0.focus.data.assistant.ChatRole
+import fan.x0.focus.core.designsystem.theme.focusColorScheme
+import fan.x0.focus.core.notify.R as NotifyR
 import fan.x0.focus.data.assistant.ChatStore
 import fan.x0.focus.data.assistant.MainChannelSession
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import org.koin.mp.KoinPlatform
 
-class FocusWidgetProvider : AppWidgetProvider() {
-    override fun onUpdate(
-        context: Context,
-        appWidgetManager: AppWidgetManager,
-        appWidgetIds: IntArray,
-    ) {
-        val pending = goAsync()
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            try {
-                val views = build(context)
-                appWidgetIds.forEach { id ->
-                    appWidgetManager.updateAppWidget(id, views)
-                }
-            } finally {
-                pending.finish()
+class FocusWidgetProvider : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = FocusWidget()
+}
+
+class FocusWidget : GlanceAppWidget() {
+
+    override val sizeMode: SizeMode = SizeMode.Exact
+
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val snapshot = readSnapshot()
+        provideContent {
+            val colors = ColorProviders(
+                light = focusColorScheme(context, dark = false),
+                dark = focusColorScheme(context, dark = true),
+            )
+            GlanceTheme(colors = colors) {
+                FocusWidgetContent(snapshot)
             }
         }
     }
 
-    companion object {
-        fun updateAll(context: Context) {
-            val manager = AppWidgetManager.getInstance(context) ?: return
-            val ids = manager.getAppWidgetIds(ComponentName(context, FocusWidgetProvider::class.java))
-            if (ids.isEmpty()) return
-            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                val views = build(context)
-                ids.forEach { id -> manager.updateAppWidget(id, views) }
-            }
-        }
-
-        private suspend fun build(context: Context): RemoteViews {
-            val views = RemoteViews(context.packageName, R.layout.widget_focus)
+    private suspend fun readSnapshot(): WidgetSnapshot {
+        return runCatching {
             val koin = KoinPlatform.getKoin()
             val chats = koin.get<ChatStore>()
             val main = koin.get<MainChannelSession>()
-            val messages = chats.messages(ChatStore.MAIN_CONVERSATION_ID, limit = 8)
-            val latest = messages
-                .lastOrNull { it.role == ChatRole.Assistant && it.content.isNotBlank() }
+            val latest = chats.messages(ChatStore.MAIN_CONVERSATION_ID, limit = 8)
+                .lastOrNull { it.content.isNotBlank() }
                 ?.content
-                ?.lineSequence()
-                ?.firstOrNull { it.isNotBlank() }
-                ?.take(180)
+                ?.let(::readable)
                 .orEmpty()
-            val active = chats.activeSideChats().size
-            val status = when {
-                main.state.value.working -> context.getString(R.string.widget_working)
-                active > 0 -> context.resources.getQuantityString(
-                    R.plurals.widget_side_running,
-                    active,
-                    active,
-                )
-                else -> latest.ifBlank { context.getString(R.string.widget_idle) }
-            }
-            val night = (context.resources.configuration.uiMode and
-                android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-                android.content.res.Configuration.UI_MODE_NIGHT_YES
-            val surface = surfaceColor(context, night)
-            val onSurface = if (night) 0xFFE5E2DD.toInt() else 0xFF1A1C19.toInt()
-            val accent = accentColor(context)
-            views.setImageViewBitmap(R.id.widget_bg, background(surface))
-            views.setTextViewText(R.id.widget_title, context.getString(R.string.widget_title))
-            views.setTextViewText(R.id.widget_body, status)
-            views.setTextColor(R.id.widget_title, onSurface)
-            views.setTextColor(R.id.widget_body, onSurface)
-            views.setTextColor(R.id.widget_ask, accent)
-            views.setTextColor(R.id.widget_main, onSurface)
-            views.setInt(R.id.widget_icon, "setColorFilter", accent)
-            val ask = PendingIntent.getActivity(
-                context,
-                1,
-                Intent(context, AssistantEntryActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            WidgetSnapshot(
+                headline = latest,
+                working = main.state.value.working,
+                active = chats.activeSideChats().size,
             )
-            val mainIntent = PendingIntent.getActivity(
-                context,
-                2,
-                Intent(context, MainActivity::class.java)
-                    .setAction(Intent.ACTION_ASSIST)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            views.setOnClickPendingIntent(R.id.widget_ask, ask)
-            views.setOnClickPendingIntent(R.id.widget_main, mainIntent)
-            return views
+        }.getOrElse {
+            WidgetSnapshot(headline = "", working = false, active = 0)
         }
+    }
 
-        private fun surfaceColor(context: Context, night: Boolean): Int {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                return context.getColor(
-                    if (night) android.R.color.system_neutral1_900 else android.R.color.system_neutral1_50,
+    private fun readable(text: String): String {
+        return text
+            .replace(Regex("```.*?```", RegexOption.DOT_MATCHES_ALL), " ")
+            .replace(Regex("\\[([^]]*)]\\([^)]*\\)"), "$1")
+            .replace(Regex("[#>*_`~]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .take(240)
+    }
+}
+
+private data class WidgetSnapshot(
+    val headline: String,
+    val working: Boolean,
+    val active: Int,
+)
+
+@Composable
+private fun FocusWidgetContent(snapshot: WidgetSnapshot) {
+    val context = LocalContext.current
+    val size = LocalSize.current
+    val compact = size.height < 160.dp
+    val headline = snapshot.headline.ifBlank { context.getString(R.string.widget_idle) }
+    val status = when {
+        snapshot.working -> context.getString(R.string.widget_status_busy)
+        snapshot.active > 0 -> context.resources.getQuantityString(
+            R.plurals.widget_tasks_running,
+            snapshot.active,
+            snapshot.active,
+        )
+        else -> context.getString(R.string.widget_status_idle)
+    }
+    val active = snapshot.working || snapshot.active > 0
+    Scaffold(
+        modifier = GlanceModifier.clickable(actionStartActivity<AssistantEntryActivity>()),
+        titleBar = {
+            Row(
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, top = if (compact) 8.dp else 12.dp, end = 16.dp),
+                verticalAlignment = Alignment.Vertical.CenterVertically,
+            ) {
+                Box(
+                    modifier = GlanceModifier
+                        .size(if (compact) 28.dp else 32.dp)
+                        .background(GlanceTheme.colors.primaryContainer)
+                        .cornerRadius(if (compact) 14.dp else 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(
+                        provider = ImageProvider(NotifyR.drawable.ic_notification_mascot),
+                        contentDescription = null,
+                        modifier = GlanceModifier.size(if (compact) 19.dp else 22.dp),
+                        colorFilter = ColorFilter.tint(GlanceTheme.colors.onPrimaryContainer),
+                    )
+                }
+                Text(
+                    text = context.getString(R.string.widget_title),
+                    modifier = GlanceModifier.padding(start = 10.dp),
+                    style = TextStyle(
+                        color = GlanceTheme.colors.onSurface,
+                        fontSize = if (compact) 14.sp else 16.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    maxLines = 1,
+                )
+                Spacer(GlanceModifier.defaultWeight())
+                StatusPill(text = status, active = active)
+            }
+        },
+        horizontalPadding = 16.dp,
+    ) {
+        Column(GlanceModifier.fillMaxSize().padding(top = if (compact) 4.dp else 10.dp)) {
+            Text(
+                text = headline,
+                style = TextStyle(
+                    color = GlanceTheme.colors.onSurface,
+                    fontSize = if (compact) 17.sp else 20.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                maxLines = when {
+                    compact -> 1
+                    size.height < 210.dp -> 2
+                    else -> 3
+                },
+            )
+            Spacer(GlanceModifier.defaultWeight())
+            Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
+                FilledButton(
+                    text = context.getString(R.string.widget_ask),
+                    onClick = actionStartActivity<AssistantEntryActivity>(),
+                )
+                Spacer(GlanceModifier.width(8.dp))
+                OutlineButton(
+                    text = context.getString(R.string.widget_main),
+                    contentColor = GlanceTheme.colors.primary,
+                    onClick = actionStartActivity<MainActivity>(),
                 )
             }
-            return if (night) 0xFF1A1C19.toInt() else 0xFFFBF8F2.toInt()
+            Spacer(GlanceModifier.size(if (compact) 6.dp else 12.dp))
         }
+    }
+}
 
-        private fun accentColor(context: Context): Int {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                return context.getColor(android.R.color.system_accent1_500)
-            }
-            return 0xFF6750A4.toInt()
-        }
-
-        private fun background(color: Int): Bitmap {
-            val bitmap = Bitmap.createBitmap(720, 360, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
-            canvas.drawRoundRect(RectF(0f, 0f, 720f, 360f), 48f, 48f, paint)
-            return bitmap
-        }
+@Composable
+private fun StatusPill(text: String, active: Boolean) {
+    val background = if (active) {
+        GlanceTheme.colors.tertiaryContainer
+    } else {
+        GlanceTheme.colors.surface
+    }
+    val content = if (active) {
+        GlanceTheme.colors.onTertiaryContainer
+    } else {
+        GlanceTheme.colors.onSurfaceVariant
+    }
+    val dot = if (active) {
+        GlanceTheme.colors.tertiary
+    } else {
+        GlanceTheme.colors.outline
+    }
+    Row(
+        modifier = GlanceModifier
+            .background(background)
+            .cornerRadius(12.dp)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.Vertical.CenterVertically,
+    ) {
+        Box(
+            modifier = GlanceModifier
+                .size(6.dp)
+                .background(dot)
+                .cornerRadius(3.dp),
+        ) {}
+        Text(
+            text = text,
+            modifier = GlanceModifier.padding(start = 5.dp),
+            style = TextStyle(
+                color = content,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            maxLines = 1,
+        )
     }
 }

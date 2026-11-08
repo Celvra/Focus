@@ -1,7 +1,9 @@
 package fan.x0.focus.core.designsystem.theme
 
+import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -19,18 +21,22 @@ import fan.x0.focus.core.designsystem.components.LocalFocusHaptics
 val LocalFocusTypography = staticCompositionLocalOf { FocusTypography() }
 val LocalFocusMotion = staticCompositionLocalOf { FocusMotionDefaults }
 
+fun focusColorScheme(context: Context, dark: Boolean): ColorScheme {
+    return when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dark -> dynamicDarkColorScheme(context)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> dynamicLightColorScheme(context)
+        dark -> FallbackDarkScheme
+        else -> FallbackLightScheme
+    }
+}
+
 @Composable
 fun FocusTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val scheme = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && darkTheme -> dynamicDarkColorScheme(context)
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> dynamicLightColorScheme(context)
-        darkTheme -> FallbackDarkScheme
-        else -> FallbackLightScheme
-    }
+    val scheme = focusColorScheme(context, darkTheme)
     val typography = FocusTypography()
     val hapticFeedback = LocalHapticFeedback.current
     val haptics = remember(hapticFeedback) { FocusHaptics(hapticFeedback) }

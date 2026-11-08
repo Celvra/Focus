@@ -6,11 +6,12 @@
     <string name="widget_idle">问点什么</string>
     <string name="widget_ask">问 Focus</string>
     <string name="widget_main">主会话</string>
-    <string name="widget_working">Router 正在处理</string>
     <string name="widget_description">在桌面直接问 Focus</string>
-    <plurals name="widget_side_running">
-        <item quantity="one">%1$d 个旁聊运行中</item>
-        <item quantity="other">%1$d 个旁聊运行中</item>
+    <string name="widget_status_idle">空闲</string>
+    <string name="widget_status_busy">处理中</string>
+    <plurals name="widget_tasks_running">
+        <item quantity="one">%1$d 个任务</item>
+        <item quantity="other">%1$d 个任务</item>
     </plurals>
     <string name="notification_channel_reminders">提醒</string>
     <string name="notification_channel_chat_turns">回复</string>

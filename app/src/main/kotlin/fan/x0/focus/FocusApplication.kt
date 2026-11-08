@@ -3,11 +3,12 @@ package fan.x0.focus
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import androidx.glance.appwidget.updateAll
 import fan.x0.focus.app.AndroidMessageNotifier
 import fan.x0.focus.app.AppModule
 import fan.x0.focus.app.AppPresenceCallbacks
 import fan.x0.focus.app.ChatTurnService
-import fan.x0.focus.app.FocusWidgetProvider
+import fan.x0.focus.app.FocusWidget
 import fan.x0.focus.app.ImGatewayService
 import fan.x0.focus.core.network.NetworkModule
 import fan.x0.focus.core.notify.AppPresence
@@ -46,9 +47,11 @@ import fan.x0.focus.feature.plugin.PluginFeatureModule
 import fan.x0.focus.feature.today.TodayModule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -130,6 +133,7 @@ class FocusApplication : Application() {
         )
     }
 
+    @OptIn(FlowPreview::class)
     private suspend fun bootstrap() {
         val koin = KoinPlatform.getKoin()
         koin.get<AgentRuntime>().start()
@@ -142,8 +146,8 @@ class FocusApplication : Application() {
         koin.get<PluginManager>().loadAll()
         koin.get<AssistantEventSink>().emit("app.start")
         scope.launch {
-            koin.get<ChatStore>().changes.collect {
-                FocusWidgetProvider.updateAll(this@FocusApplication)
+            koin.get<ChatStore>().changes.debounce(500).collect {
+                FocusWidget().updateAll(this@FocusApplication)
             }
         }
         scope.launch {
