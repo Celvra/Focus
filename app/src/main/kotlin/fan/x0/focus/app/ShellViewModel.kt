@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import fan.x0.focus.data.assistant.ChatStore
 import fan.x0.focus.data.assistant.ChatSwitcher
 import fan.x0.focus.data.assistant.Conversation
+import fan.x0.focus.data.assistant.ConversationOrigin
 import fan.x0.focus.data.assistant.SideChatManager
 import fan.x0.focus.data.assistant.WorkspaceStore
 import fan.x0.focus.data.assistant.sideChatRank
@@ -108,7 +109,10 @@ class ShellViewModel(
         val conversations = chats.conversations()
             .filter { it.id != ONBOARDING_CHAT && !it.archived }
         val sides = chats.sideChats()
-            .filter { it.id != ONBOARDING_CHAT && !it.archived && it.title.isNotBlank() }
+            .filter {
+                it.id != ONBOARDING_CHAT && !it.archived && it.title.isNotBlank() &&
+                    it.origin != ConversationOrigin.Im
+            }
             .sortedWith(compareBy({ it.taskStatus.sideChatRank() }, { -it.updatedAt }))
         val archived = chats.conversations(archived = true)
             .filter { it.id != ONBOARDING_CHAT && it.archived }
