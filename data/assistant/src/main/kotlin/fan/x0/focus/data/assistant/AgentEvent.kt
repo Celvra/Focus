@@ -139,6 +139,7 @@ data class AgentEvent(
                 put("title", title)
                 put("summary", summary)
                 put("failed", failed)
+                put("turn_id", turnId)
             }.toString(),
             dedupeKey = "side-result:$sideChatId:$turnId",
         )

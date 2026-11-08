@@ -69,7 +69,8 @@ class AgentEventDispatcher(
         }
         if (turns.isRunning(main.id)) return
         if (!events.claim(event.id)) return
-        val label = "side_result:${event.sideChatId()}"
+        val turnId = event.payloadObject()["turn_id"].stringValue()
+        val label = "side_result:${event.sideChatId()}:$turnId"
         val existing = chats.messages(main.id, limit = 20).any { it.label == label }
         if (!existing) {
             chats.append(
