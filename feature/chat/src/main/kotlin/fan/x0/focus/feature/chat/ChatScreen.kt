@@ -268,7 +268,7 @@ fun ChatScreen(
             topBar = {
                 FocusCompactTopBar(
                     title = when {
-                        state.isMain -> stringResource(R.string.chat_main_title)
+                        state.isMain -> state.title.ifBlank { stringResource(R.string.chat_main_title) }
                         state.isSide && state.title.isNotBlank() -> stringResource(
                             R.string.chat_side_title,
                             state.title,
@@ -489,6 +489,7 @@ fun ChatScreen(
             onOpen = { onAction(ChatAction.OpenSideChat(it)) },
             onStop = { onAction(ChatAction.StopSideChat(it)) },
             onRetry = { onAction(ChatAction.RetrySideChat(it)) },
+            onPromote = { onAction(ChatAction.PromoteSideChat(it)) },
         )
         state.edit?.let { edit ->
             MessageEditSheet(

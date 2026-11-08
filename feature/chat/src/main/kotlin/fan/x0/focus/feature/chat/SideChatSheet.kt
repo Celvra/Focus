@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -42,6 +43,7 @@ internal fun SideChatSheet(
     onOpen: (String) -> Unit,
     onStop: (String) -> Unit,
     onRetry: (String) -> Unit,
+    onPromote: (String) -> Unit,
 ) {
     if (!panel.open) return
     ModalBottomSheet(
@@ -87,6 +89,7 @@ internal fun SideChatSheet(
                             onOpen = { onOpen(row.id) },
                             onStop = { onStop(row.id) },
                             onRetry = { onRetry(row.id) },
+                            onPromote = { onPromote(row.id) },
                         )
                     }
                 }
@@ -101,6 +104,7 @@ private fun SideChatRow(
     onOpen: () -> Unit,
     onStop: () -> Unit,
     onRetry: () -> Unit,
+    onPromote: () -> Unit,
 ) {
     Surface(
         onClick = hapticTap(onOpen),
@@ -173,21 +177,31 @@ private fun SideChatRow(
                     )
                 }
             }
-            when {
-                row.status.active -> TextButton(onClick = hapticTap(onStop)) {
-                    Text(stringResource(R.string.chat_side_panel_stop))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = hapticTap(onPromote)) {
+                    Icon(
+                        imageVector = FocusIcons.Assistant,
+                        contentDescription = stringResource(R.string.chat_promote_main),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
-                row.status == TaskStatus.Failed || row.status == TaskStatus.Interrupted -> {
-                    TextButton(onClick = hapticTap(onRetry)) {
-                        Text(stringResource(R.string.chat_side_result_retry))
+                when {
+                    row.status.active -> TextButton(onClick = hapticTap(onStop)) {
+                        Text(stringResource(R.string.chat_side_panel_stop))
                     }
+                    row.status == TaskStatus.Failed || row.status == TaskStatus.Interrupted -> {
+                        TextButton(onClick = hapticTap(onRetry)) {
+                            Text(stringResource(R.string.chat_side_result_retry))
+                        }
+                    }
+                    else -> Icon(
+                        imageVector = FocusIcons.Chevron,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
-                else -> Icon(
-                    imageVector = FocusIcons.Chevron,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
             }
         }
     }

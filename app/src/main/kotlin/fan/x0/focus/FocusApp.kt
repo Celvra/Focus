@@ -231,6 +231,10 @@ private fun MainShell() {
                         },
                         onArchiveConversation = shell::archiveConversation,
                         onDeleteConversation = shell::deleteConversation,
+                        onPromoteConversation = { id ->
+                            shell.promoteConversation(id)
+                            navigate(FocusRoute.Chat)
+                        },
                         controlledOnly = deviceRole == DeviceRole.Controlled,
                         onExit = { activity?.finish() },
                     )
@@ -278,6 +282,7 @@ private fun ShellContent(
     onOpenArchivedConversation: (String) -> Unit,
     onArchiveConversation: (String) -> Unit,
     onDeleteConversation: (String) -> Unit,
+    onPromoteConversation: (String) -> Unit,
     controlledOnly: Boolean,
     onExit: () -> Unit,
 ) {
@@ -356,6 +361,7 @@ private fun ShellContent(
                         onOpenArchived = onOpenArchivedConversation,
                         onArchive = onArchiveConversation,
                         onDelete = onDeleteConversation,
+                        onPromote = onPromoteConversation,
                     )
                 }
                 is FocusRoute.PluginPage -> NavEntry(key = route, contentKey = route.contentKey) {

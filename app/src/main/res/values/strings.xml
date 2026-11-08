@@ -51,6 +51,7 @@
     <string name="history_empty_body">Your conversations will appear here.</string>
     <string name="history_archived_empty">No archived chats.</string>
     <string name="history_archived_empty_body">Chats you archive will appear here.</string>
+    <string name="history_promote">Make main session</string>
     <string name="history_archive">Archive chat</string>
     <string name="history_delete">Delete chat</string>
     <string name="history_delete_title">Delete this chat?</string>

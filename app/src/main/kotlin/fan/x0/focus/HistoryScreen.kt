@@ -51,6 +51,7 @@ fun HistoryRoute(
     onOpenArchived: (String) -> Unit,
     onArchive: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onPromote: (String) -> Unit,
 ) {
     var section by rememberSaveable { mutableStateOf(0) }
     var deleteTarget by remember { mutableStateOf<Conversation?>(null) }
@@ -86,6 +87,7 @@ fun HistoryRoute(
                         onOpen = { onOpen(it.id) },
                         onArchive = { onArchive(it.id) },
                         onDelete = { deleteTarget = it },
+                        onPromote = { onPromote(it.id) },
                     )
                 } else {
                     ConversationList(
@@ -97,6 +99,7 @@ fun HistoryRoute(
                         onOpen = { onOpenArchived(it.id) },
                         onArchive = {},
                         onDelete = { deleteTarget = it },
+                        onPromote = {},
                     )
                 }
             }
@@ -141,6 +144,7 @@ private fun ConversationList(
     onOpen: (Conversation) -> Unit,
     onArchive: (Conversation) -> Unit,
     onDelete: (Conversation) -> Unit,
+    onPromote: (Conversation) -> Unit,
 ) {
     if (conversations.isEmpty()) {
         Box(
@@ -169,6 +173,7 @@ private fun ConversationList(
                 onOpen = { onOpen(conversation) },
                 onArchive = { onArchive(conversation) },
                 onDelete = { onDelete(conversation) },
+                onPromote = { onPromote(conversation) },
                 modifier = Modifier.animateItem(),
             )
         }
@@ -182,6 +187,7 @@ private fun ConversationCard(
     onOpen: () -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
+    onPromote: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -223,13 +229,23 @@ private fun ConversationCard(
                         )
                     }
                 } else {
-                    IconButton(onClick = hapticTap(onArchive)) {
-                        Icon(
-                            imageVector = FocusIcons.Archive,
-                            contentDescription = stringResource(R.string.history_archive),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
+                    Row {
+                        IconButton(onClick = hapticTap(onPromote)) {
+                            Icon(
+                                imageVector = FocusIcons.Assistant,
+                                contentDescription = stringResource(R.string.history_promote),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        IconButton(onClick = hapticTap(onArchive)) {
+                            Icon(
+                                imageVector = FocusIcons.Archive,
+                                contentDescription = stringResource(R.string.history_archive),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
             },

@@ -50,6 +50,7 @@
     <string name="history_empty_body">对话会出现在这里。</string>
     <string name="history_archived_empty">没有已归档对话。</string>
     <string name="history_archived_empty_body">归档的对话会出现在这里。</string>
+    <string name="history_promote">设为主会话</string>
     <string name="history_archive">归档对话</string>
     <string name="history_delete">删除对话</string>
     <string name="history_delete_title">删除这个对话？</string>

@@ -311,6 +311,7 @@ class ChatViewModel(
             is ChatAction.OpenSideChat -> openSideChat(action.id)
             is ChatAction.StopSideChat -> stopSideChat(action.id)
             is ChatAction.RetrySideChat -> retrySideChat(action.id)
+            is ChatAction.PromoteSideChat -> promoteSideChat(action.id)
             ChatAction.BackToMain -> backToMain()
         }
     }
@@ -1345,6 +1346,16 @@ class ChatViewModel(
         viewModelScope.launch {
             sideChats.retry(id)
             refreshSidePanel()
+        }
+    }
+
+    private fun promoteSideChat(id: String) {
+        viewModelScope.launch {
+            if (chats.promoteToMain(id)) {
+                updateState { copy(sidePanel = sidePanel.copy(open = false)) }
+                refreshSidePanel()
+                switchTo(id)
+            }
         }
     }
 

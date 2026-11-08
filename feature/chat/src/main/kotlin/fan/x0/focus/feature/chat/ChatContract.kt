@@ -461,6 +461,7 @@ sealed interface ChatAction : UiAction {
     data class OpenSideChat(val id: String) : ChatAction
     data class StopSideChat(val id: String) : ChatAction
     data class RetrySideChat(val id: String) : ChatAction
+    data class PromoteSideChat(val id: String) : ChatAction
     data object BackToMain : ChatAction
 }
 
