@@ -818,7 +818,7 @@ private fun ChatThread(
                         }
                         is ChatEntry.Trace -> FocusTraceCard(
                             steps = entry.steps.map { it.toFocusStep() },
-                            onOpen = {},
+                            onOpen = null,
                         )
                         is ChatEntry.Activity -> FocusActivity(
                             reasoning = entry.reasoning,
@@ -826,7 +826,7 @@ private fun ChatThread(
                             reasoningMs = entry.reasoningMs,
                             reasoningStartedAt = entry.reasoningStartedAt,
                             steps = entry.steps.map { it.toFocusStep() },
-                            onOpen = {},
+                            onOpen = null,
                             live = entry.live,
                         )
                         is ChatEntry.Approval -> FocusApprovalCard(
