@@ -22,6 +22,7 @@ val splitAbi = providers.gradleProperty("focus.splitAbi").orNull?.toBoolean() ?:
 android {
     namespace = "fan.x0.focus"
     compileSdk = 37
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "fan.x0.focus"

@@ -20,7 +20,7 @@ jobs:
           distribution: zulu
       - uses: android-actions/setup-android@v4
       - name: Install Android platform
-        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
+        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0" "ndk;28.2.13676358"
       - uses: gradle/actions/setup-gradle@v6
       - name: Assemble debug
         run: ./gradlew :app:assembleDebug -Pfocus.abis=all --console=plain -Pkotlin.daemon.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=1024m"
