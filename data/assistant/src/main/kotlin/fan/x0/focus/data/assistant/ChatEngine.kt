@@ -289,6 +289,7 @@ class ChatEngine(
                 }
 
                 message.toolCalls.forEach { call ->
+                    if (call.name == ToolCatalog.STAY_SILENT) return@forEach
                     emit(
                         ChatEvent.ToolStarted(
                             label = tools.label(call.name),
