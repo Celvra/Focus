@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -42,7 +43,25 @@ jobs:
           FOCUS_KEYSTORE_PASSWORD: ${{ secrets.FOCUS_KEYSTORE_PASSWORD }}
           FOCUS_KEY_ALIAS: ${{ secrets.FOCUS_KEY_ALIAS }}
           FOCUS_KEY_PASSWORD: ${{ secrets.FOCUS_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease -Pfocus.abis=all -Pfocus.splitAbi=true --console=plain -Dorg.gradle.jvmargs="-Xmx6144m -XX:MaxMetaspaceSize=1024m" -Pkotlin.daemon.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=1024m"
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleRelease -Pfocus.abis=all -Pfocus.splitAbi=true --console=plain -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" -Pkotlin.daemon.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" 2>&1 | tee gradle-release.log
+      - name: Report build failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f gradle-release.log ]; then
+            exit 0
+          fi
+          {
+            echo "Workflow: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo '```'
+            tail -200 gradle-release.log
+            echo '```'
+          } > /tmp/release-failure.md
+          gh issue create --title "Release build failed: $GITHUB_REF_NAME" --body-file /tmp/release-failure.md
       - name: Collect apk
         run: |
           mkdir -p dist
