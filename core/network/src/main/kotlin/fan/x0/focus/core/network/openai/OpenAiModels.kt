@@ -161,7 +161,7 @@ data class ChatMessageDto(
         name: String? = null,
     ) : this(
         role = role,
-        content = if (content.isEmpty()) null else MessageContent.Text(content),
+        content = MessageContent.Text(content),
         reasoningContent = reasoningContent,
         reasoning = null,
         toolCalls = toolCalls,

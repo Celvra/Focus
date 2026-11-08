@@ -262,7 +262,7 @@ class CrewEngine(
                 if (result.toolCalls.isEmpty()) break
                 conversation += ChatMessageDto(
                     role = "assistant",
-                    content = finalText.ifBlank { null }?.let(MessageContent::Text),
+                    content = MessageContent.Text(finalText),
                     toolCalls = result.toolCalls.map { call ->
                         ToolCallDto(
                             id = call.id,

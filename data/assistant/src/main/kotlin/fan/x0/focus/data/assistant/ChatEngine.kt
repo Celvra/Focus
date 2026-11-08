@@ -772,7 +772,7 @@ class ChatEngine(
                 )
                 ChatRole.Assistant -> ChatMessageDto(
                     role = "assistant",
-                    content = message.content.ifBlank { null }?.let(MessageContent::Text),
+                    content = MessageContent.Text(message.content),
                     reasoningContent = message.reasoning.ifBlank { null },
                     toolCalls = message.toolCalls.map { call ->
                         ToolCallDto(

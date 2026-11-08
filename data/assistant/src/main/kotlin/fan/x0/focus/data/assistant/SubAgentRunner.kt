@@ -120,9 +120,7 @@ class SubAgentRunner(
                     if (message.toolCalls.isEmpty()) return@withTimeout
                     messages += ChatMessageDto(
                         role = "assistant",
-                        content = message.text.ifBlank { null }?.let {
-                            fan.x0.focus.core.network.openai.MessageContent.Text(it)
-                        },
+                        content = fan.x0.focus.core.network.openai.MessageContent.Text(message.text),
                         toolCalls = message.toolCalls.map { call ->
                             ToolCallDto(
                                 id = call.id,
