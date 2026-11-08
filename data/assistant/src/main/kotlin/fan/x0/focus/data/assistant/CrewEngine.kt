@@ -682,7 +682,6 @@ class CrewEngine(
             "propose_plan",
             "react_to_message",
             "rename_conversation",
-            "spawn_agent",
             "switch_model",
             "save_provider",
             "test_provider",

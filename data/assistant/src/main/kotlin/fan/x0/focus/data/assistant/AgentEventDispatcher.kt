@@ -143,7 +143,7 @@ class AgentEventDispatcher(
         }
         val conversation = chats.conversation(id)
         if (conversation == null || conversation.archived) {
-            appendMainNotice(event)
+            events.complete(event.id)
             return
         }
         if (conversation.kind == ConversationKind.Side) {

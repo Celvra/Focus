@@ -780,7 +780,7 @@ object ToolCatalog {
             name = START_SIDE_CHAT,
             description = "Start a side chat for work that can run in parallel. Pass the user's request mostly as written. " +
                 "The side chat gets the current user message attachments. It reports back when finished.",
-            kind = ToolKind.Read,
+            kind = ToolKind.Write,
             parameters = schema(required = listOf("title", "task")) {
                 put("title", string("Short title, at most 30 characters"))
                 put("task", string("The user's request. Add only context the side chat cannot discover."))
@@ -808,7 +808,7 @@ object ToolCatalog {
         ToolSpec(
             name = STOP_SIDE_CHAT,
             description = "Stop a running side chat.",
-            kind = ToolKind.Read,
+            kind = ToolKind.Write,
             parameters = schema(required = listOf("side_chat_id")) {
                 put("side_chat_id", string("Side chat id"))
                 put("reason", string("Short reason, optional"))

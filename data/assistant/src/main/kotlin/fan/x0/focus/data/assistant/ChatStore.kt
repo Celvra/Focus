@@ -113,6 +113,7 @@ class ChatStore(
                 put("kind", ConversationKind.Main.wire)
                 put("parent_id", "")
                 put("archived", 0)
+                put("result_seen", 1)
             }
             db.update("conversations", promote, "id = ?", arrayOf(id))
             db.setTransactionSuccessful()
