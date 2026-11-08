@@ -28,16 +28,20 @@ class ApkDownloaderTest {
         try {
             val target = File(directory, "focus.apk")
             val downloader = ApkDownloader(client)
-            server.failOneRange.set(true)
+            val parts = File(directory, "focus.apk.parts")
+            assertTrue(parts.mkdirs())
+            File(parts, "meta").writeText("${server.url}\n${payload.size}\n2")
+            File(parts, "0.part").writeBytes(payload.copyOfRange(0, 1024 * 1024))
+
+            server.failNextRange.set(true)
             val first = runCatching {
                 downloader.download(server.url, target, payload.size.toLong()) { _, _ -> }
             }
             assertTrue(first.isFailure)
-            val parts = File(directory, "focus.apk.parts")
             assertTrue(parts.isDirectory)
             assertTrue(parts.listFiles().orEmpty().any { it.name.endsWith(".part") && it.length() > 0 })
 
-            server.failOneRange.set(false)
+            server.failNextRange.set(false)
             downloader.download(server.url, target, payload.size.toLong()) { _, _ -> }
 
             assertTrue(target.readBytes().contentEquals(payload))
@@ -62,7 +66,7 @@ class ApkDownloaderTest {
 private class RangeServer(private val payload: ByteArray) {
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
     val rangeRequests = AtomicInteger()
-    val failOneRange = AtomicBoolean(false)
+    val failNextRange = AtomicBoolean(false)
     val url: String get() = "http://127.0.0.1:${server.address.port}/focus.apk"
 
     init {
@@ -100,16 +104,14 @@ private class RangeServer(private val payload: ByteArray) {
             }
             val (start, end) = bounds
             val length = end - start + 1
+            if (failNextRange.compareAndSet(true, false)) {
+                exchange.sendResponseHeaders(500, -1)
+                return
+            }
             exchange.responseHeaders.add("Accept-Ranges", "bytes")
             exchange.responseHeaders.add("Content-Range", "bytes $start-$end/${payload.size}")
             exchange.sendResponseHeaders(206, length.toLong())
-            val output = exchange.responseBody
-            if (failOneRange.compareAndSet(true, false)) {
-                output.write(payload, start, length / 2)
-                output.flush()
-                return
-            }
-            output.write(payload, start, length)
+            exchange.responseBody.write(payload, start, length)
         } catch (_: IOException) {
         } finally {
             exchange.close()
