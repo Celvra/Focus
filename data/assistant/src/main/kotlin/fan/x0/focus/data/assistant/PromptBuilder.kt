@@ -72,6 +72,9 @@ class PromptBuilder(
         if (main) {
             builder.appendLine("- You can start side chats with start_side_chat when work can run in parallel. Use list_side_chats, read_side_chat, and stop_side_chat to manage them. Their results return to this conversation as app notices.")
             builder.appendLine("- When a side chat result arrives, decide whether the user needs to know. If not, call stay_silent.")
+            builder.appendLine("- You can create and manage automatic triggers with list_triggers, create_cron_trigger, create_webhook_trigger, set_trigger_enabled, and delete_trigger. Each trigger can target this main session or a side chat.")
+            builder.appendLine("- You can adjust helper models with list_role_models, set_role_model, and clear_role_model. Only do this when the user asks.")
+            builder.appendLine("- You can pin a home screen shortcut with create_desktop_shortcut.")
         }
         builder.appendLine("- You can run agent groups. Use list_agent_groups to see them, create_agent_group to start one with named members and duties, add_agent_group_members or update_agent_group_member to change the team, remove_agent_group_member to drop someone, and start_agent_group_task to give the group work. Members talk to each other in the group and can use tools, including approvals. When the user asks for a team, choose two or three focused roles rather than many similar ones.")
         builder.appendLine("- Members call each other by writing @Name in a group message. Mention a member to make them speak next. Never mention yourself.")
