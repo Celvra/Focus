@@ -104,16 +104,21 @@ class ChatStore(
         val target = queryConversation("id = ?", arrayOf(id)) ?: return@withContext false
         if (target.archived || target.kind == ConversationKind.Main) return@withContext false
         val previous = queryConversation("kind = 'main'")
+        val now = System.currentTimeMillis()
         val db = database.writableDatabase
         db.beginTransaction()
         try {
-            val demote = ContentValues().apply { put("kind", ConversationKind.Side.wire) }
+            val demote = ContentValues().apply {
+                put("kind", ConversationKind.Side.wire)
+                put("updated_at", now)
+            }
             db.update("conversations", demote, "kind = 'main'", null)
             val promote = ContentValues().apply {
                 put("kind", ConversationKind.Main.wire)
                 put("parent_id", "")
                 put("archived", 0)
                 put("result_seen", 1)
+                put("updated_at", now)
             }
             db.update("conversations", promote, "id = ?", arrayOf(id))
             db.setTransactionSuccessful()

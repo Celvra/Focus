@@ -355,7 +355,7 @@ class SideChatManager(
                 mainId = main.id,
                 sideChatId = conversation.id,
                 title = conversation.title.ifBlank { "旁聊" },
-                summary = summary,
+                summary = summary.take(4_000),
                 failed = failed,
                 turnId = turnId,
             ),

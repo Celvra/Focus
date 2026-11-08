@@ -39,6 +39,7 @@ import fan.x0.focus.data.assistant.MessageStats
 import fan.x0.focus.data.assistant.MentionItemUi
 import fan.x0.focus.data.assistant.MentionKind
 import fan.x0.focus.data.assistant.MentionText
+import fan.x0.focus.data.assistant.MainSessionStore
 import fan.x0.focus.data.assistant.MentionUi
 import fan.x0.focus.data.assistant.modelOptions
 import fan.x0.focus.data.assistant.SideChatManager
@@ -99,6 +100,7 @@ class ChatViewModel(
     private val fileMentions: FileMentionService,
     private val imChats: ImChatStore,
     private val sideChats: SideChatManager,
+    private val mainSession: MainSessionStore,
 ) : BaseViewModel<ChatAction, ChatUiState, ChatEffect>(ChatUiState()) {
 
     private var loadJob: Job? = null
@@ -227,6 +229,14 @@ class ChatViewModel(
                         sideUnreadCount = counts.unread,
                     )
                 }
+            }
+        }
+        viewModelScope.launch {
+            mainSession.id.collect { id ->
+                val conversationId = currentState.conversationId
+                if (conversationId.isBlank()) return@collect
+                val kind = if (conversationId == id) ConversationKind.Main else ConversationKind.Side
+                if (currentState.kind != kind) updateState { copy(kind = kind) }
             }
         }
     }
