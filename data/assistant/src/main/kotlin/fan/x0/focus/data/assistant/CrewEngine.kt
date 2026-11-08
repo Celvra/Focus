@@ -689,6 +689,20 @@ class CrewEngine(
             "list_providers",
             "set_assistant_name",
             "complete_onboarding",
+            ToolCatalog.START_SIDE_CHAT,
+            ToolCatalog.LIST_SIDE_CHATS,
+            ToolCatalog.READ_SIDE_CHAT,
+            ToolCatalog.STOP_SIDE_CHAT,
+            ToolCatalog.STAY_SILENT,
+            ToolCatalog.LIST_ROLE_MODELS,
+            ToolCatalog.SET_ROLE_MODEL,
+            ToolCatalog.CLEAR_ROLE_MODEL,
+            ToolCatalog.LIST_TRIGGERS,
+            ToolCatalog.CREATE_CRON_TRIGGER,
+            ToolCatalog.CREATE_WEBHOOK_TRIGGER,
+            ToolCatalog.SET_TRIGGER_ENABLED,
+            ToolCatalog.DELETE_TRIGGER,
+            ToolCatalog.CREATE_DESKTOP_SHORTCUT,
         )
     }
 }
