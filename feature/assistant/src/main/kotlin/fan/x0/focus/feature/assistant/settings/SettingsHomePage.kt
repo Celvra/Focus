@@ -46,8 +46,8 @@ internal fun SettingsHomePage(onOpen: (SettingsDestination) -> Unit) {
                 val chatBody = stringResource(R.string.settings_page_chat_agent_body)
                 val modelsTitle = stringResource(R.string.settings_page_models)
                 val modelsBody = stringResource(R.string.settings_page_models_body)
-                val superTitle = stringResource(R.string.settings_page_super_agent)
-                val superBody = stringResource(R.string.settings_page_super_agent_body)
+                val superTitle = stringResource(R.string.settings_page_automation)
+                val superBody = stringResource(R.string.settings_page_automation_body)
                 val toolsTitle = stringResource(R.string.settings_page_tools)
                 val toolsBody = stringResource(R.string.settings_page_tools_body)
                 val pluginsTitle = stringResource(R.string.settings_page_plugins)
@@ -89,7 +89,7 @@ internal fun SettingsHomePage(onOpen: (SettingsDestination) -> Unit) {
                         title = superTitle,
                         body = superBody,
                         icon = FocusIcons.Bolt,
-                        onClick = { onOpen(SettingsDestination.SuperAgent) },
+                        onClick = { onOpen(SettingsDestination.Automation) },
                     )
                     pageItem(
                         title = toolsTitle,

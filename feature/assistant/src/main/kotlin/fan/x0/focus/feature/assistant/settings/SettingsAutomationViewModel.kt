@@ -34,7 +34,7 @@ data class TriggerDraftUi(
     val target: AgentTriggerTarget = AgentTriggerTarget.Side,
 )
 
-data class SuperAgentUiState(
+data class AutomationUiState(
     val loading: Boolean = true,
     val sources: List<AgentSourceRowUi> = emptyList(),
     val maxConcurrent: Int = AgentEventConfig.DEFAULT_MAX_CONCURRENT,
@@ -49,34 +49,34 @@ data class SuperAgentUiState(
     val triggerError: String? = null,
 ) : fan.x0.focus.core.mvi.UiState
 
-sealed interface SuperAgentAction : fan.x0.focus.core.mvi.UiAction {
-    data class ToggleSource(val source: AgentEventSource, val enabled: Boolean) : SuperAgentAction
-    data class SetConcurrent(val value: Int) : SuperAgentAction
-    data class ToggleWatchdog(val enabled: Boolean) : SuperAgentAction
-    data class SetRateLimit(val value: Int) : SuperAgentAction
-    data class ToggleToday(val enabled: Boolean) : SuperAgentAction
-    data object NewTrigger : SuperAgentAction
-    data class EditTrigger(val id: String) : SuperAgentAction
-    data object DismissTrigger : SuperAgentAction
-    data class TriggerDraftChanged(val draft: TriggerDraftUi) : SuperAgentAction
-    data object SaveTrigger : SuperAgentAction
-    data class DeleteTrigger(val id: String) : SuperAgentAction
-    data class ToggleTrigger(val id: String, val enabled: Boolean) : SuperAgentAction
+sealed interface AutomationAction : fan.x0.focus.core.mvi.UiAction {
+    data class ToggleSource(val source: AgentEventSource, val enabled: Boolean) : AutomationAction
+    data class SetConcurrent(val value: Int) : AutomationAction
+    data class ToggleWatchdog(val enabled: Boolean) : AutomationAction
+    data class SetRateLimit(val value: Int) : AutomationAction
+    data class ToggleToday(val enabled: Boolean) : AutomationAction
+    data object NewTrigger : AutomationAction
+    data class EditTrigger(val id: String) : AutomationAction
+    data object DismissTrigger : AutomationAction
+    data class TriggerDraftChanged(val draft: TriggerDraftUi) : AutomationAction
+    data object SaveTrigger : AutomationAction
+    data class DeleteTrigger(val id: String) : AutomationAction
+    data class ToggleTrigger(val id: String, val enabled: Boolean) : AutomationAction
 }
 
-sealed interface SuperAgentEffect : fan.x0.focus.core.mvi.UiEffect {
-    data object Saved : SuperAgentEffect
-    data object TriggerDeleted : SuperAgentEffect
+sealed interface AutomationEffect : fan.x0.focus.core.mvi.UiEffect {
+    data object Saved : AutomationEffect
+    data object TriggerDeleted : AutomationEffect
 }
 
 @KoinViewModel
-class SuperAgentViewModel(
+class AutomationViewModel(
     private val settings: AgentEventSettings,
     private val dataUsage: DataUsageStore,
     private val triggerStore: AgentTriggerStore,
     private val triggerScheduler: AgentTriggerScheduler,
     private val webhook: AgentWebhookServer,
-) : BaseViewModel<SuperAgentAction, SuperAgentUiState, SuperAgentEffect>(SuperAgentUiState()) {
+) : BaseViewModel<AutomationAction, AutomationUiState, AutomationEffect>(AutomationUiState()) {
 
     init {
         viewModelScope.launch {
@@ -112,27 +112,27 @@ class SuperAgentViewModel(
         }
     }
 
-    override fun onAction(action: SuperAgentAction) {
+    override fun onAction(action: AutomationAction) {
         when (action) {
-            is SuperAgentAction.ToggleSource -> persist {
+            is AutomationAction.ToggleSource -> persist {
                 settings.setSourceEnabled(action.source, action.enabled)
             }
-            is SuperAgentAction.SetConcurrent -> persist {
+            is AutomationAction.SetConcurrent -> persist {
                 settings.setMaxConcurrentSideChats(action.value)
             }
-            is SuperAgentAction.ToggleWatchdog -> persist {
+            is AutomationAction.ToggleWatchdog -> persist {
                 settings.setWatchdogEnabled(action.enabled)
             }
-            is SuperAgentAction.SetRateLimit -> persist {
+            is AutomationAction.SetRateLimit -> persist {
                 settings.setRateLimit(action.value)
             }
-            is SuperAgentAction.ToggleToday -> persist {
+            is AutomationAction.ToggleToday -> persist {
                 settings.setPostResultsToToday(action.enabled)
             }
-            SuperAgentAction.NewTrigger -> updateState {
+            AutomationAction.NewTrigger -> updateState {
                 copy(triggerDraft = TriggerDraftUi(), triggerError = null)
             }
-            is SuperAgentAction.EditTrigger -> {
+            is AutomationAction.EditTrigger -> {
                 val trigger = currentState.triggers.firstOrNull { it.id == action.id } ?: return
                 updateState {
                     copy(
@@ -149,15 +149,15 @@ class SuperAgentViewModel(
                     )
                 }
             }
-            SuperAgentAction.DismissTrigger -> updateState {
+            AutomationAction.DismissTrigger -> updateState {
                 copy(triggerDraft = null, triggerError = null, triggerSaving = false)
             }
-            is SuperAgentAction.TriggerDraftChanged -> updateState {
+            is AutomationAction.TriggerDraftChanged -> updateState {
                 copy(triggerDraft = action.draft, triggerError = null)
             }
-            SuperAgentAction.SaveTrigger -> saveTrigger()
-            is SuperAgentAction.DeleteTrigger -> deleteTrigger(action.id)
-            is SuperAgentAction.ToggleTrigger -> toggleTrigger(action.id, action.enabled)
+            AutomationAction.SaveTrigger -> saveTrigger()
+            is AutomationAction.DeleteTrigger -> deleteTrigger(action.id)
+            is AutomationAction.ToggleTrigger -> toggleTrigger(action.id, action.enabled)
         }
     }
 
@@ -211,7 +211,7 @@ class SuperAgentViewModel(
                 triggerScheduler.sync(trigger)
             }
             updateState { copy(triggerDraft = null, triggerSaving = false) }
-            sendEffect(SuperAgentEffect.Saved)
+            sendEffect(AutomationEffect.Saved)
         }
     }
 
@@ -220,7 +220,7 @@ class SuperAgentViewModel(
             triggerStore.delete(id)
             triggerScheduler.cancel(id)
             updateState { copy(triggerDraft = null) }
-            sendEffect(SuperAgentEffect.TriggerDeleted)
+            sendEffect(AutomationEffect.TriggerDeleted)
         }
     }
 
@@ -239,7 +239,7 @@ class SuperAgentViewModel(
     private fun persist(block: suspend () -> Unit) {
         launchGuarded(onError = {}) {
             block()
-            sendEffect(SuperAgentEffect.Saved)
+            sendEffect(AutomationEffect.Saved)
         }
     }
 }

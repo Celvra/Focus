@@ -32,7 +32,7 @@ import fan.x0.focus.feature.assistant.settings.SettingsMcpRoute
 import fan.x0.focus.feature.assistant.settings.SettingsModelPickerSheet
 import fan.x0.focus.feature.assistant.settings.SettingsModelsRoute
 import fan.x0.focus.feature.assistant.settings.SettingsNotificationsPage
-import fan.x0.focus.feature.assistant.settings.SettingsSuperAgentRoute
+import fan.x0.focus.feature.assistant.settings.SettingsAutomationRoute
 import fan.x0.focus.feature.assistant.settings.SettingsOverlayPage
 import fan.x0.focus.feature.assistant.settings.SettingsSkillsRoute
 import fan.x0.focus.feature.plugin.SettingsPluginsRoute
@@ -152,7 +152,7 @@ internal fun SettingsScreen(
                         onBack = { backStack.removeLastOrNull() },
                         snackbar = snackbar,
                     )
-                    SettingsDestination.SuperAgent -> SettingsSuperAgentRoute(
+                    SettingsDestination.Automation -> SettingsAutomationRoute(
                         onBack = { backStack.removeLastOrNull() },
                         snackbar = snackbar,
                     )

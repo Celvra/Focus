@@ -61,10 +61,10 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun SettingsSuperAgentRoute(
+fun SettingsAutomationRoute(
     onBack: () -> Unit,
     snackbar: SnackbarHostState,
-    viewModel: SuperAgentViewModel = koinViewModel(),
+    viewModel: AutomationViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     HandleAppErrors(viewModel.errors, snackbar)
@@ -73,8 +73,8 @@ fun SettingsSuperAgentRoute(
     CollectEffect(viewModel.effect) { effect ->
         snackbar.showSnackbar(
             when (effect) {
-                SuperAgentEffect.Saved -> saved
-                SuperAgentEffect.TriggerDeleted -> deleted
+                AutomationEffect.Saved -> saved
+                AutomationEffect.TriggerDeleted -> deleted
             },
         )
     }
@@ -113,7 +113,7 @@ fun SettingsSuperAgentRoute(
 }
 
 @Composable
-private fun HeroCard(state: SuperAgentUiState) {
+private fun HeroCard(state: AutomationUiState) {
     val scheme = MaterialTheme.colorScheme
     val enabled = state.sources.count { it.enabled }
     FocusCard(
@@ -180,8 +180,8 @@ private fun HeroCard(state: SuperAgentUiState) {
 
 @Composable
 private fun TriggerSection(
-    state: SuperAgentUiState,
-    onAction: (SuperAgentAction) -> Unit,
+    state: AutomationUiState,
+    onAction: (AutomationAction) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         FocusSectionHeader(
@@ -204,7 +204,17 @@ private fun TriggerSection(
                         supportingContent = {
                             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(
-                                    text = triggerDetail(trigger, state.webhookBase),
+                                    text = triggerDetail(
+                                        trigger,
+                                        state.webhookBase,
+                                        stringResource(
+                                            if (trigger.target == AgentTriggerTarget.Main) {
+                                                R.string.settings_super_target_main
+                                            } else {
+                                                R.string.settings_super_target_side
+                                            },
+                                        ),
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
@@ -241,11 +251,11 @@ private fun TriggerSection(
                             Switch(
                                 checked = trigger.enabled,
                                 onCheckedChange = {
-                                    onAction(SuperAgentAction.ToggleTrigger(trigger.id, it))
+                                    onAction(AutomationAction.ToggleTrigger(trigger.id, it))
                                 },
                             )
                         },
-                        onClick = { onAction(SuperAgentAction.EditTrigger(trigger.id)) },
+                        onClick = { onAction(AutomationAction.EditTrigger(trigger.id)) },
                     )
                 }
             }
@@ -254,19 +264,17 @@ private fun TriggerSection(
             FocusTonalButton(
                 text = stringResource(R.string.settings_super_trigger_new),
                 icon = FocusIcons.Add,
-                onClick = { onAction(SuperAgentAction.NewTrigger) },
+                onClick = { onAction(AutomationAction.NewTrigger) },
             )
         }
     }
 }
 
 @Composable
-private fun triggerDetail(trigger: AgentTrigger, webhookBase: String): String =
-    if (trigger.kind == AgentTriggerKind.Cron) {
-        trigger.schedule
-    } else {
-        "$webhookBase${trigger.webhookPath}"
-    }
+private fun triggerDetail(trigger: AgentTrigger, webhookBase: String, target: String): String {
+    val where = if (trigger.kind == AgentTriggerKind.Cron) trigger.schedule else "$webhookBase${trigger.webhookPath}"
+    return "$where · $target"
+}
 
 private fun formatTime(epochMs: Long): String =
     DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(epochMs))
@@ -274,8 +282,8 @@ private fun formatTime(epochMs: Long): String =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TriggerEditorSheet(
-    state: SuperAgentUiState,
-    onAction: (SuperAgentAction) -> Unit,
+    state: AutomationUiState,
+    onAction: (AutomationAction) -> Unit,
 ) {
     val draft = state.triggerDraft ?: return
     val cronError = if (draft.kind == AgentTriggerKind.Cron) {
@@ -294,7 +302,7 @@ private fun TriggerEditorSheet(
         }
     }
     ModalBottomSheet(
-        onDismissRequest = { onAction(SuperAgentAction.DismissTrigger) },
+        onDismissRequest = { onAction(AutomationAction.DismissTrigger) },
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
@@ -319,7 +327,7 @@ private fun TriggerEditorSheet(
             FocusChoiceButtons(
                 options = AgentTriggerKind.entries,
                 selected = draft.kind,
-                onSelect = { onAction(SuperAgentAction.TriggerDraftChanged(draft.copy(kind = it))) },
+                onSelect = { onAction(AutomationAction.TriggerDraftChanged(draft.copy(kind = it))) },
                 label = { kind ->
                     stringResource(
                         if (kind == AgentTriggerKind.Cron) {
@@ -332,14 +340,14 @@ private fun TriggerEditorSheet(
             )
             OutlinedTextField(
                 value = draft.name,
-                onValueChange = { onAction(SuperAgentAction.TriggerDraftChanged(draft.copy(name = it))) },
+                onValueChange = { onAction(AutomationAction.TriggerDraftChanged(draft.copy(name = it))) },
                 label = { Text(stringResource(R.string.settings_super_trigger_name)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = draft.prompt,
-                onValueChange = { onAction(SuperAgentAction.TriggerDraftChanged(draft.copy(prompt = it))) },
+                onValueChange = { onAction(AutomationAction.TriggerDraftChanged(draft.copy(prompt = it))) },
                 label = { Text(stringResource(R.string.settings_super_trigger_prompt)) },
                 placeholder = { Text(stringResource(R.string.settings_super_trigger_prompt_hint)) },
                 minLines = 3,
@@ -350,7 +358,7 @@ private fun TriggerEditorSheet(
                 OutlinedTextField(
                     value = draft.schedule,
                     onValueChange = {
-                        onAction(SuperAgentAction.TriggerDraftChanged(draft.copy(schedule = it)))
+                        onAction(AutomationAction.TriggerDraftChanged(draft.copy(schedule = it)))
                     },
                     label = { Text(stringResource(R.string.settings_super_trigger_schedule)) },
                     placeholder = { Text(stringResource(R.string.settings_super_trigger_schedule_hint)) },
@@ -392,7 +400,7 @@ private fun TriggerEditorSheet(
             FocusChoiceButtons(
                 options = AgentTriggerTarget.entries,
                 selected = draft.target,
-                onSelect = { onAction(SuperAgentAction.TriggerDraftChanged(draft.copy(target = it))) },
+                onSelect = { onAction(AutomationAction.TriggerDraftChanged(draft.copy(target = it))) },
                 label = { target ->
                     stringResource(
                         when (target) {
@@ -417,17 +425,17 @@ private fun TriggerEditorSheet(
                 if (draft.id != null) {
                     FocusTextButton(
                         text = stringResource(R.string.settings_super_trigger_delete),
-                        onClick = { onAction(SuperAgentAction.DeleteTrigger(draft.id)) },
+                        onClick = { onAction(AutomationAction.DeleteTrigger(draft.id)) },
                     )
                 }
                 Spacer(Modifier.weight(1f))
                 FocusTextButton(
                     text = stringResource(R.string.settings_super_trigger_cancel),
-                    onClick = { onAction(SuperAgentAction.DismissTrigger) },
+                    onClick = { onAction(AutomationAction.DismissTrigger) },
                 )
                 FocusPrimaryButton(
                     text = stringResource(R.string.settings_super_trigger_save),
-                    onClick = { onAction(SuperAgentAction.SaveTrigger) },
+                    onClick = { onAction(AutomationAction.SaveTrigger) },
                     loading = state.triggerSaving,
                 )
             }
@@ -437,8 +445,8 @@ private fun TriggerEditorSheet(
 
 @Composable
 private fun SourceSections(
-    state: SuperAgentUiState,
-    onAction: (SuperAgentAction) -> Unit,
+    state: AutomationUiState,
+    onAction: (AutomationAction) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         FocusSectionHeader(
@@ -458,8 +466,8 @@ private fun SourceSections(
 private fun SourceGroup(
     title: String,
     sources: List<AgentEventSource>,
-    state: SuperAgentUiState,
-    onAction: (SuperAgentAction) -> Unit,
+    state: AutomationUiState,
+    onAction: (AutomationAction) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -474,7 +482,7 @@ private fun SourceGroup(
                 switchItem(
                     checked = row.enabled,
                     checkedIcon = FocusIcons.Check,
-                    onCheckedChange = { onAction(SuperAgentAction.ToggleSource(source, it)) },
+                    onCheckedChange = { onAction(AutomationAction.ToggleSource(source, it)) },
                     headlineContent = { Text(sourceLabel(source)) },
                     supportingContent = {
                         Text(
@@ -491,8 +499,8 @@ private fun SourceGroup(
 
 @Composable
 private fun RuntimeSection(
-    state: SuperAgentUiState,
-    onAction: (SuperAgentAction) -> Unit,
+    state: AutomationUiState,
+    onAction: (AutomationAction) -> Unit,
 ) {
     val concurrencyOptions = remember(state.maxConcurrent) {
         (listOf(1, 2, 3, 4, 6, 8) + state.maxConcurrent).distinct().sorted()
@@ -519,7 +527,7 @@ private fun RuntimeSection(
             FocusChoiceButtons(
                 options = concurrencyOptions,
                 selected = state.maxConcurrent,
-                onSelect = { onAction(SuperAgentAction.SetConcurrent(it)) },
+                onSelect = { onAction(AutomationAction.SetConcurrent(it)) },
                 label = { it.toString() },
             )
             Spacer(Modifier.height(20.dp))
@@ -536,7 +544,7 @@ private fun RuntimeSection(
             FocusChoiceButtons(
                 options = rateOptions,
                 selected = state.rateLimit,
-                onSelect = { onAction(SuperAgentAction.SetRateLimit(it)) },
+                onSelect = { onAction(AutomationAction.SetRateLimit(it)) },
                 label = { stringResource(R.string.settings_super_rate_value, it) },
             )
         }
@@ -544,7 +552,7 @@ private fun RuntimeSection(
             switchItem(
                 checked = state.watchdog,
                 checkedIcon = FocusIcons.Check,
-                onCheckedChange = { onAction(SuperAgentAction.ToggleWatchdog(it)) },
+                onCheckedChange = { onAction(AutomationAction.ToggleWatchdog(it)) },
                 headlineContent = { Text(stringResource(R.string.settings_super_watchdog)) },
                 supportingContent = {
                     Text(
@@ -560,8 +568,8 @@ private fun RuntimeSection(
 
 @Composable
 private fun OutputSection(
-    state: SuperAgentUiState,
-    onAction: (SuperAgentAction) -> Unit,
+    state: AutomationUiState,
+    onAction: (AutomationAction) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         FocusSectionHeader(
@@ -572,7 +580,7 @@ private fun OutputSection(
             switchItem(
                 checked = state.postToToday,
                 checkedIcon = FocusIcons.Check,
-                onCheckedChange = { onAction(SuperAgentAction.ToggleToday(it)) },
+                onCheckedChange = { onAction(AutomationAction.ToggleToday(it)) },
                 headlineContent = { Text(stringResource(R.string.settings_super_today)) },
                 supportingContent = {
                     Text(
