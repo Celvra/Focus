@@ -789,6 +789,10 @@ class AssistantDatabase(@Provided context: Context) : SQLiteOpenHelper(context, 
             db.execSQL("DROP TABLE IF EXISTS thread_subscriptions")
             db.execSQL("UPDATE conversations SET kind = 'side' WHERE kind NOT IN ('main', 'side')")
             db.execSQL("UPDATE conversations SET kind = 'main' WHERE id = 'main'")
+            db.execSQL(
+                "UPDATE conversations SET origin = 'im' WHERE id IN " +
+                    "(SELECT conversation_id FROM im_chats WHERE conversation_id IS NOT NULL AND conversation_id <> '')",
+            )
         }
     }
 

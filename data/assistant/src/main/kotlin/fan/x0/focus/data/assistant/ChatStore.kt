@@ -138,16 +138,19 @@ class ChatStore(
         }
     }
 
-    suspend fun createConversation(title: String, mode: AgentMode = AgentMode.Build): Conversation =
-        withContext(Dispatchers.IO) {
-            insertConversation(
-                id = UUID.randomUUID().toString(),
-                title = title,
-                kind = ConversationKind.Side,
-                origin = ConversationOrigin.User,
-                mode = mode,
-            )
-        }
+    suspend fun createConversation(
+        title: String,
+        mode: AgentMode = AgentMode.Build,
+        origin: ConversationOrigin = ConversationOrigin.User,
+    ): Conversation = withContext(Dispatchers.IO) {
+        insertConversation(
+            id = UUID.randomUUID().toString(),
+            title = title,
+            kind = ConversationKind.Side,
+            origin = origin,
+            mode = mode,
+        )
+    }
 
     suspend fun createSideChat(
         title: String,

@@ -9,6 +9,7 @@ import fan.x0.focus.core.mvi.UiAction
 import fan.x0.focus.core.mvi.UiEffect
 import fan.x0.focus.core.mvi.UiState
 import fan.x0.focus.data.assistant.ChatStore
+import fan.x0.focus.data.assistant.ConversationOrigin
 import fan.x0.focus.data.assistant.SecretStore
 import fan.x0.focus.data.im.ImAccountStore
 import fan.x0.focus.data.im.ImAccountDraft
@@ -457,7 +458,7 @@ class ImSettingsViewModel(
             try {
                 if (conversationId == NEW_CONVERSATION) {
                     val title = "${binding.accountName} / ${binding.title}".take(80)
-                    val created = conversations.createConversation(title)
+                    val created = conversations.createConversation(title, origin = ConversationOrigin.Im)
                     chats.setConversation(binding.id, created.id)
                 } else {
                     chats.setConversation(binding.id, conversationId)

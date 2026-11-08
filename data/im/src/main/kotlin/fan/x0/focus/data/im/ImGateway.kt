@@ -7,6 +7,7 @@ import fan.x0.focus.data.assistant.ChatStore
 import fan.x0.focus.data.assistant.ChatTurnProgress
 import fan.x0.focus.data.assistant.ChatTurnResult
 import fan.x0.focus.data.assistant.ChatTurnRunner
+import fan.x0.focus.data.assistant.ConversationOrigin
 import fan.x0.focus.data.assistant.ReasoningLevel
 import fan.x0.focus.data.assistant.TurnOptions
 import kotlinx.coroutines.CancellationException
@@ -420,7 +421,7 @@ class ImGateway(
         val existing = chat.conversationId?.let { conversations.conversation(it) }
         if (existing != null && !existing.archived) return existing.id
         val title = "${account.name} / ${chat.title}".take(80)
-        val conversation = conversations.createConversation(title)
+        val conversation = conversations.createConversation(title, origin = ConversationOrigin.Im)
         ImLog.i(TAG, "create conversation ${conversation.id} title=$title")
         chats.setConversation(chat.id, conversation.id)
         return conversation.id
