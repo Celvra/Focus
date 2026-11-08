@@ -12,6 +12,7 @@ import fan.x0.focus.data.assistant.ChatTurnEntry
 import fan.x0.focus.data.assistant.ChatTurnRunner
 import fan.x0.focus.data.assistant.ChatTurnStepStatus
 import fan.x0.focus.data.assistant.ChatTurnTrustPhase
+import fan.x0.focus.data.assistant.MainSessionStore
 import fan.x0.focus.data.assistant.TurnOptions
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -22,6 +23,7 @@ import java.util.UUID
 class OverlayViewModel(
     private val chats: ChatStore,
     private val turns: ChatTurnRunner,
+    private val mainSession: MainSessionStore,
 ) : BaseViewModel<OverlayAction, OverlayUiState, OverlayEffect>(OverlayUiState()) {
 
     private var mainId = ""
@@ -32,6 +34,12 @@ class OverlayViewModel(
         viewModelScope.launch {
             mainId = chats.ensureMainConversation().id
             load()
+            mainSession.id.collect { id ->
+                if (id != mainId) {
+                    mainId = id
+                    load()
+                }
+            }
         }
         viewModelScope.launch {
             turns.states.collect { states ->
