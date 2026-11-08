@@ -5,4 +5,9 @@
     <string name="model_picker_vision">图像输入</string>
     <string name="model_picker_tools">工具调用</string>
     <string name="model_picker_reasoning">推理</string>
+    <string name="model_picker_count">%1$d 个模型</string>
+    <string name="model_picker_model_count">%1$d</string>
+    <string name="model_picker_refresh">刷新模型</string>
+    <string name="model_picker_close">关闭</string>
+    <string name="model_picker_selected">已选择</string>
 </resources>

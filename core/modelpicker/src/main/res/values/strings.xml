@@ -5,4 +5,9 @@
     <string name="model_picker_vision">Image input</string>
     <string name="model_picker_tools">Tool calling</string>
     <string name="model_picker_reasoning">Reasoning</string>
+    <string name="model_picker_count">%1$d models</string>
+    <string name="model_picker_model_count">%1$d</string>
+    <string name="model_picker_refresh">Refresh models</string>
+    <string name="model_picker_close">Close</string>
+    <string name="model_picker_selected">Selected</string>
 </resources>
