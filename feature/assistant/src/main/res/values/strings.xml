@@ -551,7 +551,7 @@
     <string name="settings_assistant_hijack_missing">Not loaded. Enable Focus in LSPosed and reboot.</string>
     <string name="settings_assistant_hijack_hint">In LSPosed, enable Focus and select the system, SystemUI, and launcher scopes, then reboot. Grant display over other apps so the power button and gestures open the floating assistant.</string>
     <string name="settings_page_models">Model allocation</string>
-    <string name="settings_page_models_body">Choose the model for the router, side chats, and helper roles.</string>
+    <string name="settings_page_models_body">Choose the model for the main conversation, side chats, and helper roles.</string>
     <string name="settings_models_title">Model allocation</string>
     <string name="settings_models_intro">Helper roles can use their own model. Without one, they follow the current model.</string>
     <string name="settings_models_group_helpers">Helpers</string>
@@ -608,9 +608,9 @@
     <string name="settings_super_concurrency_pill">%1$d parallel</string>
     <string name="settings_super_watchdog_on">Watchdog on</string>
     <string name="settings_super_watchdog_off">Watchdog off</string>
-    <string name="settings_super_sources_body">Only enabled sources reach the router. Side chat events still arrive as they finish.</string>
+    <string name="settings_super_sources_body">Only enabled sources enter automation. Side chat events still arrive as they finish.</string>
     <string name="settings_super_group_background">Background</string>
-    <string name="settings_super_runtime_body">How many workers can run, how often events enter, and when work is stopped.</string>
+    <string name="settings_super_runtime_body">How many side chats can run, how often events enter, and when work is stopped.</string>
     <string name="settings_super_output">Output</string>
     <string name="settings_super_output_body">Where results go besides the main conversation and notifications.</string>
     <string name="settings_super_rate_value">%1$d</string>

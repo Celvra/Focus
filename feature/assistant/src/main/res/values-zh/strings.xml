@@ -610,7 +610,7 @@
     <string name="settings_super_watchdog_off">看门狗关闭</string>
     <string name="settings_super_sources_body">只有开启的来源会进入自动化分发。</string>
     <string name="settings_super_group_background">后台</string>
-    <string name="settings_super_runtime_body">同时能跑多少 worker、事件进入的频率，以及什么时候停止任务。</string>
+    <string name="settings_super_runtime_body">同时能跑多少旁聊、事件进入的频率，以及什么时候停止任务。</string>
     <string name="settings_super_output">输出</string>
     <string name="settings_super_output_body">除了主会话和通知之外，结果还可以去哪里。</string>
     <string name="settings_super_rate_value">%1$d</string>
