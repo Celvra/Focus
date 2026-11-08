@@ -424,7 +424,7 @@ private fun ModelRow(
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ModelAvatar(group = group, model = model, selected = selected)
+            ModelAvatar(model = model, selected = selected)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -507,15 +507,10 @@ private fun CapabilityChip(capability: FocusPickerCapability) {
 
 @Composable
 private fun ModelAvatar(
-    group: ModelPickerGroup,
     model: ModelPickerModel,
     selected: Boolean,
 ) {
     val brand = BrandIcons.forModel(model.id)
-    if (brand == null) {
-        ProviderAvatar(icon = group.icon, size = 40.dp)
-        return
-    }
     Surface(
         modifier = Modifier.size(40.dp),
         shape = MaterialTheme.shapes.small,
@@ -531,11 +526,19 @@ private fun ModelAvatar(
         },
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            BrandIcon(
-                icon = brand,
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-            )
+            if (brand != null) {
+                BrandIcon(
+                    icon = brand,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                )
+            } else {
+                Icon(
+                    imageVector = FocusIcons.Assistant,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
         }
     }
 }
