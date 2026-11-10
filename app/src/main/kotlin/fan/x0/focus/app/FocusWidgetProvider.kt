@@ -38,7 +38,6 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import fan.x0.focus.AssistantEntryActivity
-import fan.x0.focus.MainActivity
 import fan.x0.focus.R
 import fan.x0.focus.core.designsystem.theme.focusColorScheme
 import fan.x0.focus.core.notify.R as NotifyR
@@ -184,7 +183,7 @@ private fun FocusWidgetContent(snapshot: WidgetSnapshot) {
                 OutlineButton(
                     text = context.getString(R.string.widget_main),
                     contentColor = GlanceTheme.colors.primary,
-                    onClick = actionStartActivity<MainActivity>(),
+                    onClick = actionStartActivity<AssistantEntryActivity>(),
                 )
             }
             Spacer(GlanceModifier.size(if (compact) 6.dp else 12.dp))

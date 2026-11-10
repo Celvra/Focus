@@ -21,9 +21,7 @@ import fan.x0.focus.data.assistant.AssistantModule
 import fan.x0.focus.data.assistant.ChatStore
 import fan.x0.focus.data.assistant.CrewRunner
 import fan.x0.focus.data.assistant.ReminderWorker
-import fan.x0.focus.data.device.DeviceAutomationState
 import fan.x0.focus.data.device.DeviceModule
-import fan.x0.focus.data.device.DeviceRuntime
 import fan.x0.focus.data.device.DeviceTriggerManager
 import fan.x0.focus.data.im.ImModule
 import fan.x0.focus.data.plugin.PluginManager
@@ -41,7 +39,6 @@ import fan.x0.focus.feature.device.DeviceFeatureModule
 import fan.x0.focus.feature.goals.GoalsModule
 import fan.x0.focus.feature.library.LibraryModule
 import fan.x0.focus.feature.onboarding.OnboardingModule
-import fan.x0.focus.feature.overlay.AutomationOverlayService
 import fan.x0.focus.feature.overlay.OverlayModule
 import fan.x0.focus.feature.plugin.PluginFeatureModule
 import fan.x0.focus.feature.today.TodayModule
@@ -149,14 +146,6 @@ class FocusApplication : Application() {
             koin.get<ChatStore>().changes.debounce(500).collect {
                 FocusWidget().updateAll(this@FocusApplication)
             }
-        }
-        scope.launch {
-            koin.get<DeviceRuntime>().automation
-                .collect { state ->
-                    if (state is DeviceAutomationState.Running) {
-                        AutomationOverlayService.start(this@FocusApplication)
-                    }
-                }
         }
     }
 }

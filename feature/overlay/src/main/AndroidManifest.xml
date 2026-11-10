@@ -18,14 +18,6 @@
                 android:value="assistant_overlay" />
         </service>
 
-        <service
-            android:name=".AutomationOverlayService"
-            android:exported="false" />
-
-        <service
-            android:name=".DisplayWindowService"
-            android:exported="false" />
-
         <activity
             android:name=".OverlayShortcutActivity"
             android:excludeFromRecents="true"
